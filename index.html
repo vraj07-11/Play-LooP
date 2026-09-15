@@ -30,9 +30,8 @@
               <i data-lucide="x" class="w-7 h-7"></i>
             </button>
           </div>
-          <h1 class="header-title text-2xl font-bold" href="#home"><img class="brand-logo" src="public/logo.svg"
-              alt="Play LooP logo" />&nbsp;Play
-            LooP</h1>
+              <h1 class="header-title text-2xl font-bold"><a class="brand-link" href="/" data-nav="home"><img
+                class="brand-logo" src="public/logo.svg" alt="Play LooP logo" />Play LooP</a></h1>
         </div>
         <div class="header-actions flex items-center gap-3">
           <form class="search-form" data-search-form role="search">
@@ -60,7 +59,7 @@
         data-sidebar>
         <nav class="mt-1">
           <ul class=" border-b border-zinc-800 ">
-            <li class="mb-5 border-white"><a href="#home" class="underline-link" data-nav="home"><i data-lucide="home"
+            <li class="mb-5 border-white"><a href="/" class="underline-link" data-nav="home"><i data-lucide="home"
                   class="w-6 h-6"></i><span>Home</span></a></li>
             <li class="mb-5"><a href="#search" class="underline-link" data-nav="search"><i data-lucide="search" class="w-6
                     h-6"></i><span>Search</span></a></li>
@@ -86,10 +85,12 @@
                 class="w-6 h-6"></i><span>Settings</span></a></li>
         </ul>
       </aside>
+      <section class="app-content" data-content aria-live="polite"></section>
     </main>
   </div>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>lucide.createIcons();</script>
+  <script src="pages.js"></script>
   <script src="script.js"></script>
 </body>
 

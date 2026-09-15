@@ -2,6 +2,29 @@ const menuButtons = document.querySelectorAll('[data-action="toggle-sidebar"]');
 const closeButton = document.querySelector('[data-action="close-sidebar"]');
 const sidebar = document.querySelector('[data-sidebar]');
 const navLinks = document.querySelectorAll('[data-nav]');
+const content = document.querySelector('[data-content]');
+const profileButton = document.querySelector('[data-action="profile-button"]');
+
+function showPage(pageName, updateUrl = true) {
+  const page = pages[pageName] || pages.home;
+  content.innerHTML = `
+    <div class="page-header">
+      <h2>${page.title}</h2>
+      <p>${page.description}</p>
+    </div>
+    <div class="page-grid">
+      ${page.cards.map((card) => `<article class="page-card"><h3>${card}</h3><p>Coming soon</p></article>`).join("")}
+    </div>
+  `;
+
+  if (updateUrl) {
+    if (pageName === "home") {
+      window.history.pushState({}, "", "/");
+    } else {
+      window.location.hash = pageName;
+    }
+  }
+}
 
 function setSidebarState(isOpen) {
   sidebar.classList.toggle("is-closed", !isOpen);
@@ -22,10 +45,15 @@ closeButton.addEventListener("click", () => {
   setSidebarState(false);
 });
 
-navLinks.forEach((navLink) => navLink.addEventListener("click", () => {
+navLinks.forEach((navLink) => navLink.addEventListener("click", (event) => {
+  event.preventDefault();
   navLink.classList.add("is-tapped");
   window.setTimeout(() => navLink.classList.remove("is-tapped"), 250);
+  showPage(navLink.dataset.nav);
+  setSidebarState(false);
 }));
+
+profileButton.addEventListener("click", () => showPage("profile"));
 
 setSidebarState(false);
 
@@ -69,6 +97,7 @@ searchForm.addEventListener("submit", (event) => {
   const query = searchInput.value.trim();
 
   if (query) {
+    showPage("search");
     console.log("Searching for:", query);
   }
 });
@@ -86,4 +115,13 @@ searchInput.addEventListener("keydown", (event) => {
     setSearchState(false);
   }
 });
+
+function getPageFromLocation() {
+  return window.location.hash.slice(1) || "home";
+}
+
+window.addEventListener("hashchange", () => showPage(getPageFromLocation(), false));
+window.addEventListener("popstate", () => showPage(getPageFromLocation(), false));
+
+showPage(getPageFromLocation(), false);
 
