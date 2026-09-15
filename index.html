@@ -19,66 +19,72 @@
     <!-- navigation bar -->
     <header class="relative z-30 w-full shrink-0 border-b border-zinc-800 bg-black">
       <nav class="relative flex items-center justify-between px-5 py-3">
-      <div class="flex items-center gap-3">
-        <div class="sidebar-controls" aria-live="polite">
-          <button type="button" class="sidebar-control toggle-sidebar" data-action="toggle-sidebar"
-            aria-label="Open menu" aria-expanded="false">
-            <i data-lucide="menu" class="w-7 h-7"></i>
-          </button>
-          <button type="button" class="sidebar-control close-sidebar is-hidden" data-action="close-sidebar"
-            aria-label="Close menu" aria-expanded="true" tabindex="-1">
-            <i data-lucide="x" class="w-7 h-7"></i>
+        <div class="flex items-center gap-3">
+          <div class="sidebar-controls" aria-live="polite">
+            <button type="button" class="sidebar-control toggle-sidebar" data-action="toggle-sidebar"
+              aria-label="Open menu" aria-expanded="false">
+              <i data-lucide="menu" class="w-7 h-7"></i>
+            </button>
+            <button type="button" class="sidebar-control close-sidebar is-hidden" data-action="close-sidebar"
+              aria-label="Close menu" aria-expanded="true" tabindex="-1">
+              <i data-lucide="x" class="w-7 h-7"></i>
+            </button>
+          </div>
+          <h1 class="header-title text-2xl font-bold" href="#home"><img class="brand-logo" src="public/logo.svg"
+              alt="Play LooP logo" />&nbsp;Play
+            LooP</h1>
+        </div>
+        <div class="header-actions flex items-center gap-3">
+          <form class="search-form" data-search-form role="search">
+            <input class="search-input" type="search" name="search" autocomplete="off" autocorrect="off"
+              autocapitalize="none" spellcheck="false" inputmode="search"
+              placeholder="What do you want to play?" aria-label="Search music" />
+            <button type="button" class="clear-search is-hidden" data-action="clear-search" aria-label="Clear search">
+              <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+            <button type="button" class="search-button" data-action="search-toggle" aria-label="Open search">
+              <i data-lucide="search" class="w-6 h-6"></i>
+            </button>
+          </form>
+          <button type="button" class="profile-button" data-action="profile-button" aria-label="Profile">
+            <i data-lucide="user" class="w-6 h-6"></i>
           </button>
         </div>
-        <h1 class="header-title text-2xl font-bold"><img class="brand-logo" src="public/logo.svg" alt="Play LooP logo" />&nbsp;Play
-          LooP</h1>
-      </div>
-      <div class="flex items-center gap-3">
-        <form class="search-form" role="search">
-          <input class="search-input" type="search" name="search" placeholder="What do you want to play?"
-            aria-label="Search music" />
-          <button type="submit" class="search-button" data-action="search-button" aria-label="Search">
-            <i data-lucide="search" class="w-6 h-6"></i>
-          </button>
-        </form>
-        <button type="button" class="profile-button" data-action="profile-button" aria-label="Profile">
-          <i data-lucide="user" class="w-6 h-6"></i>
-        </button>
-      </div>
       </nav>
     </header>
 
     <main class="relative flex min-h-0 flex-1">
       <!-- sidebar -->
-      <aside class="sidebar is-closed w-70 bg-black border-r flex flex-col overflow-y-auto border-zinc-800 text-white p-5 "
+      <aside
+        class="sidebar is-closed w-70 bg-black border-r flex flex-col overflow-y-auto border-zinc-800 text-white p-5 "
         data-sidebar>
-      <nav class="mt-1">
-        <ul class=" border-b border-zinc-800 ">
-          <li class="mb-5 border-white"><a href="#home" class="underline-link" data-nav="home"><i data-lucide="home"
-                class="w-6 h-6"></i><span>Home</span></a></li>
-          <li class="mb-5"><a href="#search" class="underline-link" data-nav="search"><i data-lucide="search" class="w-6
+        <nav class="mt-1">
+          <ul class=" border-b border-zinc-800 ">
+            <li class="mb-5 border-white"><a href="#home" class="underline-link" data-nav="home"><i data-lucide="home"
+                  class="w-6 h-6"></i><span>Home</span></a></li>
+            <li class="mb-5"><a href="#search" class="underline-link" data-nav="search"><i data-lucide="search" class="w-6
                     h-6"></i><span>Search</span></a></li>
-          <li class="mb-5"><a href="#library" class="underline-link" data-nav="library"><i data-lucide="library"
-                class="w-6 h-6"></i><span>Your
-                Library</span></a></li>
-          <li class="mb-5"><a href="#Download" class="underline-link" data-nav="Download"><i data-lucide="download"
-                class="w-6 h-6"></i><span>Download App</span></a></li>
+            <li class="mb-5"><a href="#library" class="underline-link" data-nav="library"><i data-lucide="library"
+                  class="w-6 h-6"></i><span>Your
+                  Library</span></a></li>
+            <li class="mb-5"><a href="#Download" class="underline-link" data-nav="Download"><i data-lucide="download"
+                  class="w-6 h-6"></i><span>Download App</span></a></li>
 
+          </ul>
+          <ul class="mt-5">
+            <li class="mb-5"><a href="#create-playlist" class="underline-link" data-nav="create-playlist"><i
+                  data-lucide="plus-square" class="w-6 h-6"></i><span>Create Playlist</span></a></li>
+            <li class="mb-5"><a href="#liked-songs" class="underline-link" data-nav="liked-songs"><i data-lucide="heart"
+                  class="w-6 h-6"></i><span>Liked
+                  Songs</span></a></li>
+          </ul>
+        </nav>
+        <ul class="mt-5 border-t border-zinc-800 pt-5 sidebar-bottom">
+          <li class="mb-5"><a href="#logout" class="underline-link" data-nav="logout"><i data-lucide="log-out"
+                class="w-6 h-6"></i><span>Logout</span></a></li>
+          <li class="mb-5"><a href="#settings" class="underline-link" data-nav="settings"><i data-lucide="settings"
+                class="w-6 h-6"></i><span>Settings</span></a></li>
         </ul>
-        <ul class="mt-5">
-          <li class="mb-5"><a href="#create-playlist" class="underline-link" data-nav="create-playlist"><i
-                data-lucide="plus-square" class="w-6 h-6"></i><span>Create Playlist</span></a></li>
-          <li class="mb-5"><a href="#liked-songs" class="underline-link" data-nav="liked-songs"><i data-lucide="heart"
-                class="w-6 h-6"></i><span>Liked
-                Songs</span></a></li>
-        </ul>
-      </nav>
-      <ul class="mt-5 border-t border-zinc-800 pt-5 sidebar-bottom">
-        <li class="mb-5"><a href="#logout" class="underline-link" data-nav="logout"><i data-lucide="log-out"
-              class="w-6 h-6"></i><span>Logout</span></a></li>
-        <li class="mb-5"><a href="#settings" class="underline-link" data-nav="settings"><i data-lucide="settings"
-              class="w-6 h-6"></i><span>Settings</span></a></li>
-      </ul>
       </aside>
     </main>
   </div>

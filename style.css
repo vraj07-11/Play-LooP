@@ -35,8 +35,10 @@ h1 {
 }
 
 .search-form {
+  position: relative;
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   width: 20rem;
   height: 2.5rem;
   overflow: hidden;
@@ -49,7 +51,7 @@ h1 {
   min-width: 0;
   flex: 1;
   height: 100%;
-  padding: 0 0.25rem 0 1rem;
+  padding: 0 5.25rem 0 1rem;
   color: white;
   border: 0;
   outline: 0;
@@ -73,8 +75,34 @@ h1 {
 }
 
 .search-button {
+  position: absolute;
+  top: 0;
+  right: 0;
   width: 2.5rem;
   height: 2.5rem;
+}
+
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.clear-search {
+  position: absolute;
+  top: 0;
+  right: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: white;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+.clear-search.is-hidden {
+  display: none;
 }
 
 @media (max-width: 640px) {
@@ -82,10 +110,41 @@ h1 {
     width: 2.5rem;
     border: 0;
     background: transparent;
+    transition: width 0.3s ease;
   }
 
   .search-input {
-    display: none;
+    display: block;
+    min-width: 0;
+    padding: 0 2.75rem 0 1rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease;
+  }
+
+  .search-form.is-open {
+    width: min(70vw, 20rem);
+    border: 1px solid rgb(63 63 70);
+    background-color: rgb(24 24 27);
+  }
+
+  .search-form.is-open .search-input {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .search-form.is-open .search-button {
+    right: 0;
+  }
+
+  .header-title {
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+  }
+
+  body.mobile-search-open .header-title {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
   }
 }
 

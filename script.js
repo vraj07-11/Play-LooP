@@ -28,3 +28,62 @@ navLinks.forEach((navLink) => navLink.addEventListener("click", () => {
 }));
 
 setSidebarState(false);
+
+const searchForm = document.querySelector("[data-search-form]");
+const searchInput = document.querySelector(".search-input");
+const searchToggle = document.querySelector('[data-action="search-toggle"]');
+const clearSearch = document.querySelector('[data-action="clear-search"]');
+
+function setClearSearchState() {
+  clearSearch.classList.toggle("is-hidden", !searchInput.value);
+}
+
+function setSearchState(isOpen) {
+  searchForm.classList.toggle("is-open", isOpen);
+  document.body.classList.toggle("mobile-search-open", isOpen);
+
+  searchToggle.setAttribute("aria-label", isOpen ? "Close search" : "Open search");
+
+  if (isOpen) {
+    searchInput.focus();
+  } else {
+    searchInput.value = "";
+    searchInput.blur();
+  }
+
+  setClearSearchState();
+}
+
+searchToggle.addEventListener("click", () => {
+  setSearchState(!searchForm.classList.contains("is-open"));
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (searchForm.classList.contains("is-open") && !searchForm.contains(event.target)) {
+    setSearchState(false);
+  }
+});
+searchForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const query = searchInput.value.trim();
+
+  if (query) {
+    console.log("Searching for:", query);
+  }
+});
+
+searchInput.addEventListener("input", setClearSearchState);
+
+clearSearch.addEventListener("click", () => {
+  searchInput.value = "";
+  setClearSearchState();
+  searchInput.focus();
+});
+
+searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    setSearchState(false);
+  }
+});
+
