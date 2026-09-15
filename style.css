@@ -1,16 +1,30 @@
-div {
-	font-family: "Momo Trust Display", sans-serif;
+body {
+  font-family: "Momo Trust Display", sans-serif;
 }
 
-h1 svg path {
-	fill: #ffffff;
-	stroke: #ffffff;
+html,
+body {
+  min-height: 100%;
+  overscroll-behavior-y: auto;
+  touch-action: pan-y;
 }
 
 h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .header-title {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    font-size: 1.25rem;
+  }
 }
 
 .brand-logo {
@@ -20,29 +34,141 @@ h1 {
 	vertical-align: middle;
 }
 
-.underline-link {
-  position: relative;
-  text-decoration: none;
+.search-form {
   display: flex;
   align-items: center;
+  width: 20rem;
+  height: 2.5rem;
+  overflow: hidden;
+  border: 1px solid rgb(63 63 70);
+  border-radius: 9999px;
+  background-color: rgb(24 24 27);
+}
+
+.search-input {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0 0.25rem 0 1rem;
+  color: white;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.search-input::placeholder {
+  color: rgb(161 161 170);
+}
+
+.search-button,
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: white;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+.search-button {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .search-form {
+    width: 2.5rem;
+    border: 0;
+    background: transparent;
+  }
+
+  .search-input {
+    display: none;
+  }
+}
+
+.underline-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   gap: 0.75rem;
-  color: #ffffff;
+  width: fit-content;
+}
+
+.underline-link svg {
+  flex-shrink: 0;
 }
 
 .underline-link::after {
-  content: '';
+	content: "";
   position: absolute;
+  left: 0;
+  bottom: -6px;
   width: 100%;
   height: 2px;
-  bottom: 0;
-  left: 0;
-  background-color: #ffffff;
+  background-color: white;
   transform: scaleX(0);
   transform-origin: bottom right;
-  transition: transform 0.3s ease-out;
-}	
+  transition: transform 0.2s ease-out;
+}
 
-.underline-link:hover::after {
+.underline-link.is-tapped::after {
   transform: scaleX(1);
   transform-origin: bottom left;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .underline-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: bottom left;
+  }
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+}
+
+.sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 280px;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  z-index: 10;
+}
+
+.sidebar-controls {
+  position: relative;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+}
+
+.sidebar-control {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  background: transparent;
+  border: 0;
+  transform: scale(1) rotate(0deg);
+  opacity: 1;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear;
+}
+
+.sidebar.is-closed {
+  transform: translateX(-100%);
+}
+
+.sidebar-control.is-hidden {
+  opacity: 0;
+  transform: scale(0.75) rotate(-12deg);
+  visibility: hidden;
+  pointer-events: none;
+  transition-delay: 0s, 0s, 0.2s;
 }
