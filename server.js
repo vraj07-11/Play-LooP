@@ -15,6 +15,9 @@ const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
 	: [];
+const ytdlpRemoteArgs = process.env.YTDLP_REMOTE_COMPONENTS
+	? ["--remote-components", process.env.YTDLP_REMOTE_COMPONENTS]
+	: [];
 
 app.use(cors());
 app.use(express.static(__dirname));
@@ -65,9 +68,27 @@ app.get("/api/audio", async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Audio proxy failed:", error);
-		if (!res.headersSent) res.status(502).send("Failed to load audio");
+		if (!res.headersSent) {
+			res.status(502).json({ error: "Audio extraction failed", detail: getExtractorError(error) });
+		}
 	}
 });
+
+app.get("/api/health", (req, res) => {
+	res.json({
+		ok: true,
+		ytdlpRuntime: process.env.YTDLP_JS_RUNTIME || "default",
+		ytdlpRemoteComponents: process.env.YTDLP_REMOTE_COMPONENTS || "none"
+	});
+});
+
+function getExtractorError(error) {
+	return String(error.stderr || error.message || "Unknown extractor error")
+		.trim()
+		.split(/\r?\n/)
+		.slice(-3)
+		.join(" ");
+}
 
 async function getCachedAudio(videoId) {
 	const safeVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -88,6 +109,7 @@ async function getCachedAudio(videoId) {
 				"--no-progress",
 				"--no-playlist",
 				...ytdlpRuntimeArgs,
+				...ytdlpRemoteArgs,
 				"--no-part",
 				"-f",
 				"bestaudio/best",
@@ -113,6 +135,7 @@ async function resolveStreamUrl(videoId) {
 			"--no-warnings",
 			"--no-playlist",
 			...ytdlpRuntimeArgs,
+			...ytdlpRemoteArgs,
 			"--skip-download",
 			"--get-url",
 			"-f",

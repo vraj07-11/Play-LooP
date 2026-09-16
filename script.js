@@ -174,7 +174,7 @@ async function selectAndPlayTrack(videoId, title, artist) {
     setPlaybackState(true);
   } catch (error) {
     console.error(error);
-    playerStatus.textContent = "Could not play this track";
+    playerStatus.textContent = "Playback failed - check server logs";
     setPlaybackState(false);
   }
 }
