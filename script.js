@@ -163,16 +163,9 @@ window.onYouTubeIframeAPIReady = initializeYouTubePlayer;
 if (window.YT?.Player) initializeYouTubePlayer();
 
 function positionSeekButtons() {
-  if (window.matchMedia("(max-width: 640px)").matches) {
-    previousTrackButton.before(repeatButton);
-    previousTrackButton.after(rewindButton);
-    playPauseButton.after(forwardButton);
-    return;
-  }
-
   previousTrackButton.before(repeatButton);
   previousTrackButton.after(rewindButton);
-  nextTrackButton.after(forwardButton);
+  playPauseButton.after(forwardButton);
 }
 
 positionSeekButtons();
