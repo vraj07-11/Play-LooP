@@ -71,7 +71,7 @@ const nextTrackButton = document.querySelector('[data-action="next-track"]');
 const rewindButton = document.querySelector('[data-action="rewind-10"]');
 const forwardButton = document.querySelector('[data-action="forward-10"]');
 const playerBar = document.querySelector("[data-player]");
-const audioPlayer = document.querySelector("#audioPlayer");
+const youtubePlayerElement = document.querySelector("#youtubePlayer");
 const progressBar = document.querySelector("[data-progress]");
 const currentTitle = document.querySelector("[data-current-title]");
 const playerStatus = document.querySelector("[data-player-status]");
@@ -85,6 +85,75 @@ let trackQueue = [];
 let recommendationQueue = [];
 let currentTrackIndex = -1;
 let trackHistory = [];
+let youtubePlayer;
+let youtubeInitialized = false;
+let youtubeReadyResolve;
+const youtubeReady = new Promise((resolve) => {
+  youtubeReadyResolve = resolve;
+});
+const playerListeners = new Map();
+const audioPlayer = {
+  duration: 0,
+  currentTime: 0,
+  ended: false,
+  addEventListener(eventName, listener) {
+    const listeners = playerListeners.get(eventName) || [];
+    listeners.push(listener);
+    playerListeners.set(eventName, listeners);
+  },
+  dispatchEvent(eventName) {
+    (playerListeners.get(eventName) || []).forEach((listener) => listener());
+  },
+  play() {
+    if (!youtubePlayer) return Promise.reject(new Error("YouTube player is not ready"));
+    youtubePlayer.playVideo();
+    return Promise.resolve();
+  },
+  pause() {
+    youtubePlayer?.pauseVideo();
+  },
+  seekTo(time) {
+    youtubePlayer?.seekTo(time, true);
+  }
+};
+
+function initializeYouTubePlayer() {
+  if (youtubeInitialized || !window.YT?.Player) return;
+  youtubeInitialized = true;
+  youtubePlayer = new YT.Player(youtubePlayerElement, {
+    width: "1",
+    height: "1",
+    playerVars: {
+      controls: 0,
+      disablekb: 1,
+      fs: 0,
+      modestbranding: 1,
+      origin: window.location.origin,
+      playsinline: 1,
+      rel: 0
+    },
+    events: {
+      onReady: () => youtubeReadyResolve(),
+      onError: () => audioPlayer.dispatchEvent("error"),
+      onStateChange: ({ data }) => {
+        if (data === YT.PlayerState.PLAYING) {
+          audioPlayer.ended = false;
+          audioPlayer.duration = youtubePlayer.getDuration();
+          audioPlayer.dispatchEvent("loadedmetadata");
+          audioPlayer.dispatchEvent("play");
+        } else if (data === YT.PlayerState.PAUSED) {
+          audioPlayer.dispatchEvent("pause");
+        } else if (data === YT.PlayerState.ENDED) {
+          audioPlayer.ended = true;
+          audioPlayer.dispatchEvent("ended");
+        }
+      }
+    }
+  });
+}
+
+window.onYouTubeIframeAPIReady = initializeYouTubePlayer;
+if (window.YT?.Player) initializeYouTubePlayer();
 
 function positionSeekButtons() {
   if (window.matchMedia("(max-width: 640px)").matches) {
@@ -298,13 +367,12 @@ if ("mediaSession" in navigator) {
 }
 
 function loadAudioTrack(track) {
-  audioPlayer.src = `/api/audio?id=${encodeURIComponent(track.videoId)}`;
-  audioPlayer.load();
-  audioPlayer.play().catch((error) => {
-    if (error.name !== "AbortError") {
+  youtubeReady.then(() => {
+    youtubePlayer.loadVideoById(track.videoId);
+    audioPlayer.play().catch(() => {
       playerStatus.textContent = "Press play to start this track";
       setPlaybackState(false);
-    }
+    });
   });
 }
 
@@ -393,10 +461,10 @@ playPauseButton.addEventListener("click", () => {
 
 function seekBy(seconds) {
   if (!Number.isFinite(audioPlayer.duration)) return;
-  audioPlayer.currentTime = Math.max(
+  audioPlayer.seekTo(Math.max(
     0,
     Math.min(audioPlayer.duration, audioPlayer.currentTime + seconds)
-  );
+  ));
 }
 
 rewindButton.addEventListener("click", () => seekBy(-10));
@@ -411,7 +479,7 @@ progressBar.addEventListener("input", () => {
   const progress = Number(progressBar.value);
   progressBar.style.setProperty("--progress", `${progress}%`);
   if (Number.isFinite(audioPlayer.duration)) {
-    audioPlayer.currentTime = (progress / 100) * audioPlayer.duration;
+    audioPlayer.seekTo((progress / 100) * audioPlayer.duration);
   }
 });
 
@@ -425,6 +493,10 @@ function updateProgress() {
   progressBar.value = String(progress);
   progressBar.style.setProperty("--progress", `${progress}%`);
   playerTime.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+  if (youtubePlayer && isPlaying) {
+    audioPlayer.currentTime = youtubePlayer.getCurrentTime();
+    requestAnimationFrame(updateProgress);
+  }
 }
 
 function startProgressAnimation() {

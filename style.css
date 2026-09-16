@@ -366,19 +366,16 @@ h1 {
   display: none;
 }
 
-.audio-player {
+.youtube-player {
   width: 1px;
   height: 1px;
-  flex: 0 0 160px;
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
 @media (max-width: 640px) {
-  .audio-player {
-    flex-basis: 1px;
-  }
+  .youtube-player { width: 1px; }
 }
 
 .player-track {
