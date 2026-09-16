@@ -18,6 +18,10 @@ const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 const ytdlpRemoteArgs = process.env.YTDLP_REMOTE_COMPONENTS
 	? ["--remote-components", process.env.YTDLP_REMOTE_COMPONENTS]
 	: [];
+const ytdlpClientArgs = process.env.YTDLP_CLIENTS
+	? ["--extractor-args", `youtube:player_client=${process.env.YTDLP_CLIENTS}`]
+	: [];
+const ytdlpNetworkArgs = ["--force-ipv4"];
 
 app.use(cors());
 app.use(express.static(__dirname));
@@ -110,6 +114,8 @@ async function getCachedAudio(videoId) {
 				"--no-playlist",
 				...ytdlpRuntimeArgs,
 				...ytdlpRemoteArgs,
+				...ytdlpClientArgs,
+				...ytdlpNetworkArgs,
 				"--no-part",
 				"-f",
 				"bestaudio/best",
@@ -136,6 +142,8 @@ async function resolveStreamUrl(videoId) {
 			"--no-playlist",
 			...ytdlpRuntimeArgs,
 			...ytdlpRemoteArgs,
+			...ytdlpClientArgs,
+			...ytdlpNetworkArgs,
 			"--skip-download",
 			"--get-url",
 			"-f",

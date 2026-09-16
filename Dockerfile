@@ -17,6 +17,7 @@ ENV NODE_ENV=production
 ENV YTDLP_PATH=/usr/local/bin/yt-dlp
 ENV YTDLP_JS_RUNTIME=deno
 ENV YTDLP_REMOTE_COMPONENTS=ejs:github
+ENV YTDLP_CLIENTS=android_vr,web_safari,tv
 ENV PATH="/root/.deno/bin:${PATH}"
 
 EXPOSE 3000
