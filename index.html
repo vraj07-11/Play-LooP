@@ -87,15 +87,21 @@
       </aside>
       <section class="app-content" data-content aria-live="polite"></section>
     </main>
-    <footer class="player-bar" data-player>
+    <footer class="player-bar is-hidden" data-player>
       <div class="youtube-player" id="youtubePlayer" aria-label="YouTube video player"></div>
       <div class="player-track">
         <span class="player-status" data-player-status>Nothing playing</span>
         <span class="player-title" data-current-title>Select a song to start listening</span>
       </div>
       <div class="player-controls">
+        <button type="button" class="player-skip-button" data-action="previous-track" aria-label="Previous track" disabled>
+          <i data-lucide="skip-back" class="w-4 h-4"></i>
+        </button>
         <button type="button" class="player-button" data-action="play-pause" aria-label="Play" disabled>
           <i data-lucide="play" class="w-5 h-5"></i>
+        </button>
+        <button type="button" class="player-skip-button" data-action="next-track" aria-label="Next random track" disabled>
+          <i data-lucide="skip-forward" class="w-4 h-4"></i>
         </button>
         <input class="progress-bar" data-progress type="range" min="0" max="100" value="0" aria-label="Track progress" disabled />
         <span class="player-time" data-player-time>0:00 / 0:00</span>

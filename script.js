@@ -66,6 +66,9 @@ const searchInput = document.querySelector(".search-input");
 const searchToggle = document.querySelector('[data-action="search-toggle"]');
 const clearSearch = document.querySelector('[data-action="clear-search"]');
 const playPauseButton = document.querySelector('[data-action="play-pause"]');
+const previousTrackButton = document.querySelector('[data-action="previous-track"]');
+const nextTrackButton = document.querySelector('[data-action="next-track"]');
+const playerBar = document.querySelector("[data-player]");
 const progressBar = document.querySelector("[data-progress]");
 const currentTitle = document.querySelector("[data-current-title]");
 const playerStatus = document.querySelector("[data-player-status]");
@@ -74,17 +77,41 @@ let youtubePlayer;
 let youtubeReady = false;
 let pendingTrack;
 let isPlaying = false;
+let progressAnimationFrame;
 let activeSearchRequest = 0;
+let trackQueue = [];
+let currentTrackIndex = -1;
+let trackHistory = [];
 
 window.onYouTubeIframeAPIReady = () => {
   youtubePlayer = new YT.Player("youtubePlayer", {
     width: "320",
     height: "180",
-    playerVars: { controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
+    playerVars: {
+      controls: 0,
+      disablekb: 1,
+      playsinline: 1,
+      rel: 0,
+      origin: window.location.origin
+    },
     events: {
       onReady: () => {
         youtubeReady = true;
         if (pendingTrack) loadYouTubeTrack(pendingTrack);
+      },
+      onError: (event) => {
+        const errorMessages = {
+          2: "Invalid YouTube video ID",
+          5: "This video cannot be played in the HTML5 player",
+          100: "This video is unavailable or private",
+          101: "The owner does not allow embedded playback",
+          150: "The owner does not allow embedded playback",
+          153: "YouTube could not verify the embedded player origin"
+        };
+        playerStatus.textContent = errorMessages[event.data] || "Video unavailable";
+        playPauseButton.disabled = true;
+        progressBar.disabled = true;
+        setPlaybackState(false);
       },
       onStateChange: (event) => {
         if (event.data === YT.PlayerState.PLAYING) {
@@ -96,10 +123,7 @@ window.onYouTubeIframeAPIReady = () => {
           playerStatus.textContent = "Paused";
           setPlaybackState(false);
         } else if (event.data === YT.PlayerState.ENDED) {
-          playerStatus.textContent = "Finished";
-          setPlaybackState(false);
-          progressBar.value = "0";
-          progressBar.style.setProperty("--progress", "0%");
+          playNextTrack();
         }
       }
     }
@@ -186,9 +210,24 @@ function setPlaybackState(playing) {
   playPauseButton.innerHTML = `<i data-lucide="${playing ? "pause" : "play"}" class="w-5 h-5"></i>`;
   playPauseButton.setAttribute("aria-label", playing ? "Pause" : "Play");
   lucide.createIcons();
+
+  if (playing) {
+    startProgressAnimation();
+  } else if (progressAnimationFrame) {
+    cancelAnimationFrame(progressAnimationFrame);
+    progressAnimationFrame = undefined;
+  }
 }
 
 async function selectAndPlayTrack(videoId, title, artist) {
+  playerBar.classList.remove("is-hidden");
+  const selectedIndex = trackQueue.findIndex((track) => track.videoId === videoId);
+  if (selectedIndex >= 0) currentTrackIndex = selectedIndex;
+  const selectedTrack = { videoId, title, artist };
+  const lastTrack = trackHistory.at(-1);
+  if (!lastTrack || lastTrack.videoId !== videoId) trackHistory.push(selectedTrack);
+  updateTrackButtons();
+
   currentTitle.textContent = `${title} - ${artist}`;
   playerStatus.textContent = "Loading";
   playPauseButton.disabled = true;
@@ -224,6 +263,15 @@ async function searchTracks(query) {
       return;
     }
 
+    trackQueue = songs.map((song) => ({
+      videoId: song.videoId,
+      title: song.name || "Unknown track",
+      artist: song.artist?.name || "Unknown artist"
+    }));
+    currentTrackIndex = -1;
+    trackHistory = [];
+    updateTrackButtons();
+
     songs.forEach((song) => {
       const title = song.name || "Unknown track";
       const artist = song.artist?.name || "Unknown artist";
@@ -256,6 +304,9 @@ playPauseButton.addEventListener("click", () => {
   }
 });
 
+nextTrackButton.addEventListener("click", playNextTrack);
+previousTrackButton.addEventListener("click", playPreviousTrack);
+
 progressBar.addEventListener("input", () => {
   const progress = Number(progressBar.value);
   progressBar.style.setProperty("--progress", `${progress}%`);
@@ -277,5 +328,44 @@ function updateProgress() {
   playerTime.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
 }
 
-window.setInterval(updateProgress, 250);
+function startProgressAnimation() {
+  if (progressAnimationFrame) return;
+
+  const animate = () => {
+    progressAnimationFrame = undefined;
+    updateProgress();
+    if (isPlaying) progressAnimationFrame = requestAnimationFrame(animate);
+  };
+
+  progressAnimationFrame = requestAnimationFrame(animate);
+}
+
+function playNextTrack() {
+  if (!trackQueue.length) return;
+
+  let nextIndex = Math.floor(Math.random() * trackQueue.length);
+  if (trackQueue.length > 1 && nextIndex === currentTrackIndex) {
+    nextIndex = (nextIndex + 1) % trackQueue.length;
+  }
+
+  const nextTrack = trackQueue[nextIndex];
+  selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist);
+}
+
+function playPreviousTrack() {
+  if (trackHistory.length < 2) return;
+
+  trackHistory.pop();
+  const previousTrack = trackHistory.at(-1);
+  currentTrackIndex = trackQueue.findIndex((track) => track.videoId === previousTrack.videoId);
+  updateTrackButtons();
+  currentTitle.textContent = `${previousTrack.title} - ${previousTrack.artist}`;
+  pendingTrack = previousTrack;
+  if (youtubeReady) loadYouTubeTrack(previousTrack);
+}
+
+function updateTrackButtons() {
+  previousTrackButton.disabled = trackHistory.length < 2;
+  nextTrackButton.disabled = trackQueue.length === 0;
+}
 
