@@ -184,16 +184,27 @@ h1 {
   .search-input {
     display: block;
     min-width: 0;
-    padding: 0 5.25rem 0 1rem;
+    padding: 0 2.75rem 0 0.85rem;
+    font-size: 0.875rem;
+    text-overflow: ellipsis;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s ease;
   }
 
+  .search-input::placeholder {
+    font-size: 0.825rem;
+    color: rgb(161 161 170);
+  }
+
   .search-form.is-open {
-    width: min(70vw, 20rem);
+    width: min(calc(100vw - 5.5rem), 20rem);
     border: 1px solid rgb(63 63 70);
     background-color: rgb(24 24 27);
+  }
+
+  .search-form:has(.clear-search:not(.is-hidden)) .search-input {
+    padding-right: 4.75rem;
   }
 
   .search-form.is-open .search-input {
@@ -210,7 +221,7 @@ h1 {
   }
 
   .search-form.is-open .search-suggestions {
-    width: min(70vw, 20rem);
+    width: 100%;
   }
 
   .header-title {

@@ -275,6 +275,7 @@ function updateTitleMarquee() {
 }
 
 async function selectAndPlayTrack(videoId, title, artist, thumbnail = null, fromHistory = false) {
+  startSilentAudioKeepAlive();
   playerBar.classList.remove("is-hidden");
   if (!fromHistory) forwardTrack = undefined;
   const selectedIndex = trackQueue.findIndex((track) => track.videoId === videoId);
@@ -308,28 +309,42 @@ function updateMediaSession(track) {
   if (!("mediaSession" in navigator) || !("MediaMetadata" in window)) return;
 
   const artworkUrl = track.thumbnail || `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`;
-
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.artist,
     album: "Play LooP",
     artwork: [
-      { src: artworkUrl, sizes: "512x512", type: "image/jpeg" },
-      { src: "/public/logo.svg", sizes: "192x192", type: "image/svg+xml" }
+      { src: artworkUrl, sizes: "96x96", type: "image/jpeg" },
+      { src: artworkUrl, sizes: "128x128", type: "image/jpeg" },
+      { src: artworkUrl, sizes: "192x192", type: "image/jpeg" },
+      { src: artworkUrl, sizes: "256x256", type: "image/jpeg" },
+      { src: artworkUrl, sizes: "384x384", type: "image/jpeg" },
+      { src: artworkUrl, sizes: "512x512", type: "image/jpeg" }
     ]
   });
+
+  setupMediaSessionActionHandlers();
 }
 
-if ("mediaSession" in navigator) {
+function setupMediaSessionActionHandlers() {
+  if (!("mediaSession" in navigator)) return;
+
   const mediaSessionActions = {
-    play: () => audioPlayer.play(),
-    pause: () => audioPlayer.pause(),
-    nexttrack: playNextTrack,
-    previoustrack: playPreviousTrack,
+    play: () => {
+      audioPlayer.play();
+    },
+    pause: () => {
+      audioPlayer.pause();
+    },
+    previoustrack: () => {
+      playPreviousTrack();
+    },
+    nexttrack: () => {
+      playNextTrack();
+    },
     seekto: (details) => {
-      if (details.seekTime !== undefined && Number.isFinite(audioPlayer.duration)) {
+      if (details.seekTime !== undefined && Number.isFinite(details.seekTime)) {
         audioPlayer.seekTo(details.seekTime);
-        updateProgress();
       }
     },
     seekbackward: (details) => {
@@ -362,9 +377,24 @@ function loadAudioTrack(track) {
 
   nativeAudioPlayer.src = `/api/audio?id=${encodeURIComponent(track.videoId)}`;
   nativeAudioPlayer.load();
-  audioPlayer.play().catch(() => {
-    currentActiveEngine = "youtube";
-    loadAudioTrackYouTube(track);
+
+  const handleCanPlay = () => {
+    nativeAudioPlayer.removeEventListener("canplay", handleCanPlay);
+    if (currentActiveEngine === "native") {
+      nativeAudioPlayer.play().catch(() => {
+        // Retry playing if initial attempt was deferred by mobile browser
+      });
+    }
+  };
+
+  nativeAudioPlayer.addEventListener("canplay", handleCanPlay);
+
+  nativeAudioPlayer.play().catch(() => {
+    // Keep native audio engine active while stream buffers on mobile
+    if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      currentActiveEngine = "youtube";
+      loadAudioTrackYouTube(track);
+    }
   });
 }
 

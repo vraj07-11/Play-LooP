@@ -78,6 +78,9 @@ if (searchForm) {
   });
 }
 
+const suggestionsCache = new Map();
+let activeSuggestionController = null;
+
 if (searchInput) {
   searchInput.addEventListener("input", () => {
     isSearchSubmitted = false;
@@ -85,12 +88,17 @@ if (searchInput) {
     clearTimeout(suggestionTimer);
     const query = searchInput.value.trim();
 
-    if (query.length < 2) {
+    if (!query) {
       hideSearchSuggestions();
       return;
     }
 
-    suggestionTimer = window.setTimeout(() => loadSearchSuggestions(query), 250);
+    if (suggestionsCache.has(query.toLowerCase())) {
+      renderSuggestions(query, suggestionsCache.get(query.toLowerCase()));
+      return;
+    }
+
+    suggestionTimer = window.setTimeout(() => loadSearchSuggestions(query), 60);
   });
 }
 
@@ -107,50 +115,80 @@ if (clearSearch) {
 function hideSearchSuggestions() {
   clearTimeout(suggestionTimer);
   activeSuggestionRequest += 1;
+  if (activeSuggestionController) {
+    activeSuggestionController.abort();
+    activeSuggestionController = null;
+  }
   if (searchSuggestions) {
     searchSuggestions.replaceChildren();
     searchSuggestions.classList.add("is-hidden");
   }
 }
 
+function renderSuggestions(query, songs) {
+  if (isSearchSubmitted || !searchSuggestions || (searchInput && searchInput.value.trim().toLowerCase() !== query.toLowerCase())) return;
+
+  const suggestions = songs
+    .map((song) => ({
+      title: song.name || "Unknown track",
+      artist: song.artist?.name || "Unknown artist"
+    }))
+    .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
+    .slice(0, 6);
+
+  searchSuggestions.replaceChildren();
+
+  if (suggestions.length === 0) {
+    searchSuggestions.classList.add("is-hidden");
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  const searchIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 shrink-0 text-zinc-400"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>`;
+
+  suggestions.forEach(({ title, artist }) => {
+    const suggestion = document.createElement("button");
+    suggestion.type = "button";
+    suggestion.className = "search-suggestion";
+    suggestion.setAttribute("role", "option");
+    suggestion.innerHTML = `${searchIconSvg}<span><strong></strong><small></small></span>`;
+    suggestion.querySelector("strong").textContent = title;
+    suggestion.querySelector("small").textContent = artist;
+    suggestion.addEventListener("click", () => {
+      if (searchInput) searchInput.value = title;
+      setClearSearchState();
+      if (searchForm) searchForm.requestSubmit();
+    });
+    fragment.appendChild(suggestion);
+  });
+
+  searchSuggestions.appendChild(fragment);
+  searchSuggestions.classList.remove("is-hidden");
+}
+
 async function loadSearchSuggestions(query) {
-  const requestId = ++activeSuggestionRequest;
+  const queryLower = query.toLowerCase();
+
+  if (suggestionsCache.has(queryLower)) {
+    renderSuggestions(query, suggestionsCache.get(queryLower));
+    return;
+  }
+
+  if (activeSuggestionController) {
+    activeSuggestionController.abort();
+  }
+  activeSuggestionController = new AbortController();
 
   try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    const songs = await response.json();
-    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !response.ok || (searchInput && searchInput.value.trim() !== query)) return;
-
-    const suggestions = songs
-      .map((song) => ({
-        title: song.name || "Unknown track",
-        artist: song.artist?.name || "Unknown artist"
-      }))
-      .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
-      .slice(0, 6);
-
-    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !searchSuggestions) return;
-
-    searchSuggestions.replaceChildren();
-    suggestions.forEach(({ title, artist }) => {
-      const suggestion = document.createElement("button");
-      suggestion.type = "button";
-      suggestion.className = "search-suggestion";
-      suggestion.setAttribute("role", "option");
-      suggestion.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i><span><strong></strong><small></small></span>';
-      suggestion.querySelector("strong").textContent = title;
-      suggestion.querySelector("small").textContent = artist;
-      suggestion.addEventListener("click", () => {
-        if (searchInput) searchInput.value = title;
-        setClearSearchState();
-        if (searchForm) searchForm.requestSubmit();
-      });
-      searchSuggestions.appendChild(suggestion);
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+      signal: activeSuggestionController.signal
     });
-    searchSuggestions.classList.toggle("is-hidden", suggestions.length === 0 || isSearchSubmitted);
-    if (window.lucide?.createIcons) lucide.createIcons();
+    if (!response.ok) return;
+    const songs = await response.json();
+    suggestionsCache.set(queryLower, songs);
+    renderSuggestions(query, songs);
   } catch (error) {
-    if (requestId === activeSuggestionRequest) hideSearchSuggestions();
+    if (error.name === "AbortError") return;
     console.error("Search suggestions unavailable:", error);
   }
 }
