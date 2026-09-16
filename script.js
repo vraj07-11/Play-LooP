@@ -169,7 +169,8 @@ searchForm.addEventListener("submit", (event) => {
   const query = searchInput.value.trim();
 
   if (query) {
-    showPage("search");
+    showPage("search", false);
+    window.history.pushState({}, "", "#search");
     searchTracks(query);
   }
 });
