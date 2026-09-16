@@ -80,6 +80,9 @@ navLinks.forEach((navLink) => navLink.addEventListener("click", (event) => {
   window.setTimeout(() => navLink.classList.remove("is-tapped"), 250);
   showPage(navLink.dataset.nav);
   setSidebarState(false);
+  if (navLink.dataset.nav === "search" && window.innerWidth <= 640 && typeof setSearchState === "function") {
+    setSearchState(true);
+  }
 }));
 
 profileButton.addEventListener("click", () => showPage("profile"));

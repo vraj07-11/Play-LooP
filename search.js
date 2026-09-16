@@ -1,13 +1,21 @@
+const searchForm = document.querySelector('[data-search-form]');
+const searchInput = document.querySelector('.search-input');
+const searchSuggestions = document.querySelector('[data-search-suggestions]');
+const clearSearch = document.querySelector('[data-action="clear-search"]');
+const searchToggle = document.querySelector('[data-action="search-toggle"]');
+
 let activeSearchRequest = 0;
 let activeSuggestionRequest = 0;
 let suggestionTimer;
 let isSearchSubmitted = false;
 
 function setClearSearchState() {
+  if (!clearSearch || !searchInput) return;
   clearSearch.classList.toggle("is-hidden", !searchInput.value);
 }
 
 function setSearchState(isOpen) {
+  if (!searchForm || !searchInput || !searchToggle || !clearSearch) return;
   searchForm.classList.toggle("is-open", isOpen);
   document.body.classList.toggle("mobile-search-open", isOpen);
 
@@ -25,17 +33,26 @@ function setSearchState(isOpen) {
   setClearSearchState();
 }
 
-searchToggle.addEventListener("click", () => {
-  if (!searchForm.classList.contains("is-open") && window.innerWidth <= 640) {
-    setSearchState(true);
-    return;
-  }
+if (searchToggle) {
+  searchToggle.addEventListener("click", () => {
+    if (!searchForm) return;
 
-  searchForm.requestSubmit();
-});
+    if (!searchForm.classList.contains("is-open") && window.innerWidth <= 640) {
+      setSearchState(true);
+      return;
+    }
+
+    if (window.innerWidth <= 640 && !searchInput.value.trim()) {
+      setSearchState(false);
+      return;
+    }
+
+    searchForm.requestSubmit();
+  });
+}
 
 document.addEventListener("pointerdown", (event) => {
-  if (!searchForm.contains(event.target)) {
+  if (searchForm && !searchForm.contains(event.target)) {
     hideSearchSuggestions();
     if (searchForm.classList.contains("is-open")) {
       setSearchState(false);
@@ -43,49 +60,57 @@ document.addEventListener("pointerdown", (event) => {
   }
 });
 
-searchForm.addEventListener("submit", (event) => {
-  event.preventDefault();
+if (searchForm) {
+  searchForm.addEventListener("submit", (event) => {
+    event.preventDefault();
 
-  const query = searchInput.value.trim();
+    const query = searchInput ? searchInput.value.trim() : "";
 
-  if (query) {
-    isSearchSubmitted = true;
+    if (query) {
+      isSearchSubmitted = true;
+      clearTimeout(suggestionTimer);
+      hideSearchSuggestions();
+      if (searchInput) searchInput.blur();
+      showPage("search", false);
+      window.history.pushState({}, "", "#search");
+      searchTracks(query);
+    }
+  });
+}
+
+if (searchInput) {
+  searchInput.addEventListener("input", () => {
+    isSearchSubmitted = false;
+    setClearSearchState();
     clearTimeout(suggestionTimer);
+    const query = searchInput.value.trim();
+
+    if (query.length < 2) {
+      hideSearchSuggestions();
+      return;
+    }
+
+    suggestionTimer = window.setTimeout(() => loadSearchSuggestions(query), 250);
+  });
+}
+
+if (clearSearch) {
+  clearSearch.addEventListener("click", () => {
+    isSearchSubmitted = false;
+    if (searchInput) searchInput.value = "";
+    setClearSearchState();
     hideSearchSuggestions();
-    searchInput.blur();
-    showPage("search", false);
-    window.history.pushState({}, "", "#search");
-    searchTracks(query);
-  }
-});
-
-searchInput.addEventListener("input", () => {
-  isSearchSubmitted = false;
-  setClearSearchState();
-  clearTimeout(suggestionTimer);
-  const query = searchInput.value.trim();
-
-  if (query.length < 2) {
-    hideSearchSuggestions();
-    return;
-  }
-
-  suggestionTimer = window.setTimeout(() => loadSearchSuggestions(query), 250);
-});
-
-clearSearch.addEventListener("click", () => {
-  isSearchSubmitted = false;
-  searchInput.value = "";
-  setClearSearchState();
-  hideSearchSuggestions();
-  searchInput.focus();
-});
+    if (searchInput) searchInput.focus();
+  });
+}
 
 function hideSearchSuggestions() {
   clearTimeout(suggestionTimer);
   activeSuggestionRequest += 1;
-  searchSuggestions.replaceChildren();
-  searchSuggestions.classList.add("is-hidden");
+  if (searchSuggestions) {
+    searchSuggestions.replaceChildren();
+    searchSuggestions.classList.add("is-hidden");
+  }
 }
 
 async function loadSearchSuggestions(query) {
@@ -94,7 +119,7 @@ async function loadSearchSuggestions(query) {
   try {
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
     const songs = await response.json();
-    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !response.ok || searchInput.value.trim() !== query) return;
+    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !response.ok || (searchInput && searchInput.value.trim() !== query)) return;
 
     const suggestions = songs
       .map((song) => ({
@@ -104,7 +129,7 @@ async function loadSearchSuggestions(query) {
       .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
       .slice(0, 6);
 
-    if (isSearchSubmitted || requestId !== activeSuggestionRequest) return;
+    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !searchSuggestions) return;
 
     searchSuggestions.replaceChildren();
     suggestions.forEach(({ title, artist }) => {
@@ -116,9 +141,9 @@ async function loadSearchSuggestions(query) {
       suggestion.querySelector("strong").textContent = title;
       suggestion.querySelector("small").textContent = artist;
       suggestion.addEventListener("click", () => {
-        searchInput.value = title;
+        if (searchInput) searchInput.value = title;
         setClearSearchState();
-        searchForm.requestSubmit();
+        if (searchForm) searchForm.requestSubmit();
       });
       searchSuggestions.appendChild(suggestion);
     });
@@ -130,20 +155,22 @@ async function loadSearchSuggestions(query) {
   }
 }
 
-searchInput.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    hideSearchSuggestions();
-    setSearchState(false);
-    return;
-  }
+if (searchInput) {
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      hideSearchSuggestions();
+      setSearchState(false);
+      return;
+    }
 
-  if (event.key === "Enter") {
-    event.preventDefault();
-    clearTimeout(suggestionTimer);
-    hideSearchSuggestions();
-    searchForm.requestSubmit();
-  }
-});
+    if (event.key === "Enter") {
+      event.preventDefault();
+      clearTimeout(suggestionTimer);
+      hideSearchSuggestions();
+      if (searchForm) searchForm.requestSubmit();
+    }
+  });
+}
 
 async function searchTracks(query) {
   const requestId = ++activeSearchRequest;

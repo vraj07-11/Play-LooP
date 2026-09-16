@@ -184,7 +184,7 @@ h1 {
   .search-input {
     display: block;
     min-width: 0;
-    padding: 0 2.75rem 0 1rem;
+    padding: 0 5.25rem 0 1rem;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s ease;
