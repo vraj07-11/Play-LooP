@@ -21,12 +21,6 @@ const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
 	: [];
-const ytdlpRemoteArgs = process.env.YTDLP_REMOTE_COMPONENTS
-	? ["--remote-components", process.env.YTDLP_REMOTE_COMPONENTS]
-	: [];
-const ytdlpClientArgs = process.env.YTDLP_CLIENTS
-	? ["--extractor-args", `youtube:player_client=${process.env.YTDLP_CLIENTS}`]
-	: [];
 const ytdlpNetworkArgs = ["--force-ipv4"];
 
 app.use(cors());
@@ -110,8 +104,7 @@ app.get("/api/recommendations", async (req, res) => {
 app.get("/api/health", (req, res) => {
 	res.json({
 		ok: true,
-		ytdlpRuntime: process.env.YTDLP_JS_RUNTIME || "default",
-		ytdlpRemoteComponents: process.env.YTDLP_REMOTE_COMPONENTS || "none"
+		ytdlpRuntime: process.env.YTDLP_JS_RUNTIME || "default"
 	});
 });
 
@@ -142,8 +135,6 @@ async function getCachedAudio(videoId) {
 				"--no-progress",
 				"--no-playlist",
 				...ytdlpRuntimeArgs,
-				...ytdlpRemoteArgs,
-				...ytdlpClientArgs,
 				...ytdlpNetworkArgs,
 				"--no-part",
 				"-f",
