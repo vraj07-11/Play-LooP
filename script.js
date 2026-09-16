@@ -65,14 +65,46 @@ const searchForm = document.querySelector("[data-search-form]");
 const searchInput = document.querySelector(".search-input");
 const searchToggle = document.querySelector('[data-action="search-toggle"]');
 const clearSearch = document.querySelector('[data-action="clear-search"]');
-const audio = new Audio();
 const playPauseButton = document.querySelector('[data-action="play-pause"]');
 const progressBar = document.querySelector("[data-progress]");
 const currentTitle = document.querySelector("[data-current-title]");
 const playerStatus = document.querySelector("[data-player-status]");
 const playerTime = document.querySelector("[data-player-time]");
+let youtubePlayer;
+let youtubeReady = false;
+let pendingTrack;
 let isPlaying = false;
 let activeSearchRequest = 0;
+
+window.onYouTubeIframeAPIReady = () => {
+  youtubePlayer = new YT.Player("youtubePlayer", {
+    width: "320",
+    height: "180",
+    playerVars: { controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
+    events: {
+      onReady: () => {
+        youtubeReady = true;
+        if (pendingTrack) loadYouTubeTrack(pendingTrack);
+      },
+      onStateChange: (event) => {
+        if (event.data === YT.PlayerState.PLAYING) {
+          playPauseButton.disabled = false;
+          progressBar.disabled = false;
+          playerStatus.textContent = "Playing";
+          setPlaybackState(true);
+        } else if (event.data === YT.PlayerState.PAUSED) {
+          playerStatus.textContent = "Paused";
+          setPlaybackState(false);
+        } else if (event.data === YT.PlayerState.ENDED) {
+          playerStatus.textContent = "Finished";
+          setPlaybackState(false);
+          progressBar.value = "0";
+          progressBar.style.setProperty("--progress", "0%");
+        }
+      }
+    }
+  });
+};
 
 function setClearSearchState() {
   clearSearch.classList.toggle("is-hidden", !searchInput.value);
@@ -165,18 +197,13 @@ async function selectAndPlayTrack(videoId, title, artist) {
   progressBar.style.setProperty("--progress", "0%");
   playerTime.textContent = "0:00 / 0:00";
 
-  try {
-    audio.src = `/api/audio?id=${encodeURIComponent(videoId)}`;
-    audio.load();
-    await audio.play();
-    playPauseButton.disabled = false;
-    playerStatus.textContent = "Playing";
-    setPlaybackState(true);
-  } catch (error) {
-    console.error(error);
-    playerStatus.textContent = "Playback failed - check server logs";
-    setPlaybackState(false);
-  }
+  pendingTrack = { videoId, title, artist };
+  if (youtubeReady) loadYouTubeTrack(pendingTrack);
+  else playerStatus.textContent = "Loading YouTube player";
+}
+
+function loadYouTubeTrack(track) {
+  youtubePlayer.loadVideoById(track.videoId);
 }
 
 async function searchTracks(query) {
@@ -220,52 +247,35 @@ async function searchTracks(query) {
   }
 }
 
-playPauseButton.addEventListener("click", async () => {
-  if (!audio.src) return;
-  if (audio.paused) {
-    await audio.play();
-    playerStatus.textContent = "Playing";
-    setPlaybackState(true);
+playPauseButton.addEventListener("click", () => {
+  if (!youtubePlayer || !youtubeReady) return;
+  if (isPlaying) {
+    youtubePlayer.pauseVideo();
   } else {
-    audio.pause();
-    playerStatus.textContent = "Paused";
-    setPlaybackState(false);
+    youtubePlayer.playVideo();
   }
-});
-
-audio.addEventListener("timeupdate", () => {
-  updateProgress();
-});
-
-audio.addEventListener("loadedmetadata", updateProgress);
-audio.addEventListener("durationchange", updateProgress);
-
-audio.addEventListener("error", () => {
-  playPauseButton.disabled = true;
-  progressBar.disabled = true;
-  playerStatus.textContent = "Playback unavailable";
-});
-
-audio.addEventListener("ended", () => {
-  setPlaybackState(false);
-  playerStatus.textContent = "Finished";
-  progressBar.value = "0";
-  progressBar.style.setProperty("--progress", "0%");
 });
 
 progressBar.addEventListener("input", () => {
   const progress = Number(progressBar.value);
   progressBar.style.setProperty("--progress", `${progress}%`);
-  if (audio.duration) audio.currentTime = (progress / 100) * audio.duration;
+  if (youtubePlayer && youtubeReady) {
+    youtubePlayer.seekTo((progress / 100) * youtubePlayer.getDuration(), true);
+  }
 });
 
 function updateProgress() {
-  if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  if (!youtubePlayer || !youtubeReady) return;
+  const duration = youtubePlayer.getDuration();
+  const currentTime = youtubePlayer.getCurrentTime();
+  if (!Number.isFinite(duration) || duration <= 0) return;
 
   progressBar.disabled = false;
-  const progress = (audio.currentTime / audio.duration) * 100;
+  const progress = (currentTime / duration) * 100;
   progressBar.value = String(progress);
   progressBar.style.setProperty("--progress", `${progress}%`);
-  playerTime.textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+  playerTime.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
 }
+
+window.setInterval(updateProgress, 250);
 
