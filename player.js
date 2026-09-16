@@ -1,128 +1,3 @@
-const menuButtons = document.querySelectorAll('[data-action="toggle-sidebar"]');
-const closeButton = document.querySelector('[data-action="close-sidebar"]');
-const sidebar = document.querySelector('[data-sidebar]');
-const navLinks = document.querySelectorAll('[data-nav]');
-const content = document.querySelector('[data-content]');
-const profileButton = document.querySelector('[data-action="profile-button"]');
-
-let deferredPrompt;
-
-window.addEventListener("beforeinstallprompt", (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  const installBtn = document.querySelector('[data-action="install-pwa"]');
-  if (installBtn) {
-    installBtn.classList.remove("hidden");
-  }
-});
-
-window.addEventListener("appinstalled", () => {
-  deferredPrompt = null;
-  const installContainer = document.querySelector("#pwaInstallStatus");
-  if (installContainer) {
-    installContainer.innerHTML = '<p class="text-emerald-400 font-semibold mt-4">✓ Play LooP is installed on your device!</p>';
-  }
-});
-
-function showPage(pageName, updateUrl = true) {
-  const page = pages[pageName] || pages.home;
-  let pageBody;
-
-  if (pageName === "search") {
-    pageBody = '<div class="track-list" data-track-list><p class="muted-text">Search for a song to begin.</p></div>';
-  } else if (pageName === "Download") {
-    pageBody = `
-      <div class="flex flex-col items-start gap-4 p-6 bg-zinc-900/60 rounded-2xl border border-zinc-800/80 max-w-xl">
-        <div class="flex items-center gap-3">
-          <img src="public/logo.svg" alt="Play LooP Logo" class="w-10 h-10 shrink-0" />
-          <h3 class="text-lg font-normal text-white tracking-normal">Install Play LooP App</h3>
-        </div>
-        <p class="text-zinc-400 text-sm font-normal tracking-normal leading-relaxed">
-          Install Play LooP on your desktop or mobile home screen for fast access, full-screen playback, and seamless offline listening.
-        </p>
-        <div id="pwaInstallStatus" class="w-full pt-1">
-          <button type="button" data-action="install-pwa" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-normal tracking-normal rounded-full transition cursor-pointer shadow-sm">
-            Install Desktop / Mobile App
-          </button>
-        </div>
-      </div>
-    `;
-  } else {
-    pageBody = `<div class="page-grid">
-      ${page.cards.map((card) => `<article class="page-card"><h3>${card}</h3><p>Coming soon</p></article>`).join("")}
-    </div>`;
-  }
-
-  content.innerHTML = `
-    <div class="page-header${pageName === "search" ? " search-page-header" : ""}">
-      <h2>${page.title}</h2>
-      <p>${page.description}</p>
-    </div>
-    ${pageBody}
-  `;
-
-  if (pageName === "Download") {
-    const installBtn = document.querySelector('[data-action="install-pwa"]');
-    if (installBtn) {
-      installBtn.addEventListener("click", async () => {
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          if (outcome === "accepted") {
-            deferredPrompt = null;
-          }
-        } else {
-          alert("Play LooP is already installed or your browser supports PWA installation via the address bar menu!");
-        }
-      });
-    }
-  }
-
-  if (updateUrl) {
-    if (pageName === "home") {
-      window.history.pushState({}, "", "/");
-    } else {
-      window.location.hash = pageName;
-    }
-  }
-}
-
-function setSidebarState(isOpen) {
-  sidebar.classList.toggle("is-closed", !isOpen);
-  menuButtons.forEach((menuButton) => {
-    menuButton.classList.toggle("is-hidden", isOpen);
-    menuButton.setAttribute("aria-expanded", String(isOpen));
-    menuButton.setAttribute("tabindex", isOpen ? "-1" : "0");
-  });
-  closeButton.classList.toggle("is-hidden", !isOpen);
-  closeButton.setAttribute("tabindex", isOpen ? "0" : "-1");
-}
-
-menuButtons.forEach((menuButton) => menuButton.addEventListener("click", () => {
-  setSidebarState(true);
-}));
-
-closeButton.addEventListener("click", () => {
-  setSidebarState(false);
-});
-
-navLinks.forEach((navLink) => navLink.addEventListener("click", (event) => {
-  event.preventDefault();
-  navLink.classList.add("is-tapped");
-  window.setTimeout(() => navLink.classList.remove("is-tapped"), 250);
-  showPage(navLink.dataset.nav);
-  setSidebarState(false);
-}));
-
-profileButton.addEventListener("click", () => showPage("profile"));
-
-setSidebarState(false);
-
-const searchForm = document.querySelector("[data-search-form]");
-const searchInput = document.querySelector(".search-input");
-const searchSuggestions = document.querySelector("[data-search-suggestions]");
-const searchToggle = document.querySelector('[data-action="search-toggle"]');
-const clearSearch = document.querySelector('[data-action="clear-search"]');
 const playPauseButton = document.querySelector('[data-action="play-pause"]');
 const previousTrackButton = document.querySelector('[data-action="previous-track"]');
 const nextTrackButton = document.querySelector('[data-action="next-track"]');
@@ -136,12 +11,10 @@ const progressBar = document.querySelector("[data-progress]");
 const currentTitle = document.querySelector("[data-current-title]");
 const playerStatus = document.querySelector("[data-player-status]");
 const playerTime = document.querySelector("[data-player-time]");
+
 let pendingTrack;
 let isPlaying = false;
 let progressAnimationFrame;
-let activeSearchRequest = 0;
-let activeSuggestionRequest = 0;
-let suggestionTimer;
 let recommendationRequestId = 0;
 let trackQueue = [];
 let recommendationQueue = [];
@@ -158,6 +31,48 @@ const youtubeReady = new Promise((resolve) => {
   youtubeReadyResolve = resolve;
 });
 const playerListeners = new Map();
+
+let currentActiveEngine = "native";
+const nativeAudioPlayer = new Audio();
+nativeAudioPlayer.preload = "auto";
+
+nativeAudioPlayer.addEventListener("play", () => {
+  if (currentActiveEngine === "native") {
+    audioPlayer.ended = false;
+    audioPlayer.duration = nativeAudioPlayer.duration || 0;
+    audioPlayer.dispatchEvent("loadedmetadata");
+    audioPlayer.dispatchEvent("play");
+  }
+});
+
+nativeAudioPlayer.addEventListener("pause", () => {
+  if (currentActiveEngine === "native") {
+    audioPlayer.dispatchEvent("pause");
+  }
+});
+
+nativeAudioPlayer.addEventListener("ended", () => {
+  if (currentActiveEngine === "native") {
+    audioPlayer.ended = true;
+    audioPlayer.dispatchEvent("ended");
+  }
+});
+
+nativeAudioPlayer.addEventListener("loadedmetadata", () => {
+  if (currentActiveEngine === "native") {
+    audioPlayer.duration = nativeAudioPlayer.duration;
+    audioPlayer.dispatchEvent("loadedmetadata");
+  }
+});
+
+nativeAudioPlayer.addEventListener("error", (e) => {
+  if (currentActiveEngine === "native" && pendingTrack) {
+    console.warn("[Audio Engine] Native audio playback failed, switching to YouTube player fallback...", e);
+    currentActiveEngine = "youtube";
+    loadAudioTrackYouTube(pendingTrack);
+  }
+});
+
 const audioPlayer = {
   duration: 0,
   currentTime: 0,
@@ -171,15 +86,26 @@ const audioPlayer = {
     (playerListeners.get(eventName) || []).forEach((listener) => listener());
   },
   play() {
+    if (currentActiveEngine === "native") {
+      return nativeAudioPlayer.play();
+    }
     if (!youtubePlayer) return Promise.reject(new Error("YouTube player is not ready"));
     youtubePlayer.playVideo();
     return Promise.resolve();
   },
   pause() {
-    youtubePlayer?.pauseVideo();
+    if (currentActiveEngine === "native") {
+      nativeAudioPlayer.pause();
+    } else {
+      youtubePlayer?.pauseVideo();
+    }
   },
   seekTo(time) {
-    youtubePlayer?.seekTo(time, true);
+    if (currentActiveEngine === "native") {
+      nativeAudioPlayer.currentTime = time;
+    } else {
+      youtubePlayer?.seekTo(time, true);
+    }
   }
 };
 
@@ -200,8 +126,13 @@ function initializeYouTubePlayer() {
     },
     events: {
       onReady: () => youtubeReadyResolve(),
-      onError: () => audioPlayer.dispatchEvent("error"),
+      onError: () => {
+        if (currentActiveEngine === "youtube") {
+          audioPlayer.dispatchEvent("error");
+        }
+      },
       onStateChange: ({ data }) => {
+        if (currentActiveEngine !== "youtube") return;
         if (data === YT.PlayerState.PLAYING) {
           audioPlayer.ended = false;
           audioPlayer.duration = youtubePlayer.getDuration();
@@ -255,13 +186,14 @@ audioPlayer.addEventListener("ended", () => {
     repeatButton.setAttribute("aria-label", "Repeat off");
     repeatButton.classList.remove("is-active");
     audioPlayer.ended = false;
-    youtubePlayer.seekTo(0, true);
-    youtubePlayer.playVideo();
+    audioPlayer.seekTo(0);
+    audioPlayer.play();
     return;
   }
 
   playNextTrack();
 });
+
 audioPlayer.addEventListener("loadedmetadata", updateProgress);
 audioPlayer.addEventListener("loadedmetadata", () => {
   rewindButton.disabled = false;
@@ -275,159 +207,6 @@ audioPlayer.addEventListener("error", () => {
   forwardButton.disabled = true;
   setPlaybackState(false);
 });
-
-function setClearSearchState() {
-  clearSearch.classList.toggle("is-hidden", !searchInput.value);
-}
-
-function setSearchState(isOpen) {
-  searchForm.classList.toggle("is-open", isOpen);
-  document.body.classList.toggle("mobile-search-open", isOpen);
-
-  searchToggle.setAttribute("aria-label", isOpen ? "Close search" : "Open search");
-
-  if (isOpen) {
-    searchInput.focus();
-  } else {
-    searchInput.value = "";
-    hideSearchSuggestions();
-    clearSearch.classList.add("is-hidden");
-    searchInput.blur();
-  }
-
-  setClearSearchState();
-}
-
-searchToggle.addEventListener("click", () => {
-  if (!searchForm.classList.contains("is-open") && window.innerWidth <= 640) {
-    setSearchState(true);
-    return;
-  }
-
-  searchForm.requestSubmit();
-});
-
-let isSearchSubmitted = false;
-
-document.addEventListener("pointerdown", (event) => {
-  if (!searchForm.contains(event.target)) {
-    hideSearchSuggestions();
-    if (searchForm.classList.contains("is-open")) {
-      setSearchState(false);
-    }
-  }
-});
-
-searchForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-
-  const query = searchInput.value.trim();
-
-  if (query) {
-    isSearchSubmitted = true;
-    clearTimeout(suggestionTimer);
-    hideSearchSuggestions();
-    searchInput.blur();
-    showPage("search", false);
-    window.history.pushState({}, "", "#search");
-    searchTracks(query);
-  }
-});
-
-searchInput.addEventListener("input", () => {
-  isSearchSubmitted = false;
-  setClearSearchState();
-  clearTimeout(suggestionTimer);
-  const query = searchInput.value.trim();
-
-  if (query.length < 2) {
-    hideSearchSuggestions();
-    return;
-  }
-
-  suggestionTimer = window.setTimeout(() => loadSearchSuggestions(query), 250);
-});
-
-clearSearch.addEventListener("click", () => {
-  isSearchSubmitted = false;
-  searchInput.value = "";
-  setClearSearchState();
-  hideSearchSuggestions();
-  searchInput.focus();
-});
-
-function hideSearchSuggestions() {
-  clearTimeout(suggestionTimer);
-  activeSuggestionRequest += 1;
-  searchSuggestions.replaceChildren();
-  searchSuggestions.classList.add("is-hidden");
-}
-
-async function loadSearchSuggestions(query) {
-  const requestId = ++activeSuggestionRequest;
-
-  try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    const songs = await response.json();
-    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !response.ok || searchInput.value.trim() !== query) return;
-
-    const suggestions = songs
-      .map((song) => ({
-        title: song.name || "Unknown track",
-        artist: song.artist?.name || "Unknown artist"
-      }))
-      .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
-      .slice(0, 6);
-
-    if (isSearchSubmitted || requestId !== activeSuggestionRequest) return;
-
-    searchSuggestions.replaceChildren();
-    suggestions.forEach(({ title, artist }) => {
-      const suggestion = document.createElement("button");
-      suggestion.type = "button";
-      suggestion.className = "search-suggestion";
-      suggestion.setAttribute("role", "option");
-      suggestion.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i><span><strong></strong><small></small></span>';
-      suggestion.querySelector("strong").textContent = title;
-      suggestion.querySelector("small").textContent = artist;
-      suggestion.addEventListener("click", () => {
-        searchInput.value = title;
-        setClearSearchState();
-        searchForm.requestSubmit();
-      });
-      searchSuggestions.appendChild(suggestion);
-    });
-    searchSuggestions.classList.toggle("is-hidden", suggestions.length === 0 || isSearchSubmitted);
-    lucide.createIcons();
-  } catch (error) {
-    if (requestId === activeSuggestionRequest) hideSearchSuggestions();
-    console.error("Search suggestions unavailable:", error);
-  }
-}
-
-searchInput.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
-    hideSearchSuggestions();
-    setSearchState(false);
-    return;
-  }
-
-  if (event.key === "Enter") {
-    event.preventDefault();
-    clearTimeout(suggestionTimer);
-    hideSearchSuggestions();
-    searchForm.requestSubmit();
-  }
-});
-
-function getPageFromLocation() {
-  return window.location.hash.slice(1) || "home";
-}
-
-window.addEventListener("hashchange", () => showPage(getPageFromLocation(), false));
-window.addEventListener("popstate", () => showPage(getPageFromLocation(), false));
-
-showPage(getPageFromLocation(), false);
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -464,7 +243,7 @@ function setPlaybackState(playing) {
   isPlaying = playing;
   playPauseButton.innerHTML = `<i data-lucide="${playing ? "pause" : "play"}" class="w-5 h-5"></i>`;
   playPauseButton.setAttribute("aria-label", playing ? "Pause" : "Play");
-  lucide.createIcons();
+  if (window.lucide?.createIcons) lucide.createIcons();
 
   if ("mediaSession" in navigator) {
     navigator.mediaSession.playbackState = playing ? "playing" : "paused";
@@ -576,9 +355,24 @@ if ("mediaSession" in navigator) {
 }
 
 function loadAudioTrack(track) {
+  currentActiveEngine = "native";
+  if (youtubePlayer && youtubePlayer.pauseVideo) {
+    try { youtubePlayer.pauseVideo(); } catch {}
+  }
+
+  nativeAudioPlayer.src = `/api/audio?id=${encodeURIComponent(track.videoId)}`;
+  nativeAudioPlayer.load();
+  audioPlayer.play().catch(() => {
+    currentActiveEngine = "youtube";
+    loadAudioTrackYouTube(track);
+  });
+}
+
+function loadAudioTrackYouTube(track) {
+  try { nativeAudioPlayer.pause(); } catch {}
   youtubeReady.then(() => {
     youtubePlayer.loadVideoById(track.videoId);
-    audioPlayer.play().catch(() => {
+    youtubePlayer.playVideo().catch(() => {
       playerStatus.textContent = "Press play to start this track";
       setPlaybackState(false);
     });
@@ -605,64 +399,6 @@ async function loadRecommendations(videoId) {
   } catch (error) {
     if (requestId === recommendationRequestId) recommendationQueue = [];
     console.error("Recommendations unavailable:", error);
-  }
-}
-
-async function searchTracks(query) {
-  const requestId = ++activeSearchRequest;
-  const trackList = document.querySelector("[data-track-list]");
-  if (!trackList) return;
-  trackList.innerHTML = '<p class="muted-text">Searching music catalog...</p>';
-
-  try {
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    const songs = await response.json();
-    if (requestId !== activeSearchRequest) return;
-    if (!response.ok) throw new Error(songs.error || "Search failed");
-
-    trackList.replaceChildren();
-    if (!songs.length) {
-      trackList.innerHTML = '<p class="muted-text">No tracks found.</p>';
-      return;
-    }
-
-    trackQueue = songs.map((song) => ({
-      videoId: song.videoId,
-      title: song.name || "Unknown track",
-      artist: song.artist?.name || "Unknown artist",
-      thumbnail: song.thumbnails?.find((item) => item?.url)?.url || `https://img.youtube.com/vi/${song.videoId}/hqdefault.jpg`
-    }));
-    currentTrackIndex = -1;
-    trackHistory = [];
-    forwardTrack = undefined;
-    updateTrackButtons();
-
-    songs.forEach((song) => {
-      const title = song.name || "Unknown track";
-      const artist = song.artist?.name || "Unknown artist";
-      const thumbnail = song.thumbnails?.find((item) => item?.url)?.url || `https://img.youtube.com/vi/${song.videoId}/hqdefault.jpg`;
-      const card = document.createElement("article");
-      card.className = "track-card";
-      card.innerHTML = `
-        <img src="${thumbnail}" alt="" class="track-art" />
-        <div class="track-info"><h3></h3><p></p></div>
-        <button type="button" class="track-play" aria-label="Play ${title}"><i data-lucide="play" class="w-4 h-4"></i></button>
-      `;
-      const trackArt = card.querySelector(".track-art");
-      const handleThumbnailError = () => {
-        trackArt.removeEventListener("error", handleThumbnailError);
-        trackArt.src = "/public/logo.svg";
-      };
-      trackArt.addEventListener("error", handleThumbnailError);
-      card.querySelector("h3").textContent = title;
-      card.querySelector("p").textContent = artist;
-      card.querySelector("button").addEventListener("click", () => selectAndPlayTrack(song.videoId, title, artist, thumbnail));
-      trackList.appendChild(card);
-    });
-    lucide.createIcons();
-  } catch (error) {
-    console.error(error);
-    trackList.innerHTML = '<p class="muted-text">The music server is unavailable. Start it with <code>npm start</code>.</p>';
   }
 }
 
@@ -710,9 +446,12 @@ progressBar.addEventListener("input", () => {
 });
 
 function updateProgress() {
-  const duration = audioPlayer.duration;
-  const currentTime = audioPlayer.currentTime;
+  const duration = currentActiveEngine === "native" ? nativeAudioPlayer.duration : audioPlayer.duration;
+  const currentTime = currentActiveEngine === "native" ? nativeAudioPlayer.currentTime : (youtubePlayer ? youtubePlayer.getCurrentTime() : audioPlayer.currentTime);
   if (!Number.isFinite(duration) || duration <= 0) return;
+
+  audioPlayer.duration = duration;
+  audioPlayer.currentTime = currentTime;
 
   progressBar.disabled = false;
   const progress = (currentTime / duration) * 100;
@@ -732,8 +471,7 @@ function updateProgress() {
     }
   }
 
-  if (youtubePlayer && isPlaying) {
-    audioPlayer.currentTime = youtubePlayer.getCurrentTime();
+  if (isPlaying) {
     requestAnimationFrame(updateProgress);
   }
 }
@@ -759,7 +497,6 @@ function playNextTrack() {
   }
 
   if (isShuffleEnabled) {
-    // Random mode: pick random track from recommendations or queue
     const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
     if (!availableTracks.length) return;
 
@@ -771,13 +508,12 @@ function playNextTrack() {
     const nextTrack = availableTracks[nextIndex];
     selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
   } else {
-    // Sequential mode: pick next result in order from search queue
     if (trackQueue.length > 0) {
       let nextIndex;
       if (currentTrackIndex >= 0 && currentTrackIndex < trackQueue.length - 1) {
         nextIndex = currentTrackIndex + 1;
       } else {
-        nextIndex = 0; // loop back to first search result
+        nextIndex = 0;
       }
       const nextTrack = trackQueue[nextIndex];
       selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
@@ -803,14 +539,3 @@ function updateTrackButtons() {
   nextTrackButton.disabled = trackQueue.length === 0 && recommendationQueue.length === 0;
   shuffleButton.disabled = trackQueue.length === 0 && recommendationQueue.length === 0;
 }
-
-// Register Service Worker for PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((reg) => console.log('[PWA] Service Worker registered with scope:', reg.scope))
-      .catch((err) => console.error('[PWA] Service Worker registration failed:', err));
-  });
-}
-
-
