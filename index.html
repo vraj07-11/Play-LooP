@@ -38,6 +38,7 @@
             <input class="search-input" type="search" name="search" autocomplete="off" autocorrect="off"
               autocapitalize="none" spellcheck="false" inputmode="search"
               placeholder="What do you want to play?" aria-label="Search music" />
+            <div class="search-suggestions is-hidden" data-search-suggestions role="listbox"></div>
             <button type="button" class="clear-search is-hidden" data-action="clear-search" aria-label="Clear search">
               <i data-lucide="x" class="w-6 h-6"></i>
             </button>
@@ -117,6 +118,9 @@
         <span class="player-time" data-player-time>0:00 / 0:00</span>
         <input class="progress-bar" data-progress type="range" min="0" max="100" value="0" aria-label="Track progress" disabled />
         <div class="player-buttons">
+          <button type="button" class="player-skip-button repeat-button" data-action="repeat-track" aria-label="Repeat off" aria-pressed="false" disabled>
+            <i data-lucide="repeat-1" class="w-4 h-4"></i>
+          </button>
           <button type="button" class="player-skip-button" data-action="previous-track" aria-label="Previous track" disabled>
             <i data-lucide="skip-back" class="w-4 h-4"></i>
           </button>

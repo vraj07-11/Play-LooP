@@ -63,11 +63,13 @@ setSidebarState(false);
 
 const searchForm = document.querySelector("[data-search-form]");
 const searchInput = document.querySelector(".search-input");
+const searchSuggestions = document.querySelector("[data-search-suggestions]");
 const searchToggle = document.querySelector('[data-action="search-toggle"]');
 const clearSearch = document.querySelector('[data-action="clear-search"]');
 const playPauseButton = document.querySelector('[data-action="play-pause"]');
 const previousTrackButton = document.querySelector('[data-action="previous-track"]');
 const nextTrackButton = document.querySelector('[data-action="next-track"]');
+const repeatButton = document.querySelector('[data-action="repeat-track"]');
 const rewindButton = document.querySelector('[data-action="rewind-10"]');
 const forwardButton = document.querySelector('[data-action="forward-10"]');
 const playerBar = document.querySelector("[data-player]");
@@ -80,9 +82,14 @@ let pendingTrack;
 let isPlaying = false;
 let progressAnimationFrame;
 let activeSearchRequest = 0;
+let activeSuggestionRequest = 0;
+let suggestionTimer;
 let recommendationRequestId = 0;
 let trackQueue = [];
 let recommendationQueue = [];
+let isRepeatEnabled = false;
+let hasRepeatedCurrentTrack = false;
+let forwardTrack;
 let currentTrackIndex = -1;
 let trackHistory = [];
 let youtubePlayer;
@@ -157,12 +164,14 @@ if (window.YT?.Player) initializeYouTubePlayer();
 
 function positionSeekButtons() {
   if (window.matchMedia("(max-width: 640px)").matches) {
+    previousTrackButton.before(repeatButton);
     previousTrackButton.after(rewindButton);
     playPauseButton.after(forwardButton);
     return;
   }
 
-  previousTrackButton.before(rewindButton);
+  previousTrackButton.before(repeatButton);
+  previousTrackButton.after(rewindButton);
   nextTrackButton.after(forwardButton);
 }
 
@@ -172,6 +181,7 @@ window.addEventListener("resize", positionSeekButtons);
 audioPlayer.addEventListener("play", () => {
   playPauseButton.disabled = false;
   progressBar.disabled = false;
+  repeatButton.disabled = false;
   rewindButton.disabled = false;
   forwardButton.disabled = false;
   playerStatus.textContent = "Playing";
@@ -183,7 +193,21 @@ audioPlayer.addEventListener("pause", () => {
   setPlaybackState(false);
 });
 
-audioPlayer.addEventListener("ended", playNextTrack);
+audioPlayer.addEventListener("ended", () => {
+  if (isRepeatEnabled && !hasRepeatedCurrentTrack && youtubePlayer) {
+    hasRepeatedCurrentTrack = true;
+    isRepeatEnabled = false;
+    repeatButton.setAttribute("aria-pressed", "false");
+    repeatButton.setAttribute("aria-label", "Repeat off");
+    repeatButton.classList.remove("is-active");
+    audioPlayer.ended = false;
+    youtubePlayer.seekTo(0, true);
+    youtubePlayer.playVideo();
+    return;
+  }
+
+  playNextTrack();
+});
 audioPlayer.addEventListener("loadedmetadata", updateProgress);
 audioPlayer.addEventListener("loadedmetadata", () => {
   rewindButton.disabled = false;
@@ -212,6 +236,8 @@ function setSearchState(isOpen) {
     searchInput.focus();
   } else {
     searchInput.value = "";
+    hideSearchSuggestions();
+    clearSearch.classList.add("is-hidden");
     searchInput.blur();
   }
 
@@ -238,22 +264,82 @@ searchForm.addEventListener("submit", (event) => {
   const query = searchInput.value.trim();
 
   if (query) {
+    hideSearchSuggestions();
     showPage("search", false);
     window.history.pushState({}, "", "#search");
     searchTracks(query);
   }
 });
 
-searchInput.addEventListener("input", setClearSearchState);
+searchInput.addEventListener("input", () => {
+  setClearSearchState();
+  clearTimeout(suggestionTimer);
+  const query = searchInput.value.trim();
+
+  if (query.length < 2) {
+    hideSearchSuggestions();
+    return;
+  }
+
+  suggestionTimer = window.setTimeout(() => loadSearchSuggestions(query), 250);
+});
 
 clearSearch.addEventListener("click", () => {
   searchInput.value = "";
   setClearSearchState();
+  hideSearchSuggestions();
   searchInput.focus();
 });
 
+function hideSearchSuggestions() {
+  activeSuggestionRequest += 1;
+  searchSuggestions.replaceChildren();
+  searchSuggestions.classList.add("is-hidden");
+}
+
+async function loadSearchSuggestions(query) {
+  const requestId = ++activeSuggestionRequest;
+
+  try {
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    const songs = await response.json();
+    if (requestId !== activeSuggestionRequest || !response.ok || searchInput.value.trim() !== query) return;
+
+    const suggestions = songs
+      .map((song) => ({
+        title: song.name || "Unknown track",
+        artist: song.artist?.name || "Unknown artist"
+      }))
+      .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
+      .slice(0, 6);
+
+    searchSuggestions.replaceChildren();
+    suggestions.forEach(({ title, artist }) => {
+      const suggestion = document.createElement("button");
+      suggestion.type = "button";
+      suggestion.className = "search-suggestion";
+      suggestion.setAttribute("role", "option");
+      suggestion.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i><span><strong></strong><small></small></span>';
+      suggestion.querySelector("strong").textContent = title;
+      suggestion.querySelector("small").textContent = artist;
+      suggestion.addEventListener("click", () => {
+        searchInput.value = title;
+        setClearSearchState();
+        searchForm.requestSubmit();
+      });
+      searchSuggestions.appendChild(suggestion);
+    });
+    searchSuggestions.classList.toggle("is-hidden", suggestions.length === 0);
+    lucide.createIcons();
+  } catch (error) {
+    if (requestId === activeSuggestionRequest) hideSearchSuggestions();
+    console.error("Search suggestions unavailable:", error);
+  }
+}
+
 searchInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    hideSearchSuggestions();
     setSearchState(false);
     return;
   }
@@ -311,11 +397,13 @@ function updateTitleMarquee() {
   });
 }
 
-async function selectAndPlayTrack(videoId, title, artist) {
+async function selectAndPlayTrack(videoId, title, artist, fromHistory = false) {
   playerBar.classList.remove("is-hidden");
+  if (!fromHistory) forwardTrack = undefined;
   const selectedIndex = trackQueue.findIndex((track) => track.videoId === videoId);
   if (selectedIndex >= 0) currentTrackIndex = selectedIndex;
   const selectedTrack = { videoId, title, artist };
+  if (!pendingTrack || pendingTrack.videoId !== videoId) hasRepeatedCurrentTrack = false;
   const lastTrack = trackHistory.at(-1);
   if (!lastTrack || lastTrack.videoId !== videoId) trackHistory.push(selectedTrack);
   updateTrackButtons();
@@ -423,6 +511,7 @@ async function searchTracks(query) {
     }));
     currentTrackIndex = -1;
     trackHistory = [];
+    forwardTrack = undefined;
     updateTrackButtons();
 
     songs.forEach((song) => {
@@ -470,6 +559,13 @@ function seekBy(seconds) {
 rewindButton.addEventListener("click", () => seekBy(-10));
 forwardButton.addEventListener("click", () => seekBy(10));
 
+repeatButton.addEventListener("click", () => {
+  isRepeatEnabled = !isRepeatEnabled;
+  repeatButton.setAttribute("aria-pressed", String(isRepeatEnabled));
+  repeatButton.setAttribute("aria-label", isRepeatEnabled ? "Repeat on" : "Repeat off");
+  repeatButton.classList.toggle("is-active", isRepeatEnabled);
+});
+
 window.addEventListener("resize", updateTitleMarquee);
 
 nextTrackButton.addEventListener("click", playNextTrack);
@@ -515,6 +611,13 @@ function playNextTrack() {
   const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
   if (!availableTracks.length) return;
 
+  if (forwardTrack) {
+    const nextTrack = forwardTrack;
+    forwardTrack = undefined;
+    selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, true);
+    return;
+  }
+
   let nextIndex = Math.floor(Math.random() * availableTracks.length);
   if (availableTracks === trackQueue && trackQueue.length > 1 && nextIndex === currentTrackIndex) {
     nextIndex = (nextIndex + 1) % trackQueue.length;
@@ -527,17 +630,11 @@ function playNextTrack() {
 function playPreviousTrack() {
   if (trackHistory.length < 2) return;
 
-  trackHistory.pop();
+  forwardTrack = trackHistory.pop();
   const previousTrack = trackHistory.at(-1);
   currentTrackIndex = trackQueue.findIndex((track) => track.videoId === previousTrack.videoId);
   updateTrackButtons();
-  currentTitle.textContent = `${previousTrack.title} - ${previousTrack.artist}`;
-  updateTitleMarquee();
-  playerStatus.textContent = "Loading";
-  updateMediaSession(previousTrack);
-  pendingTrack = previousTrack;
-  loadRecommendations(previousTrack.videoId);
-  loadAudioTrack(previousTrack);
+  selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, true);
 }
 
 function updateTrackButtons() {
