@@ -5,13 +5,48 @@ const navLinks = document.querySelectorAll('[data-nav]');
 const content = document.querySelector('[data-content]');
 const profileButton = document.querySelector('[data-action="profile-button"]');
 
+let deferredPrompt;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const installBtn = document.querySelector('[data-action="install-pwa"]');
+  if (installBtn) {
+    installBtn.classList.remove("hidden");
+  }
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredPrompt = null;
+  const installContainer = document.querySelector("#pwaInstallStatus");
+  if (installContainer) {
+    installContainer.innerHTML = '<p class="text-emerald-400 font-semibold mt-4">✓ Play LooP is installed on your device!</p>';
+  }
+});
+
 function showPage(pageName, updateUrl = true) {
   const page = pages[pageName] || pages.home;
-  const pageBody = pageName === "search"
-    ? '<div class="track-list" data-track-list><p class="muted-text">Search for a song to begin.</p></div>'
-    : `<div class="page-grid">
+  let pageBody;
+
+  if (pageName === "search") {
+    pageBody = '<div class="track-list" data-track-list><p class="muted-text">Search for a song to begin.</p></div>';
+  } else if (pageName === "Download") {
+    pageBody = `
+      <div class="flex flex-col items-start gap-4 p-6 bg-zinc-900 rounded-xl border border-zinc-800 max-w-xl">
+        <h3 class="text-xl font-bold">Install Play LooP App</h3>
+        <p class="text-zinc-400">Install Play LooP on your desktop or mobile home screen for fast access, full-screen playback, and offline support.</p>
+        <div id="pwaInstallStatus" class="w-full">
+          <button type="button" data-action="install-pwa" class="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-full transition cursor-pointer">
+            Install Desktop / Mobile App
+          </button>
+        </div>
+      </div>
+    `;
+  } else {
+    pageBody = `<div class="page-grid">
       ${page.cards.map((card) => `<article class="page-card"><h3>${card}</h3><p>Coming soon</p></article>`).join("")}
     </div>`;
+  }
 
   content.innerHTML = `
     <div class="page-header${pageName === "search" ? " search-page-header" : ""}">
@@ -20,6 +55,23 @@ function showPage(pageName, updateUrl = true) {
     </div>
     ${pageBody}
   `;
+
+  if (pageName === "Download") {
+    const installBtn = document.querySelector('[data-action="install-pwa"]');
+    if (installBtn) {
+      installBtn.addEventListener("click", async () => {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === "accepted") {
+            deferredPrompt = null;
+          }
+        } else {
+          alert("Play LooP is already installed or your browser supports PWA installation via the address bar menu!");
+        }
+      });
+    }
+  }
 
   if (updateUrl) {
     if (pageName === "home") {
@@ -634,4 +686,14 @@ function updateTrackButtons() {
   previousTrackButton.disabled = trackHistory.length < 2;
   nextTrackButton.disabled = trackQueue.length === 0 && recommendationQueue.length === 0;
 }
+
+// Register Service Worker for PWA
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => console.log('[PWA] Service Worker registered with scope:', reg.scope))
+      .catch((err) => console.error('[PWA] Service Worker registration failed:', err));
+  });
+}
+
 

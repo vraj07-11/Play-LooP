@@ -1,0 +1,23 @@
+{
+  "name": "Play LooP",
+  "short_name": "Play LooP",
+  "description": "Stream and discover your favorite music with Play LooP.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/public/logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/public/favicon.svg",
+      "sizes": "48x48 72x72 96x96 128x128",
+      "type": "image/svg+xml"
+    }
+  ]
+}
