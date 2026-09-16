@@ -11,6 +11,7 @@ const port = process.env.PORT || 3000;
 const ytmusic = new YTMusic();
 const execFileAsync = promisify(execFile);
 const youtubeApiKey = process.env.YOUTUBE_API_KEY;
+const ytdlpPath = process.env.YTDLP_PATH || (process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
 const audioCacheDirectory = path.join(__dirname, "audio-cache");
 const configuredCacheLimit = Number.parseInt(process.env.AUDIO_CACHE_LIMIT || "10", 10);
 const audioCacheLimit = Number.isInteger(configuredCacheLimit) && configuredCacheLimit > 0
@@ -124,7 +125,7 @@ function getExtractorError(error) {
 
 async function getCachedAudio(videoId) {
 	const safeVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-	const audioPath = path.join(audioCacheDirectory, `${safeVideoId}.mp4`);
+	const audioPath = path.join(audioCacheDirectory, `${safeVideoId}.m4a`);
 
 	try {
 		const file = await fs.promises.stat(audioPath);
@@ -135,7 +136,7 @@ async function getCachedAudio(videoId) {
 	if (!activeDownloads.has(videoId)) {
 		const download = (async () => {
 			await fs.promises.mkdir(audioCacheDirectory, { recursive: true });
-			await execFileAsync(process.env.YTDLP_PATH || "yt-dlp.exe", [
+			await execFileAsync(ytdlpPath, [
 				"--quiet",
 				"--no-warnings",
 				"--no-progress",
@@ -147,6 +148,9 @@ async function getCachedAudio(videoId) {
 				"--no-part",
 				"-f",
 				"bestaudio/best",
+				"-x",
+				"--audio-format",
+				"m4a",
 				"-o",
 				audioPath,
 				`https://www.youtube.com/watch?v=${videoId}`
@@ -169,7 +173,7 @@ async function enforceAudioCacheLimit(protectedPath) {
 	const entries = await fs.promises.readdir(audioCacheDirectory, { withFileTypes: true });
 	const audioFiles = await Promise.all(
 		entries
-			.filter((entry) => entry.isFile() && entry.name.endsWith(".mp4"))
+			.filter((entry) => entry.isFile() && entry.name.endsWith(".m4a"))
 			.map(async (entry) => {
 				const filePath = path.join(audioCacheDirectory, entry.name);
 				const stats = await fs.promises.stat(filePath);
