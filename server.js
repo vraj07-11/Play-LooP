@@ -12,6 +12,9 @@ const ytmusic = new YTMusic();
 const execFileAsync = promisify(execFile);
 const audioCacheDirectory = path.join(__dirname, "audio-cache");
 const activeDownloads = new Map();
+const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
+	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
+	: [];
 
 app.use(cors());
 app.use(express.static(__dirname));
@@ -84,6 +87,7 @@ async function getCachedAudio(videoId) {
 				"--no-warnings",
 				"--no-progress",
 				"--no-playlist",
+				...ytdlpRuntimeArgs,
 				"--no-part",
 				"-f",
 				"bestaudio/best",
@@ -108,6 +112,7 @@ async function resolveStreamUrl(videoId) {
 		const { stdout } = await execFileAsync(process.env.YTDLP_PATH || "yt-dlp.exe", [
 			"--no-warnings",
 			"--no-playlist",
+			...ytdlpRuntimeArgs,
 			"--skip-download",
 			"--get-url",
 			"-f",
