@@ -127,6 +127,7 @@ const playPauseButton = document.querySelector('[data-action="play-pause"]');
 const previousTrackButton = document.querySelector('[data-action="previous-track"]');
 const nextTrackButton = document.querySelector('[data-action="next-track"]');
 const repeatButton = document.querySelector('[data-action="repeat-track"]');
+const shuffleButton = document.querySelector('[data-action="shuffle-track"]');
 const rewindButton = document.querySelector('[data-action="rewind-10"]');
 const forwardButton = document.querySelector('[data-action="forward-10"]');
 const playerBar = document.querySelector("[data-player]");
@@ -145,6 +146,7 @@ let recommendationRequestId = 0;
 let trackQueue = [];
 let recommendationQueue = [];
 let isRepeatEnabled = false;
+let isShuffleEnabled = false;
 let hasRepeatedCurrentTrack = false;
 let forwardTrack;
 let currentTrackIndex = -1;
@@ -223,6 +225,7 @@ function positionSeekButtons() {
   previousTrackButton.before(repeatButton);
   previousTrackButton.after(rewindButton);
   playPauseButton.after(forwardButton);
+  nextTrackButton.after(shuffleButton);
 }
 
 positionSeekButtons();
@@ -232,6 +235,7 @@ audioPlayer.addEventListener("play", () => {
   playPauseButton.disabled = false;
   progressBar.disabled = false;
   repeatButton.disabled = false;
+  shuffleButton.disabled = false;
   rewindButton.disabled = false;
   forwardButton.disabled = false;
   playerStatus.textContent = "Playing";
@@ -303,18 +307,27 @@ searchToggle.addEventListener("click", () => {
   searchForm.requestSubmit();
 });
 
+let isSearchSubmitted = false;
+
 document.addEventListener("pointerdown", (event) => {
-  if (searchForm.classList.contains("is-open") && !searchForm.contains(event.target)) {
-    setSearchState(false);
+  if (!searchForm.contains(event.target)) {
+    hideSearchSuggestions();
+    if (searchForm.classList.contains("is-open")) {
+      setSearchState(false);
+    }
   }
 });
+
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const query = searchInput.value.trim();
 
   if (query) {
+    isSearchSubmitted = true;
+    clearTimeout(suggestionTimer);
     hideSearchSuggestions();
+    searchInput.blur();
     showPage("search", false);
     window.history.pushState({}, "", "#search");
     searchTracks(query);
@@ -322,6 +335,7 @@ searchForm.addEventListener("submit", (event) => {
 });
 
 searchInput.addEventListener("input", () => {
+  isSearchSubmitted = false;
   setClearSearchState();
   clearTimeout(suggestionTimer);
   const query = searchInput.value.trim();
@@ -335,6 +349,7 @@ searchInput.addEventListener("input", () => {
 });
 
 clearSearch.addEventListener("click", () => {
+  isSearchSubmitted = false;
   searchInput.value = "";
   setClearSearchState();
   hideSearchSuggestions();
@@ -342,6 +357,7 @@ clearSearch.addEventListener("click", () => {
 });
 
 function hideSearchSuggestions() {
+  clearTimeout(suggestionTimer);
   activeSuggestionRequest += 1;
   searchSuggestions.replaceChildren();
   searchSuggestions.classList.add("is-hidden");
@@ -353,7 +369,7 @@ async function loadSearchSuggestions(query) {
   try {
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
     const songs = await response.json();
-    if (requestId !== activeSuggestionRequest || !response.ok || searchInput.value.trim() !== query) return;
+    if (isSearchSubmitted || requestId !== activeSuggestionRequest || !response.ok || searchInput.value.trim() !== query) return;
 
     const suggestions = songs
       .map((song) => ({
@@ -362,6 +378,8 @@ async function loadSearchSuggestions(query) {
       }))
       .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
       .slice(0, 6);
+
+    if (isSearchSubmitted || requestId !== activeSuggestionRequest) return;
 
     searchSuggestions.replaceChildren();
     suggestions.forEach(({ title, artist }) => {
@@ -379,7 +397,7 @@ async function loadSearchSuggestions(query) {
       });
       searchSuggestions.appendChild(suggestion);
     });
-    searchSuggestions.classList.toggle("is-hidden", suggestions.length === 0);
+    searchSuggestions.classList.toggle("is-hidden", suggestions.length === 0 || isSearchSubmitted);
     lucide.createIcons();
   } catch (error) {
     if (requestId === activeSuggestionRequest) hideSearchSuggestions();
@@ -396,6 +414,8 @@ searchInput.addEventListener("keydown", (event) => {
 
   if (event.key === "Enter") {
     event.preventDefault();
+    clearTimeout(suggestionTimer);
+    hideSearchSuggestions();
     searchForm.requestSubmit();
   }
 });
@@ -416,6 +436,30 @@ function formatTime(seconds) {
   return `${minutes}:${remainingSeconds}`;
 }
 
+let silentAudioKeepAlive = null;
+
+function ensureSilentAudioKeepAlive() {
+  if (!silentAudioKeepAlive) {
+    silentAudioKeepAlive = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+    silentAudioKeepAlive.loop = true;
+  }
+}
+
+function startSilentAudioKeepAlive() {
+  ensureSilentAudioKeepAlive();
+  if (silentAudioKeepAlive && silentAudioKeepAlive.paused) {
+    silentAudioKeepAlive.play().catch(() => {
+      /* ignore autoplay restriction */
+    });
+  }
+}
+
+function stopSilentAudioKeepAlive() {
+  if (silentAudioKeepAlive && !silentAudioKeepAlive.paused) {
+    silentAudioKeepAlive.pause();
+  }
+}
+
 function setPlaybackState(playing) {
   isPlaying = playing;
   playPauseButton.innerHTML = `<i data-lucide="${playing ? "pause" : "play"}" class="w-5 h-5"></i>`;
@@ -427,10 +471,14 @@ function setPlaybackState(playing) {
   }
 
   if (playing) {
+    startSilentAudioKeepAlive();
     startProgressAnimation();
-  } else if (progressAnimationFrame) {
-    cancelAnimationFrame(progressAnimationFrame);
-    progressAnimationFrame = undefined;
+  } else {
+    stopSilentAudioKeepAlive();
+    if (progressAnimationFrame) {
+      cancelAnimationFrame(progressAnimationFrame);
+      progressAnimationFrame = undefined;
+    }
   }
 }
 
@@ -447,12 +495,12 @@ function updateTitleMarquee() {
   });
 }
 
-async function selectAndPlayTrack(videoId, title, artist, fromHistory = false) {
+async function selectAndPlayTrack(videoId, title, artist, thumbnail = null, fromHistory = false) {
   playerBar.classList.remove("is-hidden");
   if (!fromHistory) forwardTrack = undefined;
   const selectedIndex = trackQueue.findIndex((track) => track.videoId === videoId);
   if (selectedIndex >= 0) currentTrackIndex = selectedIndex;
-  const selectedTrack = { videoId, title, artist };
+  const selectedTrack = { videoId, title, artist, thumbnail };
   if (!pendingTrack || pendingTrack.videoId !== videoId) hasRepeatedCurrentTrack = false;
   const lastTrack = trackHistory.at(-1);
   if (!lastTrack || lastTrack.videoId !== videoId) trackHistory.push(selectedTrack);
@@ -470,7 +518,7 @@ async function selectAndPlayTrack(videoId, title, artist, fromHistory = false) {
   progressBar.style.setProperty("--progress", "0%");
   playerTime.textContent = "0:00 / 0:00";
 
-  pendingTrack = { videoId, title, artist };
+  pendingTrack = selectedTrack;
   recommendationQueue = [];
   updateTrackButtons();
   loadRecommendations(videoId);
@@ -480,10 +528,16 @@ async function selectAndPlayTrack(videoId, title, artist, fromHistory = false) {
 function updateMediaSession(track) {
   if (!("mediaSession" in navigator) || !("MediaMetadata" in window)) return;
 
+  const artworkUrl = track.thumbnail || `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`;
+
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.artist,
-    album: "Play LooP"
+    album: "Play LooP",
+    artwork: [
+      { src: artworkUrl, sizes: "512x512", type: "image/jpeg" },
+      { src: "/public/logo.svg", sizes: "192x192", type: "image/svg+xml" }
+    ]
   });
 }
 
@@ -492,7 +546,24 @@ if ("mediaSession" in navigator) {
     play: () => audioPlayer.play(),
     pause: () => audioPlayer.pause(),
     nexttrack: playNextTrack,
-    previoustrack: playPreviousTrack
+    previoustrack: playPreviousTrack,
+    seekto: (details) => {
+      if (details.seekTime !== undefined && Number.isFinite(audioPlayer.duration)) {
+        audioPlayer.seekTo(details.seekTime);
+        updateProgress();
+      }
+    },
+    seekbackward: (details) => {
+      const skipTime = details.seekOffset || 10;
+      seekBy(-skipTime);
+    },
+    seekforward: (details) => {
+      const skipTime = details.seekOffset || 10;
+      seekBy(skipTime);
+    },
+    stop: () => {
+      audioPlayer.pause();
+    }
   };
 
   Object.entries(mediaSessionActions).forEach(([action, handler]) => {
@@ -527,7 +598,8 @@ async function loadRecommendations(videoId) {
       .map((track) => ({
         videoId: track.videoId,
         title: track.title || "Unknown track",
-        artist: track.artists || "Unknown artist"
+        artist: track.artists || "Unknown artist",
+        thumbnail: `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`
       }));
     updateTrackButtons();
   } catch (error) {
@@ -557,7 +629,8 @@ async function searchTracks(query) {
     trackQueue = songs.map((song) => ({
       videoId: song.videoId,
       title: song.name || "Unknown track",
-      artist: song.artist?.name || "Unknown artist"
+      artist: song.artist?.name || "Unknown artist",
+      thumbnail: song.thumbnails?.find((item) => item?.url)?.url || `https://img.youtube.com/vi/${song.videoId}/hqdefault.jpg`
     }));
     currentTrackIndex = -1;
     trackHistory = [];
@@ -567,7 +640,7 @@ async function searchTracks(query) {
     songs.forEach((song) => {
       const title = song.name || "Unknown track";
       const artist = song.artist?.name || "Unknown artist";
-      const thumbnail = song.thumbnails?.find((item) => item?.url)?.url || "/public/logo.svg";
+      const thumbnail = song.thumbnails?.find((item) => item?.url)?.url || `https://img.youtube.com/vi/${song.videoId}/hqdefault.jpg`;
       const card = document.createElement("article");
       card.className = "track-card";
       card.innerHTML = `
@@ -583,7 +656,7 @@ async function searchTracks(query) {
       trackArt.addEventListener("error", handleThumbnailError);
       card.querySelector("h3").textContent = title;
       card.querySelector("p").textContent = artist;
-      card.querySelector("button").addEventListener("click", () => selectAndPlayTrack(song.videoId, title, artist));
+      card.querySelector("button").addEventListener("click", () => selectAndPlayTrack(song.videoId, title, artist, thumbnail));
       trackList.appendChild(card);
     });
     lucide.createIcons();
@@ -616,6 +689,13 @@ repeatButton.addEventListener("click", () => {
   repeatButton.classList.toggle("is-active", isRepeatEnabled);
 });
 
+shuffleButton.addEventListener("click", () => {
+  isShuffleEnabled = !isShuffleEnabled;
+  shuffleButton.setAttribute("aria-pressed", String(isShuffleEnabled));
+  shuffleButton.setAttribute("aria-label", isShuffleEnabled ? "Random / Shuffle on" : "Random / Shuffle off");
+  shuffleButton.classList.toggle("is-active", isShuffleEnabled);
+});
+
 window.addEventListener("resize", updateTitleMarquee);
 
 nextTrackButton.addEventListener("click", playNextTrack);
@@ -639,6 +719,19 @@ function updateProgress() {
   progressBar.value = String(progress);
   progressBar.style.setProperty("--progress", `${progress}%`);
   playerTime.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+
+  if ("mediaSession" in navigator && "setPositionState" in navigator.mediaSession) {
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: duration,
+        playbackRate: 1,
+        position: Math.min(currentTime, duration)
+      });
+    } catch {
+      // Ignore if setPositionState is not supported
+    }
+  }
+
   if (youtubePlayer && isPlaying) {
     audioPlayer.currentTime = youtubePlayer.getCurrentTime();
     requestAnimationFrame(updateProgress);
@@ -658,23 +751,41 @@ function startProgressAnimation() {
 }
 
 function playNextTrack() {
-  const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
-  if (!availableTracks.length) return;
-
   if (forwardTrack) {
     const nextTrack = forwardTrack;
     forwardTrack = undefined;
-    selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, true);
+    selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail, true);
     return;
   }
 
-  let nextIndex = Math.floor(Math.random() * availableTracks.length);
-  if (availableTracks === trackQueue && trackQueue.length > 1 && nextIndex === currentTrackIndex) {
-    nextIndex = (nextIndex + 1) % trackQueue.length;
-  }
+  if (isShuffleEnabled) {
+    // Random mode: pick random track from recommendations or queue
+    const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
+    if (!availableTracks.length) return;
 
-  const nextTrack = availableTracks[nextIndex];
-  selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist);
+    let nextIndex = Math.floor(Math.random() * availableTracks.length);
+    if (availableTracks === trackQueue && trackQueue.length > 1 && nextIndex === currentTrackIndex) {
+      nextIndex = (nextIndex + 1) % trackQueue.length;
+    }
+
+    const nextTrack = availableTracks[nextIndex];
+    selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
+  } else {
+    // Sequential mode: pick next result in order from search queue
+    if (trackQueue.length > 0) {
+      let nextIndex;
+      if (currentTrackIndex >= 0 && currentTrackIndex < trackQueue.length - 1) {
+        nextIndex = currentTrackIndex + 1;
+      } else {
+        nextIndex = 0; // loop back to first search result
+      }
+      const nextTrack = trackQueue[nextIndex];
+      selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
+    } else if (recommendationQueue.length > 0) {
+      const nextTrack = recommendationQueue[0];
+      selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
+    }
+  }
 }
 
 function playPreviousTrack() {
@@ -684,12 +795,13 @@ function playPreviousTrack() {
   const previousTrack = trackHistory.at(-1);
   currentTrackIndex = trackQueue.findIndex((track) => track.videoId === previousTrack.videoId);
   updateTrackButtons();
-  selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, true);
+  selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true);
 }
 
 function updateTrackButtons() {
   previousTrackButton.disabled = trackHistory.length < 2;
   nextTrackButton.disabled = trackQueue.length === 0 && recommendationQueue.length === 0;
+  shuffleButton.disabled = trackQueue.length === 0 && recommendationQueue.length === 0;
 }
 
 // Register Service Worker for PWA
