@@ -91,20 +91,42 @@
       <audio class="audio-player" id="audioPlayer" preload="metadata"></audio>
       <div class="player-track">
         <span class="player-status" data-player-status>Nothing playing</span>
-        <span class="player-title" data-current-title>Select a song to start listening</span>
+        <div class="player-title-row">
+          <span class="player-title" data-current-title>Select a song to start listening</span>
+          <button type="button" class="player-skip-button seek-button" data-action="rewind-10" aria-label="Rewind 10 seconds" disabled>
+            <svg class="seek-icon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" stroke-width="3"
+              stroke="currentColor" fill="none" aria-hidden="true">
+              <polyline points="9.57 15.41 12.17 24.05 20.81 21.44" stroke-linecap="round" />
+              <path d="M26.93,41.41V23a.09.09,0,0,0-.16-.07s-2.58,3.69-4.17,4.78" stroke-linecap="round" />
+              <rect x="32.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
+              <path d="M12.14,23.94a21.91,21.91,0,1,1-.91,13.25" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button type="button" class="player-skip-button seek-button" data-action="forward-10" aria-label="Forward 10 seconds" disabled>
+            <svg class="seek-icon seek-forward-icon" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"
+              stroke-width="3" stroke="currentColor" fill="none" aria-hidden="true">
+              <path d="M23.93,41.41V23a.09.09,0,0,0-.16-.07s-2.58,3.69-4.17,4.78" stroke-linecap="round" />
+              <rect x="29.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
+              <polyline points="54.43 15.41 51.83 24.05 43.19 21.44" stroke-linecap="round" />
+              <path d="M51.86,23.94a21.91,21.91,0,1,0,.91,13.25" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="player-controls">
-        <button type="button" class="player-skip-button" data-action="previous-track" aria-label="Previous track" disabled>
-          <i data-lucide="skip-back" class="w-4 h-4"></i>
-        </button>
-        <button type="button" class="player-button" data-action="play-pause" aria-label="Play" disabled>
-          <i data-lucide="play" class="w-5 h-5"></i>
-        </button>
-        <button type="button" class="player-skip-button" data-action="next-track" aria-label="Next random track" disabled>
-          <i data-lucide="skip-forward" class="w-4 h-4"></i>
-        </button>
-        <input class="progress-bar" data-progress type="range" min="0" max="100" value="0" aria-label="Track progress" disabled />
         <span class="player-time" data-player-time>0:00 / 0:00</span>
+        <input class="progress-bar" data-progress type="range" min="0" max="100" value="0" aria-label="Track progress" disabled />
+        <div class="player-buttons">
+          <button type="button" class="player-skip-button" data-action="previous-track" aria-label="Previous track" disabled>
+            <i data-lucide="skip-back" class="w-4 h-4"></i>
+          </button>
+          <button type="button" class="player-button" data-action="play-pause" aria-label="Play" disabled>
+            <i data-lucide="play" class="w-5 h-5"></i>
+          </button>
+          <button type="button" class="player-skip-button" data-action="next-track" aria-label="Next random track" disabled>
+            <i data-lucide="skip-forward" class="w-4 h-4"></i>
+          </button>
+        </div>
       </div>
     </footer>
   </div>

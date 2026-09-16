@@ -14,7 +14,7 @@ function showPage(pageName, updateUrl = true) {
     </div>`;
 
   content.innerHTML = `
-    <div class="page-header">
+    <div class="page-header${pageName === "search" ? " search-page-header" : ""}">
       <h2>${page.title}</h2>
       <p>${page.description}</p>
     </div>
@@ -68,6 +68,8 @@ const clearSearch = document.querySelector('[data-action="clear-search"]');
 const playPauseButton = document.querySelector('[data-action="play-pause"]');
 const previousTrackButton = document.querySelector('[data-action="previous-track"]');
 const nextTrackButton = document.querySelector('[data-action="next-track"]');
+const rewindButton = document.querySelector('[data-action="rewind-10"]');
+const forwardButton = document.querySelector('[data-action="forward-10"]');
 const playerBar = document.querySelector("[data-player]");
 const audioPlayer = document.querySelector("#audioPlayer");
 const progressBar = document.querySelector("[data-progress]");
@@ -78,13 +80,31 @@ let pendingTrack;
 let isPlaying = false;
 let progressAnimationFrame;
 let activeSearchRequest = 0;
+let recommendationRequestId = 0;
 let trackQueue = [];
+let recommendationQueue = [];
 let currentTrackIndex = -1;
 let trackHistory = [];
+
+function positionSeekButtons() {
+  if (window.matchMedia("(max-width: 640px)").matches) {
+    previousTrackButton.after(rewindButton);
+    playPauseButton.after(forwardButton);
+    return;
+  }
+
+  previousTrackButton.before(rewindButton);
+  nextTrackButton.after(forwardButton);
+}
+
+positionSeekButtons();
+window.addEventListener("resize", positionSeekButtons);
 
 audioPlayer.addEventListener("play", () => {
   playPauseButton.disabled = false;
   progressBar.disabled = false;
+  rewindButton.disabled = false;
+  forwardButton.disabled = false;
   playerStatus.textContent = "Playing";
   setPlaybackState(true);
 });
@@ -96,10 +116,16 @@ audioPlayer.addEventListener("pause", () => {
 
 audioPlayer.addEventListener("ended", playNextTrack);
 audioPlayer.addEventListener("loadedmetadata", updateProgress);
+audioPlayer.addEventListener("loadedmetadata", () => {
+  rewindButton.disabled = false;
+  forwardButton.disabled = false;
+});
 audioPlayer.addEventListener("error", () => {
   playerStatus.textContent = "Unable to load this track";
   playPauseButton.disabled = true;
   progressBar.disabled = true;
+  rewindButton.disabled = true;
+  forwardButton.disabled = true;
   setPlaybackState(false);
 });
 
@@ -159,6 +185,12 @@ clearSearch.addEventListener("click", () => {
 searchInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     setSearchState(false);
+    return;
+  }
+
+  if (event.key === "Enter") {
+    event.preventDefault();
+    searchForm.requestSubmit();
   }
 });
 
@@ -196,6 +228,19 @@ function setPlaybackState(playing) {
   }
 }
 
+function updateTitleMarquee() {
+  currentTitle.classList.remove("is-marquee");
+  currentTitle.style.removeProperty("--title-shift");
+
+  window.requestAnimationFrame(() => {
+    if (currentTitle.scrollWidth <= currentTitle.clientWidth) return;
+
+    const overflowDistance = currentTitle.scrollWidth - currentTitle.clientWidth;
+    currentTitle.style.setProperty("--title-shift", `-${overflowDistance}px`);
+    currentTitle.classList.add("is-marquee");
+  });
+}
+
 async function selectAndPlayTrack(videoId, title, artist) {
   playerBar.classList.remove("is-hidden");
   const selectedIndex = trackQueue.findIndex((track) => track.videoId === videoId);
@@ -206,15 +251,21 @@ async function selectAndPlayTrack(videoId, title, artist) {
   updateTrackButtons();
 
   currentTitle.textContent = `${title} - ${artist}`;
+  updateTitleMarquee();
   playerStatus.textContent = "Loading";
   updateMediaSession(selectedTrack);
   playPauseButton.disabled = true;
   progressBar.disabled = true;
+  rewindButton.disabled = true;
+  forwardButton.disabled = true;
   progressBar.value = "0";
   progressBar.style.setProperty("--progress", "0%");
   playerTime.textContent = "0:00 / 0:00";
 
   pendingTrack = { videoId, title, artist };
+  recommendationQueue = [];
+  updateTrackButtons();
+  loadRecommendations(videoId);
   loadAudioTrack(pendingTrack);
 }
 
@@ -256,6 +307,28 @@ function loadAudioTrack(track) {
   });
 }
 
+async function loadRecommendations(videoId) {
+  const requestId = ++recommendationRequestId;
+
+  try {
+    const response = await fetch(`/api/recommendations?id=${encodeURIComponent(videoId)}`);
+    const recommendations = await response.json();
+    if (requestId !== recommendationRequestId || !response.ok) return;
+
+    recommendationQueue = recommendations
+      .filter((track) => track.videoId && track.videoId !== videoId)
+      .map((track) => ({
+        videoId: track.videoId,
+        title: track.title || "Unknown track",
+        artist: track.artists || "Unknown artist"
+      }));
+    updateTrackButtons();
+  } catch (error) {
+    if (requestId === recommendationRequestId) recommendationQueue = [];
+    console.error("Recommendations unavailable:", error);
+  }
+}
+
 async function searchTracks(query) {
   const requestId = ++activeSearchRequest;
   const trackList = document.querySelector("[data-track-list]");
@@ -286,7 +359,7 @@ async function searchTracks(query) {
     songs.forEach((song) => {
       const title = song.name || "Unknown track";
       const artist = song.artist?.name || "Unknown artist";
-      const thumbnail = song.thumbnails?.[0]?.url || "";
+      const thumbnail = song.thumbnails?.find((item) => item?.url)?.url || "/public/logo.svg";
       const card = document.createElement("article");
       card.className = "track-card";
       card.innerHTML = `
@@ -294,6 +367,12 @@ async function searchTracks(query) {
         <div class="track-info"><h3></h3><p></p></div>
         <button type="button" class="track-play" aria-label="Play ${title}"><i data-lucide="play" class="w-4 h-4"></i></button>
       `;
+      const trackArt = card.querySelector(".track-art");
+      const handleThumbnailError = () => {
+        trackArt.removeEventListener("error", handleThumbnailError);
+        trackArt.src = "/public/logo.svg";
+      };
+      trackArt.addEventListener("error", handleThumbnailError);
       card.querySelector("h3").textContent = title;
       card.querySelector("p").textContent = artist;
       card.querySelector("button").addEventListener("click", () => selectAndPlayTrack(song.videoId, title, artist));
@@ -310,6 +389,19 @@ playPauseButton.addEventListener("click", () => {
   if (isPlaying) audioPlayer.pause();
   else audioPlayer.play();
 });
+
+function seekBy(seconds) {
+  if (!Number.isFinite(audioPlayer.duration)) return;
+  audioPlayer.currentTime = Math.max(
+    0,
+    Math.min(audioPlayer.duration, audioPlayer.currentTime + seconds)
+  );
+}
+
+rewindButton.addEventListener("click", () => seekBy(-10));
+forwardButton.addEventListener("click", () => seekBy(10));
+
+window.addEventListener("resize", updateTitleMarquee);
 
 nextTrackButton.addEventListener("click", playNextTrack);
 previousTrackButton.addEventListener("click", playPreviousTrack);
@@ -347,14 +439,15 @@ function startProgressAnimation() {
 }
 
 function playNextTrack() {
-  if (!trackQueue.length) return;
+  const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
+  if (!availableTracks.length) return;
 
-  let nextIndex = Math.floor(Math.random() * trackQueue.length);
-  if (trackQueue.length > 1 && nextIndex === currentTrackIndex) {
+  let nextIndex = Math.floor(Math.random() * availableTracks.length);
+  if (availableTracks === trackQueue && trackQueue.length > 1 && nextIndex === currentTrackIndex) {
     nextIndex = (nextIndex + 1) % trackQueue.length;
   }
 
-  const nextTrack = trackQueue[nextIndex];
+  const nextTrack = availableTracks[nextIndex];
   selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist);
 }
 
@@ -366,14 +459,16 @@ function playPreviousTrack() {
   currentTrackIndex = trackQueue.findIndex((track) => track.videoId === previousTrack.videoId);
   updateTrackButtons();
   currentTitle.textContent = `${previousTrack.title} - ${previousTrack.artist}`;
+  updateTitleMarquee();
   playerStatus.textContent = "Loading";
   updateMediaSession(previousTrack);
   pendingTrack = previousTrack;
+  loadRecommendations(previousTrack.videoId);
   loadAudioTrack(previousTrack);
 }
 
 function updateTrackButtons() {
   previousTrackButton.disabled = trackHistory.length < 2;
-  nextTrackButton.disabled = trackQueue.length === 0;
+  nextTrackButton.disabled = trackQueue.length === 0 && recommendationQueue.length === 0;
 }
 

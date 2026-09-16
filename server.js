@@ -12,6 +12,10 @@ const ytmusic = new YTMusic();
 const execFileAsync = promisify(execFile);
 const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 const audioCacheDirectory = path.join(__dirname, "audio-cache");
+const configuredCacheLimit = Number.parseInt(process.env.AUDIO_CACHE_LIMIT || "10", 10);
+const audioCacheLimit = Number.isInteger(configuredCacheLimit) && configuredCacheLimit > 0
+	? configuredCacheLimit
+	: 10;
 const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
@@ -68,22 +72,6 @@ async function filterEmbeddableSongs(songs) {
 	}
 }
 
-app.get("/api/stream", async (req, res) => {
-	const videoId = String(req.query.id || "").trim();
-
-	if (!videoId) {
-		return res.status(400).json({ error: "Video ID is required" });
-	}
-
-	try {
-		const streamUrl = await resolveStreamUrl(videoId);
-		res.json({ streamUrl });
-	} catch (error) {
-		console.error("Stream lookup failed:", error);
-		res.status(502).json({ error: "Failed to extract audio stream" });
-	}
-});
-
 app.get("/api/audio", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
 
@@ -101,6 +89,20 @@ app.get("/api/audio", async (req, res) => {
 		if (!res.headersSent) {
 			res.status(502).json({ error: "Audio extraction failed", detail: getExtractorError(error) });
 		}
+	}
+});
+
+app.get("/api/recommendations", async (req, res) => {
+	const videoId = String(req.query.id || "").trim();
+
+	if (!videoId) return res.status(400).json({ error: "Video ID is required" });
+
+	try {
+		const recommendations = await ytmusic.getUpNexts(videoId);
+		res.json(recommendations);
+	} catch (error) {
+		console.error("Recommendations failed:", error);
+		res.status(502).json({ error: "Failed to fetch recommendations" });
 	}
 });
 
@@ -155,6 +157,7 @@ async function getCachedAudio(videoId) {
 
 	try {
 		await activeDownloads.get(videoId);
+		await enforceAudioCacheLimit(audioPath);
 	} finally {
 		activeDownloads.delete(videoId);
 	}
@@ -162,24 +165,28 @@ async function getCachedAudio(videoId) {
 	return audioPath;
 }
 
-async function resolveStreamUrl(videoId) {
-		const { stdout } = await execFileAsync(process.env.YTDLP_PATH || "yt-dlp.exe", [
-			"--no-warnings",
-			"--no-playlist",
-			...ytdlpRuntimeArgs,
-			...ytdlpRemoteArgs,
-			...ytdlpClientArgs,
-			...ytdlpNetworkArgs,
-			"--skip-download",
-			"--get-url",
-			"-f",
-			"bestaudio/best",
-			`https://www.youtube.com/watch?v=${videoId}`
-		], { timeout: 30000 });
-		const streamUrl = stdout.trim().split(/\r?\n/).pop();
+async function enforceAudioCacheLimit(protectedPath) {
+	const entries = await fs.promises.readdir(audioCacheDirectory, { withFileTypes: true });
+	const audioFiles = await Promise.all(
+		entries
+			.filter((entry) => entry.isFile() && entry.name.endsWith(".mp4"))
+			.map(async (entry) => {
+				const filePath = path.join(audioCacheDirectory, entry.name);
+				const stats = await fs.promises.stat(filePath);
+				return { filePath, modifiedAt: stats.mtimeMs };
+			})
+	);
 
-		if (!streamUrl) throw new Error("No playable audio format was returned");
-		return streamUrl;
+	if (audioFiles.length <= audioCacheLimit) return;
+
+	audioFiles.sort((first, second) => first.modifiedAt - second.modifiedAt);
+	let filesToRemove = audioFiles.length - audioCacheLimit;
+	for (const file of audioFiles) {
+		if (filesToRemove === 0) break;
+		if (file.filePath === protectedPath) continue;
+		await fs.promises.rm(file.filePath, { force: true });
+		filesToRemove -= 1;
+	}
 }
 
 async function startServer() {
