@@ -32,11 +32,16 @@ function showPage(pageName, updateUrl = true) {
     pageBody = '<div class="track-list" data-track-list><p class="muted-text">Search for a song to begin.</p></div>';
   } else if (pageName === "Download") {
     pageBody = `
-      <div class="flex flex-col items-start gap-4 p-6 bg-zinc-900 rounded-xl border border-zinc-800 max-w-xl">
-        <h3 class="text-xl font-bold">Install Play LooP App</h3>
-        <p class="text-zinc-400">Install Play LooP on your desktop or mobile home screen for fast access, full-screen playback, and offline support.</p>
-        <div id="pwaInstallStatus" class="w-full">
-          <button type="button" data-action="install-pwa" class="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-full transition cursor-pointer">
+      <div class="flex flex-col items-start gap-4 p-6 bg-zinc-900/60 rounded-2xl border border-zinc-800/80 max-w-xl">
+        <div class="flex items-center gap-3">
+          <img src="public/logo.svg" alt="Play LooP Logo" class="w-10 h-10 shrink-0" />
+          <h3 class="text-lg font-normal text-white tracking-normal">Install Play LooP App</h3>
+        </div>
+        <p class="text-zinc-400 text-sm font-normal tracking-normal leading-relaxed">
+          Install Play LooP on your desktop or mobile home screen for fast access, full-screen playback, and seamless offline listening.
+        </p>
+        <div id="pwaInstallStatus" class="w-full pt-1">
+          <button type="button" data-action="install-pwa" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black text-sm font-normal tracking-normal rounded-full transition cursor-pointer shadow-sm">
             Install Desktop / Mobile App
           </button>
         </div>

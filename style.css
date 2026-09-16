@@ -286,11 +286,15 @@ h1 {
 .page-header h2 {
   margin: 0;
   font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
 .page-header p {
   margin: 0.5rem 0 0;
   color: rgb(161 161 170);
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
 .page-grid {
