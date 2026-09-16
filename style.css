@@ -202,6 +202,7 @@ h1 {
   min-width: 0;
   overflow-y: auto;
   padding: 2rem;
+  scrollbar-gutter: stable;
 }
 
 .page-header {
@@ -242,13 +243,271 @@ h1 {
   color: rgb(161 161 170);
 }
 
+.track-list {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 56rem;
+  min-width: 0;
+}
+
+.track-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  min-height: 4.5rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  box-sizing: border-box;
+  border: 1px solid rgb(63 63 70);
+  border-radius: 0.5rem;
+  background-color: rgb(24 24 27);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.track-card:hover {
+  border-color: rgb(82 82 91);
+  background-color: rgb(39 39 42);
+}
+
+.track-art {
+  width: 3.25rem;
+  height: 3.25rem;
+  flex: 0 0 3.25rem;
+  object-fit: cover;
+  border-radius: 0.25rem;
+  background-color: rgb(39 39 42);
+}
+
+.track-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.track-info h3,
+.track-info p {
+  overflow: hidden;
+  margin: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.track-info h3 {
+  font-size: 0.95rem;
+}
+
+.track-info p,
+.muted-text {
+  color: rgb(161 161 170);
+}
+
+.track-info p {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.track-play,
+.player-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  border: 0;
+  border-radius: 9999px;
+  background-color: rgb(34 197 94);
+}
+
+.track-play {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
+}
+
+.track-play:hover,
+.player-button:hover:not(:disabled) {
+  background-color: rgb(74 222 128);
+}
+
+.player-bar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  min-height: 4.75rem;
+  padding: 0.7rem 2rem;
+  border-top: 1px solid rgb(63 63 70);
+  background-color: rgb(9 9 11);
+}
+
+.player-track {
+  min-width: 12rem;
+  flex: 0 1 22rem;
+}
+
+.player-status,
+.player-title {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.player-status {
+  margin-bottom: 0.2rem;
+  color: rgb(161 161 170);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.player-title {
+  font-size: 0.85rem;
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.player-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 2.25rem;
+}
+
+.player-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.progress-bar {
+  --progress: 0%;
+  height: 1rem;
+  width: 100%;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+  touch-action: pan-x;
+}
+
+.progress-bar:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.progress-bar::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: linear-gradient(to right, rgb(34 197 94) var(--progress), rgb(63 63 70) var(--progress));
+  transition: background 0.08s linear;
+}
+
+.progress-bar::-webkit-slider-thumb {
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-top: -0.275rem;
+  appearance: none;
+  border: 0;
+  border-radius: 9999px;
+  background: rgb(34 197 94);
+}
+
+.progress-bar::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: rgb(63 63 70);
+}
+
+.progress-bar::-moz-range-progress {
+  height: 0.25rem;
+  border-radius: 9999px;
+  background: rgb(34 197 94);
+}
+
+.progress-bar::-moz-range-thumb {
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 0;
+  border-radius: 9999px;
+  background: rgb(34 197 94);
+}
+
+.player-time {
+  min-width: 5.5rem;
+  color: rgb(161 161 170);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
 @media (max-width: 640px) {
+  header nav {
+    gap: 0.5rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .header-actions {
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  .profile-button {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sidebar {
+    width: min(280px, calc(100vw - 1rem));
+  }
+
   .app-content {
-    padding: 1.25rem;
+    padding: 1.25rem 0.9rem;
   }
 
   .page-header h2 {
     font-size: 1.5rem;
+  }
+
+  .player-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 7.25rem;
+    padding: 0.7rem 0.9rem 0.85rem;
+  }
+
+  .player-track {
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+
+  .player-controls {
+    width: 100%;
+    gap: 0.6rem;
+  }
+
+  .player-time {
+    min-width: 4.8rem;
+    font-size: 0.68rem;
+  }
+
+  .track-card {
+    gap: 0.7rem;
+    padding: 0.55rem;
+  }
+
+  .track-art {
+    width: 2.9rem;
+    height: 2.9rem;
+    flex-basis: 2.9rem;
   }
 }
 

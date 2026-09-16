@@ -1,0 +1,27 @@
+{
+  "name": "spotify-clone",
+  "version": "1.0.0",
+  "description": "",
+  "main": "pages.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vraj07-11/SPOTIFY-CLONE.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/vraj07-11/SPOTIFY-CLONE/issues"
+  },
+  "homepage": "https://github.com/vraj07-11/SPOTIFY-CLONE#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "ytmusic-api": "^5.3.1"
+  }
+}

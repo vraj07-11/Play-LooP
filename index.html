@@ -30,7 +30,7 @@
               <i data-lucide="x" class="w-7 h-7"></i>
             </button>
           </div>
-              <h1 class="header-title text-2xl font-bold"><a class="brand-link" href="/" data-nav="home"><img
+              <h1 class="header-title text-2xl font-bold"><a class  ="brand-link" href="/" data-nav="home"><img
                 class="brand-logo" src="public/logo.svg" alt="Play LooP logo" />Play LooP</a></h1>
         </div>
         <div class="header-actions flex items-center gap-3">
@@ -87,11 +87,23 @@
       </aside>
       <section class="app-content" data-content aria-live="polite"></section>
     </main>
+    <footer class="player-bar" data-player>
+      <div class="player-track">
+        <span class="player-status" data-player-status>Nothing playing</span>
+        <span class="player-title" data-current-title>Select a song to start listening</span>
+      </div>
+      <div class="player-controls">
+        <button type="button" class="player-button" data-action="play-pause" aria-label="Play" disabled>
+          <i data-lucide="play" class="w-5 h-5"></i>
+        </button>
+        <input class="progress-bar" data-progress type="range" min="0" max="100" value="0" aria-label="Track progress" disabled />
+        <span class="player-time" data-player-time>0:00 / 0:00</span>
+      </div>
+    </footer>
   </div>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>lucide.createIcons();</script>
   <script src="pages.js"></script>
   <script src="script.js"></script>
 </body>
-
 </html>
