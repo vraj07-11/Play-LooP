@@ -1,0 +1,7 @@
+node_modules
+audio-cache
+.audio-cache
+.git
+.gitignore
+Dockerfile
+npm-debug.log
