@@ -69,12 +69,11 @@ const playPauseButton = document.querySelector('[data-action="play-pause"]');
 const previousTrackButton = document.querySelector('[data-action="previous-track"]');
 const nextTrackButton = document.querySelector('[data-action="next-track"]');
 const playerBar = document.querySelector("[data-player]");
+const audioPlayer = document.querySelector("#audioPlayer");
 const progressBar = document.querySelector("[data-progress]");
 const currentTitle = document.querySelector("[data-current-title]");
 const playerStatus = document.querySelector("[data-player-status]");
 const playerTime = document.querySelector("[data-player-time]");
-let youtubePlayer;
-let youtubeReady = false;
 let pendingTrack;
 let isPlaying = false;
 let progressAnimationFrame;
@@ -83,52 +82,26 @@ let trackQueue = [];
 let currentTrackIndex = -1;
 let trackHistory = [];
 
-window.onYouTubeIframeAPIReady = () => {
-  youtubePlayer = new YT.Player("youtubePlayer", {
-    width: "320",
-    height: "180",
-    playerVars: {
-      controls: 0,
-      disablekb: 1,
-      playsinline: 1,
-      rel: 0,
-      origin: window.location.origin
-    },
-    events: {
-      onReady: () => {
-        youtubeReady = true;
-        if (pendingTrack) loadYouTubeTrack(pendingTrack);
-      },
-      onError: (event) => {
-        const errorMessages = {
-          2: "Invalid YouTube video ID",
-          5: "This video cannot be played in the HTML5 player",
-          100: "This video is unavailable or private",
-          101: "The owner does not allow embedded playback",
-          150: "The owner does not allow embedded playback",
-          153: "YouTube could not verify the embedded player origin"
-        };
-        playerStatus.textContent = errorMessages[event.data] || "Video unavailable";
-        playPauseButton.disabled = true;
-        progressBar.disabled = true;
-        setPlaybackState(false);
-      },
-      onStateChange: (event) => {
-        if (event.data === YT.PlayerState.PLAYING) {
-          playPauseButton.disabled = false;
-          progressBar.disabled = false;
-          playerStatus.textContent = "Playing";
-          setPlaybackState(true);
-        } else if (event.data === YT.PlayerState.PAUSED) {
-          playerStatus.textContent = "Paused";
-          setPlaybackState(false);
-        } else if (event.data === YT.PlayerState.ENDED) {
-          playNextTrack();
-        }
-      }
-    }
-  });
-};
+audioPlayer.addEventListener("play", () => {
+  playPauseButton.disabled = false;
+  progressBar.disabled = false;
+  playerStatus.textContent = "Playing";
+  setPlaybackState(true);
+});
+
+audioPlayer.addEventListener("pause", () => {
+  if (!audioPlayer.ended) playerStatus.textContent = "Paused";
+  setPlaybackState(false);
+});
+
+audioPlayer.addEventListener("ended", playNextTrack);
+audioPlayer.addEventListener("loadedmetadata", updateProgress);
+audioPlayer.addEventListener("error", () => {
+  playerStatus.textContent = "Unable to load this track";
+  playPauseButton.disabled = true;
+  progressBar.disabled = true;
+  setPlaybackState(false);
+});
 
 function setClearSearchState() {
   clearSearch.classList.toggle("is-hidden", !searchInput.value);
@@ -211,6 +184,10 @@ function setPlaybackState(playing) {
   playPauseButton.setAttribute("aria-label", playing ? "Pause" : "Play");
   lucide.createIcons();
 
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+  }
+
   if (playing) {
     startProgressAnimation();
   } else if (progressAnimationFrame) {
@@ -230,6 +207,7 @@ async function selectAndPlayTrack(videoId, title, artist) {
 
   currentTitle.textContent = `${title} - ${artist}`;
   playerStatus.textContent = "Loading";
+  updateMediaSession(selectedTrack);
   playPauseButton.disabled = true;
   progressBar.disabled = true;
   progressBar.value = "0";
@@ -237,12 +215,45 @@ async function selectAndPlayTrack(videoId, title, artist) {
   playerTime.textContent = "0:00 / 0:00";
 
   pendingTrack = { videoId, title, artist };
-  if (youtubeReady) loadYouTubeTrack(pendingTrack);
-  else playerStatus.textContent = "Loading YouTube player";
+  loadAudioTrack(pendingTrack);
 }
 
-function loadYouTubeTrack(track) {
-  youtubePlayer.loadVideoById(track.videoId);
+function updateMediaSession(track) {
+  if (!("mediaSession" in navigator) || !("MediaMetadata" in window)) return;
+
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track.title,
+    artist: track.artist,
+    album: "Play LooP"
+  });
+}
+
+if ("mediaSession" in navigator) {
+  const mediaSessionActions = {
+    play: () => audioPlayer.play(),
+    pause: () => audioPlayer.pause(),
+    nexttrack: playNextTrack,
+    previoustrack: playPreviousTrack
+  };
+
+  Object.entries(mediaSessionActions).forEach(([action, handler]) => {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch {
+      // Some browsers expose Media Session but do not support every action.
+    }
+  });
+}
+
+function loadAudioTrack(track) {
+  audioPlayer.src = `/api/audio?id=${encodeURIComponent(track.videoId)}`;
+  audioPlayer.load();
+  audioPlayer.play().catch((error) => {
+    if (error.name !== "AbortError") {
+      playerStatus.textContent = "Press play to start this track";
+      setPlaybackState(false);
+    }
+  });
 }
 
 async function searchTracks(query) {
@@ -296,12 +307,8 @@ async function searchTracks(query) {
 }
 
 playPauseButton.addEventListener("click", () => {
-  if (!youtubePlayer || !youtubeReady) return;
-  if (isPlaying) {
-    youtubePlayer.pauseVideo();
-  } else {
-    youtubePlayer.playVideo();
-  }
+  if (isPlaying) audioPlayer.pause();
+  else audioPlayer.play();
 });
 
 nextTrackButton.addEventListener("click", playNextTrack);
@@ -310,15 +317,14 @@ previousTrackButton.addEventListener("click", playPreviousTrack);
 progressBar.addEventListener("input", () => {
   const progress = Number(progressBar.value);
   progressBar.style.setProperty("--progress", `${progress}%`);
-  if (youtubePlayer && youtubeReady) {
-    youtubePlayer.seekTo((progress / 100) * youtubePlayer.getDuration(), true);
+  if (Number.isFinite(audioPlayer.duration)) {
+    audioPlayer.currentTime = (progress / 100) * audioPlayer.duration;
   }
 });
 
 function updateProgress() {
-  if (!youtubePlayer || !youtubeReady) return;
-  const duration = youtubePlayer.getDuration();
-  const currentTime = youtubePlayer.getCurrentTime();
+  const duration = audioPlayer.duration;
+  const currentTime = audioPlayer.currentTime;
   if (!Number.isFinite(duration) || duration <= 0) return;
 
   progressBar.disabled = false;
@@ -360,8 +366,10 @@ function playPreviousTrack() {
   currentTrackIndex = trackQueue.findIndex((track) => track.videoId === previousTrack.videoId);
   updateTrackButtons();
   currentTitle.textContent = `${previousTrack.title} - ${previousTrack.artist}`;
+  playerStatus.textContent = "Loading";
+  updateMediaSession(previousTrack);
   pendingTrack = previousTrack;
-  if (youtubeReady) loadYouTubeTrack(previousTrack);
+  loadAudioTrack(previousTrack);
 }
 
 function updateTrackButtons() {

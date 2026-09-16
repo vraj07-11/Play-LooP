@@ -10,6 +10,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const ytmusic = new YTMusic();
 const execFileAsync = promisify(execFile);
+const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 const audioCacheDirectory = path.join(__dirname, "audio-cache");
 const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
@@ -35,12 +36,37 @@ app.get("/api/search", async (req, res) => {
 
 	try {
 		const songs = await ytmusic.searchSongs(query);
-		res.json(songs);
+		res.json(await filterEmbeddableSongs(songs));
 	} catch (error) {
 		console.error("Search failed:", error);
 		res.status(500).json({ error: "Failed to fetch search results" });
 	}
 });
+
+async function filterEmbeddableSongs(songs) {
+	if (!youtubeApiKey || songs.length === 0) return songs;
+
+	const videoIds = songs.map((song) => song.videoId).filter(Boolean).join(",");
+	const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+	url.searchParams.set("part", "status");
+	url.searchParams.set("id", videoIds);
+	url.searchParams.set("key", youtubeApiKey);
+
+	try {
+		const response = await fetch(url);
+		if (!response.ok) throw new Error(`YouTube Data API returned ${response.status}`);
+		const data = await response.json();
+		const embeddableIds = new Set(
+			(data.items || [])
+				.filter((item) => item.status?.embeddable === true)
+				.map((item) => item.id)
+		);
+		return songs.filter((song) => embeddableIds.has(song.videoId));
+	} catch (error) {
+		console.error("Embeddable video filter failed:", error);
+		return songs;
+	}
+}
 
 app.get("/api/stream", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
