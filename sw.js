@@ -1,4 +1,4 @@
-const CACHE_NAME = 'play-loop-v2';
+const CACHE_NAME = 'play-loop-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -11,6 +11,7 @@ const STATIC_ASSETS = [
   '/public/manifest.json',
   '/public/logo.svg',
   '/public/favicon.svg',
+  '/public/icon-maskable.svg',
   '/public/autism.svg'
 ];
 

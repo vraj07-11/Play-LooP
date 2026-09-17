@@ -1,5 +1,6 @@
 FROM node:22-bookworm-slim
 
+# Install system dependencies (curl, ffmpeg, python3, deno runtime for yt-dlp JS execution)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl unzip python3 python3-pip ffmpeg ca-certificates && \
     curl -fsSL https://deno.land/install.sh | sh && \
@@ -8,16 +9,27 @@ RUN apt-get update && \
 
 WORKDIR /app
 
+# Environment configuration
+ENV PATH="/root/.deno/bin:/usr/local/bin:${PATH}"
+ENV YTDLP_PATH=/usr/local/bin/yt-dlp
+ENV YTDLP_JS_RUNTIME=deno
+ENV NODE_ENV=production
+ENV AUDIO_CACHE_LIMIT=50
+
+# Copy dependency definitions and install production packages
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+# Copy project source files
 COPY . .
 
-ENV NODE_ENV=production
-ENV YTDLP_PATH=/usr/local/bin/yt-dlp
-ENV YTDLP_JS_RUNTIME=deno
-ENV PATH="/root/.deno/bin:${PATH}"
+# Ensure audio cache directory exists
+RUN mkdir -p /app/audio-cache
 
 EXPOSE 3000
+
+# Container healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 CMD ["npm", "start"]

@@ -183,12 +183,16 @@ async function loadSearchSuggestions(query) {
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
       signal: activeSuggestionController.signal
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      hideSearchSuggestions();
+      return;
+    }
     const songs = await response.json();
     suggestionsCache.set(queryLower, songs);
     renderSuggestions(query, songs);
   } catch (error) {
     if (error.name === "AbortError") return;
+    hideSearchSuggestions();
     console.error("Search suggestions unavailable:", error);
   }
 }
@@ -210,11 +214,25 @@ if (searchInput) {
   });
 }
 
+function getInfinityLoaderHTML(message = "Searching music catalog") {
+  return `
+    <div class="infinity-loader-container" role="status" aria-label="Searching for music">
+      <div class="infinity-loader-wrapper">
+        <svg class="infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+          <path class="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
+          <path class="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
+        </svg>
+      </div>
+      <p class="infinity-loader-text"><span>${message}</span><span class="infinity-dots"><span>.</span><span>.</span><span>.</span></span></p>
+    </div>
+  `;
+}
+
 async function searchTracks(query) {
   const requestId = ++activeSearchRequest;
   const trackList = document.querySelector("[data-track-list]");
   if (!trackList) return;
-  trackList.innerHTML = '<p class="muted-text">Searching music catalog...</p>';
+  trackList.innerHTML = getInfinityLoaderHTML(`Searching for "${query}"`);
 
   try {
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);

@@ -13,15 +13,19 @@ const execFileAsync = promisify(execFile);
 const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 const ytdlpPath = process.env.YTDLP_PATH || (process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
 const audioCacheDirectory = path.join(__dirname, "audio-cache");
-const configuredCacheLimit = Number.parseInt(process.env.AUDIO_CACHE_LIMIT || "10", 10);
+const configuredCacheLimit = Number.parseInt(process.env.AUDIO_CACHE_LIMIT || "50", 10);
 const audioCacheLimit = Number.isInteger(configuredCacheLimit) && configuredCacheLimit > 0
 	? configuredCacheLimit
-	: 10;
+	: 50;
 const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
 	: [];
-const ytdlpNetworkArgs = ["--force-ipv4"];
+const ytdlpNetworkArgs = [
+	"--force-ipv4",
+	"--extractor-args",
+	"youtube:player_client=android,web,ios"
+];
 
 app.use(cors());
 app.use(express.static(__dirname));
@@ -66,6 +70,20 @@ async function filterEmbeddableSongs(songs) {
 		return songs;
 	}
 }
+
+app.get("/api/audio/preload", async (req, res) => {
+	const videoId = String(req.query.id || "").trim();
+	if (!videoId) return res.status(400).json({ error: "Video ID is required" });
+
+	try {
+		getCachedAudio(videoId).catch((error) => {
+			console.warn(`[Preload] Background pre-download warning for ${videoId}:`, error.message);
+		});
+		res.json({ ok: true, preloading: videoId });
+	} catch (error) {
+		res.status(500).json({ error: "Preload trigger failed" });
+	}
+});
 
 app.get("/api/audio", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
@@ -138,7 +156,7 @@ async function getCachedAudio(videoId) {
 				...ytdlpNetworkArgs,
 				"--no-part",
 				"-f",
-				"bestaudio/best",
+				"140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
 				"-x",
 				"--audio-format",
 				"m4a",
@@ -147,14 +165,34 @@ async function getCachedAudio(videoId) {
 				`https://www.youtube.com/watch?v=${videoId}`
 			], { timeout: 120000 });
 		})();
+
+		download.catch((err) => {
+			console.warn(`[Audio] Extraction download error for ${videoId}:`, err.message);
+		});
 		activeDownloads.set(videoId, download);
 	}
 
+	const waitForPartialOrComplete = async () => {
+		for (let i = 0; i < 35; i++) {
+			try {
+				const stat = await fs.promises.stat(audioPath);
+				if (stat.size > 64 * 1024) return audioPath;
+			} catch {}
+			await new Promise((resolve) => setTimeout(resolve, 150));
+		}
+		try {
+			await activeDownloads.get(videoId);
+		} catch (err) {
+			console.warn(`[Audio] Download failed or timed out for ${videoId}`);
+		}
+		return audioPath;
+	};
+
 	try {
-		await activeDownloads.get(videoId);
+		await waitForPartialOrComplete();
 		await enforceAudioCacheLimit(audioPath);
 	} finally {
-		activeDownloads.delete(videoId);
+		activeDownloads.get(videoId)?.finally(() => activeDownloads.delete(videoId));
 	}
 
 	return audioPath;

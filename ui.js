@@ -42,6 +42,10 @@ function showPage(pageName, updateUrl = true) {
     ${pageBody}
   `;
 
+  if (window.lucide?.createIcons) {
+    lucide.createIcons();
+  }
+
   if (pageName === "Download" && typeof setupPwaInstallButton === "function") {
     setupPwaInstallButton();
   }

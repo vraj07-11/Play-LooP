@@ -122,7 +122,8 @@ function initializeYouTubePlayer() {
       modestbranding: 1,
       origin: window.location.origin,
       playsinline: 1,
-      rel: 0
+      rel: 0,
+      vq: "small"
     },
     events: {
       onReady: () => youtubeReadyResolve(),
@@ -162,6 +163,63 @@ function positionSeekButtons() {
 positionSeekButtons();
 window.addEventListener("resize", positionSeekButtons);
 
+let preloadedNextTrackId = null;
+let preloadedNextTrackObj = null;
+let preloadedAudio = null;
+
+function getNextTrackToPlay() {
+  if (forwardTrack) return forwardTrack;
+  if (preloadedNextTrackObj) return preloadedNextTrackObj;
+
+  if (isShuffleEnabled) {
+    const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
+    if (!availableTracks.length) return null;
+    let nextIndex = Math.floor(Math.random() * availableTracks.length);
+    if (availableTracks === trackQueue && trackQueue.length > 1 && nextIndex === currentTrackIndex) {
+      nextIndex = (nextIndex + 1) % trackQueue.length;
+    }
+    preloadedNextTrackObj = availableTracks[nextIndex];
+    return preloadedNextTrackObj;
+  }
+
+  if (trackQueue.length > 0) {
+    let nextIndex;
+    if (currentTrackIndex >= 0 && currentTrackIndex < trackQueue.length - 1) {
+      nextIndex = currentTrackIndex + 1;
+    } else {
+      nextIndex = 0;
+    }
+    preloadedNextTrackObj = trackQueue[nextIndex];
+    return preloadedNextTrackObj;
+  }
+
+  if (recommendationQueue.length > 0) {
+    preloadedNextTrackObj = recommendationQueue[0];
+    return preloadedNextTrackObj;
+  }
+
+  return null;
+}
+
+function triggerNextTrackPreload() {
+  const nextTrack = getNextTrackToPlay();
+  if (!nextTrack || !nextTrack.videoId) return;
+
+  if (preloadedNextTrackId === nextTrack.videoId) return;
+  preloadedNextTrackId = nextTrack.videoId;
+
+  console.log(`[Preloader] ⚡ Automatically pre-loading next track: "${nextTrack.title}" (${nextTrack.videoId})`);
+
+  fetch(`/api/audio/preload?id=${encodeURIComponent(nextTrack.videoId)}`).catch(() => {});
+
+  if (!preloadedAudio) {
+    preloadedAudio = new Audio();
+    preloadedAudio.preload = "auto";
+  }
+  preloadedAudio.src = `/api/audio?id=${encodeURIComponent(nextTrack.videoId)}`;
+  preloadedAudio.load();
+}
+
 audioPlayer.addEventListener("play", () => {
   playPauseButton.disabled = false;
   progressBar.disabled = false;
@@ -171,6 +229,7 @@ audioPlayer.addEventListener("play", () => {
   forwardButton.disabled = false;
   playerStatus.textContent = "Playing";
   setPlaybackState(true);
+  triggerNextTrackPreload();
 });
 
 audioPlayer.addEventListener("pause", () => {
@@ -275,6 +334,7 @@ function updateTitleMarquee() {
 }
 
 async function selectAndPlayTrack(videoId, title, artist, thumbnail = null, fromHistory = false) {
+  preloadedNextTrackId = null;
   startSilentAudioKeepAlive();
   playerBar.classList.remove("is-hidden");
   if (!fromHistory) forwardTrack = undefined;
@@ -401,7 +461,15 @@ function loadAudioTrack(track) {
 function loadAudioTrackYouTube(track) {
   try { nativeAudioPlayer.pause(); } catch {}
   youtubeReady.then(() => {
-    youtubePlayer.loadVideoById(track.videoId);
+    if (typeof youtubePlayer.loadVideoById === "function") {
+      youtubePlayer.loadVideoById({
+        videoId: track.videoId,
+        suggestedQuality: "small"
+      });
+    }
+    if (typeof youtubePlayer.setPlaybackQuality === "function") {
+      try { youtubePlayer.setPlaybackQuality("small"); } catch {}
+    }
     youtubePlayer.playVideo().catch(() => {
       playerStatus.textContent = "Press play to start this track";
       setPlaybackState(false);
@@ -426,6 +494,7 @@ async function loadRecommendations(videoId) {
         thumbnail: `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`
       }));
     updateTrackButtons();
+    triggerNextTrackPreload();
   } catch (error) {
     if (requestId === recommendationRequestId) recommendationQueue = [];
     console.error("Recommendations unavailable:", error);
@@ -460,6 +529,9 @@ shuffleButton.addEventListener("click", () => {
   shuffleButton.setAttribute("aria-pressed", String(isShuffleEnabled));
   shuffleButton.setAttribute("aria-label", isShuffleEnabled ? "Random / Shuffle on" : "Random / Shuffle off");
   shuffleButton.classList.toggle("is-active", isShuffleEnabled);
+  preloadedNextTrackObj = null;
+  preloadedNextTrackId = null;
+  triggerNextTrackPreload();
 });
 
 window.addEventListener("resize", updateTitleMarquee);
@@ -526,31 +598,10 @@ function playNextTrack() {
     return;
   }
 
-  if (isShuffleEnabled) {
-    const availableTracks = recommendationQueue.length ? recommendationQueue : trackQueue;
-    if (!availableTracks.length) return;
-
-    let nextIndex = Math.floor(Math.random() * availableTracks.length);
-    if (availableTracks === trackQueue && trackQueue.length > 1 && nextIndex === currentTrackIndex) {
-      nextIndex = (nextIndex + 1) % trackQueue.length;
-    }
-
-    const nextTrack = availableTracks[nextIndex];
+  const nextTrack = preloadedNextTrackObj || getNextTrackToPlay();
+  if (nextTrack) {
+    preloadedNextTrackObj = null;
     selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
-  } else {
-    if (trackQueue.length > 0) {
-      let nextIndex;
-      if (currentTrackIndex >= 0 && currentTrackIndex < trackQueue.length - 1) {
-        nextIndex = currentTrackIndex + 1;
-      } else {
-        nextIndex = 0;
-      }
-      const nextTrack = trackQueue[nextIndex];
-      selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
-    } else if (recommendationQueue.length > 0) {
-      const nextTrack = recommendationQueue[0];
-      selectAndPlayTrack(nextTrack.videoId, nextTrack.title, nextTrack.artist, nextTrack.thumbnail);
-    }
   }
 }
 
