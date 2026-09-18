@@ -13,18 +13,20 @@ WORKDIR /app
 ENV PATH="/root/.deno/bin:/usr/local/bin:${PATH}"
 ENV YTDLP_PATH=/usr/local/bin/yt-dlp
 ENV YTDLP_JS_RUNTIME=deno
-ENV NODE_ENV=production
 ENV AUDIO_CACHE_LIMIT=50
 
-# Copy dependency definitions and install all packages (including dev for build)
+# Copy dependency definitions and install all packages (including devDependencies for build)
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
   
 # Copy project source files
 COPY . .
 
 # Build the React frontend
 RUN npm run build
+
+# Set production environment
+ENV NODE_ENV=production
 
 # Ensure audio cache directory exists
 RUN mkdir -p /app/audio-cache

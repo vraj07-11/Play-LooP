@@ -22,12 +22,10 @@
   },
   "homepage": "https://github.com/vraj07-11/SPOTIFY-CLONE#readme",
   "dependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "vite": "^8.3.0",
     "ytmusic-api": "^5.3.1"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^6.1.1",
-    "vite": "^8.3.0"
   }
 }
