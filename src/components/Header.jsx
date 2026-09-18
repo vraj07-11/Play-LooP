@@ -205,7 +205,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
                       <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
                     </svg>
                     <span>
-                      Searching<span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
+                      Searching for suggestions<span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
                     </span>
                   </div>
                 ) : suggestions.length > 0 ? (
