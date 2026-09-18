@@ -230,18 +230,37 @@ export function PlayerProvider({ children }) {
   }, [trackHistory]);
 
   const seekBy = (seconds) => {
-    if (!Number.isFinite(duration)) return;
-    const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
-    nativeAudioPlayer.current.currentTime = newTime;
-    setCurrentTime(newTime);
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+      const cTime = nativeAudioPlayer.current.currentTime || currentTime;
+      const newTime = Math.max(0, Math.min(duration, cTime + seconds));
+      nativeAudioPlayer.current.currentTime = newTime;
+      setCurrentTime(newTime);
+      setProgress((newTime / duration) * 100);
+    } else if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.seekTo) {
+      const cTime = youtubePlayer.current.getCurrentTime ? youtubePlayer.current.getCurrentTime() : currentTime;
+      const newTime = Math.max(0, Math.min(duration, cTime + seconds));
+      youtubePlayer.current.seekTo(newTime, true);
+      setCurrentTime(newTime);
+      setProgress((newTime / duration) * 100);
+    }
   };
   
   const seekToPercent = (percent) => {
-    if (!Number.isFinite(duration)) return;
-    const newTime = (percent / 100) * duration;
-    nativeAudioPlayer.current.currentTime = newTime;
-    setCurrentTime(newTime);
-  }
+    const numericPercent = parseFloat(percent);
+    if (isNaN(numericPercent) || !Number.isFinite(duration) || duration <= 0) return;
+    const newTime = (numericPercent / 100) * duration;
+    
+    if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+      nativeAudioPlayer.current.currentTime = newTime;
+      setCurrentTime(newTime);
+      setProgress(numericPercent);
+    } else if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.seekTo) {
+      youtubePlayer.current.seekTo(newTime, true);
+      setCurrentTime(newTime);
+      setProgress(numericPercent);
+    }
+  };
 
   const value = {
     isPlaying, playPause,

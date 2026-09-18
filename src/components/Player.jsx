@@ -136,9 +136,10 @@ export default function Player() {
             className="progress-bar flex-1 cursor-pointer outline-none"
             style={{ '--progress': `${progress || 0}%` }}
             type="range" 
-            min="0" max="100" step="any"
+            min="0" max="100" step="0.1"
             value={progress || 0}
             onChange={handleProgressChange}
+            onInput={handleProgressChange}
             aria-label="Track progress"
           />
           <span className="text-xs text-zinc-400 min-w-[40px] font-mono">{formatTime(duration)}</span>
