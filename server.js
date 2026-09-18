@@ -130,6 +130,57 @@ app.get("/api/recommendations", async (req, res) => {
 	}
 });
 
+app.get("/api/playlists", async (req, res) => {
+	try {
+		const queries = ["Arijit Singh", "Latest Hindi Hits", "Phonk", "Global Top Hits", "Chill Lofi Beats"];
+		const playlistPromises = queries.map(async (q) => {
+			try {
+				const results = await ytmusic.searchPlaylists(q);
+				return results[0] || null;
+			} catch (e) {
+				return null;
+			}
+		});
+		const rawPlaylists = await Promise.all(playlistPromises);
+		const playlists = rawPlaylists.filter(Boolean).map((p) => ({
+			playlistId: p.playlistId,
+			title: p.title || p.name,
+			author: p.author?.name || p.artist || "Play LooP",
+			thumbnail: p.thumbnails?.[p.thumbnails.length - 1]?.url || p.thumbnail || "/logo.svg",
+			count: p.count || p.songCount || 25
+		}));
+		res.json(playlists);
+	} catch (error) {
+		console.error("Playlists fetch failed:", error);
+		res.status(500).json({ error: "Failed to fetch playlists" });
+	}
+});
+
+app.get("/api/playlist", async (req, res) => {
+	const playlistId = String(req.query.id || "").trim();
+	if (!playlistId) return res.status(400).json({ error: "Playlist ID is required" });
+
+	try {
+		const playlist = await ytmusic.getPlaylist(playlistId);
+		res.json({
+			playlistId: playlist.playlistId || playlistId,
+			title: playlist.title || "Featured Playlist",
+			description: playlist.description || `Curated collection by ${playlist.author?.name || "Play LooP"}`,
+			thumbnail: playlist.thumbnails?.[playlist.thumbnails.length - 1]?.url || "/logo.svg",
+			tracks: (playlist.videos || playlist.tracks || []).map((t) => ({
+				videoId: t.videoId,
+				title: t.title,
+				artist: t.artists?.[0]?.name || t.artist || "Various Artists",
+				thumbnail: t.thumbnails?.[0]?.url || playlist.thumbnails?.[0]?.url || "/logo.svg",
+				duration: t.duration || 0
+			}))
+		});
+	} catch (error) {
+		console.error("Playlist details failed:", error);
+		res.status(502).json({ error: "Failed to fetch playlist details" });
+	}
+});
+
 app.get("/api/health", (req, res) => {
 	res.json({
 		ok: true,

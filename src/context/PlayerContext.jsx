@@ -147,83 +147,105 @@ export function PlayerProvider({ children }) {
     }
   }, [isPlaying]);
 
-  const selectAndPlayTrack = async (videoId, title, artist, thumbnail = null, fromHistory = false) => {
-    const selectedTrack = { videoId, title, artist, thumbnail };
-    setPendingTrack(selectedTrack);
-    setCurrentTitle(`${title} - ${artist}`);
-    setPlayerStatus("Loading");
+  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isFromHistory = false) => {
+    const trackObj = { videoId, title, artist, thumbnail };
+    setPendingTrack(trackObj);
+    setCurrentTitle(title);
+    setPlayerStatus("Loading...");
     setProgress(0);
     setCurrentTime(0);
-    setDuration(0);
-    
-    if (!fromHistory) {
-      setTrackHistory(prev => {
-        const last = prev[prev.length - 1];
-        if (!last || last.videoId !== videoId) return [...prev, selectedTrack];
-        return prev;
-      });
+
+    addToRecentlyPlayed(trackObj);
+
+    if (!isFromHistory) {
+      setTrackHistory((prev) => [...prev, trackObj]);
     }
 
-    // Load recommendations
     try {
-      const response = await fetchApi(`/api/recommendations?id=${encodeURIComponent(videoId)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setRecommendationQueue(data
-          .filter((t) => t.videoId && t.videoId !== videoId)
-          .map((t) => ({
-            videoId: t.videoId,
-            title: t.title || "Unknown track",
-            artist: t.artists || "Unknown artist",
-            thumbnail: `https://img.youtube.com/vi/${t.videoId}/hqdefault.jpg`
-          })));
-      }
+      fetchApi(`/api/audio/preload?id=${encodeURIComponent(videoId)}`);
+    } catch (e) {
+      /* ignore preload errors */
+    }
+
+    try {
+      fetchApi(`/api/recommendations?id=${encodeURIComponent(videoId)}`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setRecommendationQueue(
+              data
+                .filter((t) => t.videoId && t.videoId !== videoId)
+                .map((t) => ({
+                  videoId: t.videoId,
+                  title: t.title || "Unknown track",
+                  artist: t.artists || "Unknown artist",
+                  thumbnail: `https://img.youtube.com/vi/${t.videoId}/hqdefault.jpg`
+                }))
+            );
+          }
+        })
+        .catch((e) => console.error(e));
     } catch (e) {
       console.error(e);
     }
 
-    // Load audio
     currentActiveEngine.current = "native";
     nativeAudioPlayer.current.src = getAudioUrl(videoId);
     nativeAudioPlayer.current.load();
-    nativeAudioPlayer.current.play().then(() => {
-      setIsPlaying(true);
-      setPlayerStatus("Playing");
-    }).catch(() => {
-       // fallback could go here
-       console.log("Audio play failed, requires user interaction or fallback");
-    });
+    nativeAudioPlayer.current
+      .play()
+      .then(() => {
+        setIsPlaying(true);
+        setPlayerStatus("Playing");
+      })
+      .catch(() => {
+        console.log("Audio play failed, requires user interaction or fallback");
+      });
+  };
+
+  const playPlaylist = (tracks, startIndex = 0) => {
+    if (!Array.isArray(tracks) || tracks.length === 0) return;
+    setTrackQueue(tracks);
+    setCurrentTrackIndex(startIndex);
+    const startTrack = tracks[startIndex];
+    if (startTrack && startTrack.videoId) {
+      selectAndPlayTrack(startTrack.videoId, startTrack.title, startTrack.artist, startTrack.thumbnail);
+    }
   };
 
   const playNextTrack = useCallback(() => {
     let nextTrackObj = null;
-    if (isShuffleEnabled) {
-       const pool = recommendationQueue.length ? recommendationQueue : trackQueue;
-       if (pool.length) {
-         const currentId = pendingTrack?.videoId;
-         const filtered = pool.filter(t => t.videoId !== currentId);
-         const selectionPool = filtered.length ? filtered : pool;
-         nextTrackObj = selectionPool[Math.floor(Math.random() * selectionPool.length)];
-       }
-    } else {
-       if (trackQueue.length > 0) {
-          let nextIndex = currentTrackIndex >= 0 && currentTrackIndex < trackQueue.length - 1 ? currentTrackIndex + 1 : 0;
-          nextTrackObj = trackQueue[nextIndex];
-          setCurrentTrackIndex(nextIndex);
-       } else if (recommendationQueue.length > 0) {
-          nextTrackObj = recommendationQueue[0];
-       }
+
+    if (trackQueue.length > 0) {
+      // If playing within a playlist queue
+      if (isShuffleEnabled) {
+        const randomIndex = Math.floor(Math.random() * trackQueue.length);
+        setCurrentTrackIndex(randomIndex);
+        nextTrackObj = trackQueue[randomIndex];
+      } else {
+        const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
+        setCurrentTrackIndex(nextIndex);
+        nextTrackObj = trackQueue[nextIndex];
+      }
+    } else if (recommendationQueue.length > 0) {
+      // Fallback recommendation queue
+      if (isShuffleEnabled) {
+        const randomIndex = Math.floor(Math.random() * recommendationQueue.length);
+        nextTrackObj = recommendationQueue[randomIndex];
+      } else {
+        nextTrackObj = recommendationQueue[0];
+      }
     }
-    
+
     if (nextTrackObj) {
       selectAndPlayTrack(nextTrackObj.videoId, nextTrackObj.title, nextTrackObj.artist, nextTrackObj.thumbnail);
     }
-  }, [isShuffleEnabled, recommendationQueue, trackQueue, currentTrackIndex, pendingTrack]);
+  }, [isShuffleEnabled, recommendationQueue, trackQueue, currentTrackIndex]);
 
   const playPreviousTrack = useCallback(() => {
     if (trackHistory.length < 2) return;
     const historyCopy = [...trackHistory];
-    historyCopy.pop(); // remove current
+    historyCopy.pop();
     const previousTrack = historyCopy[historyCopy.length - 1];
     setTrackHistory(historyCopy);
     selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true);
@@ -263,16 +285,29 @@ export function PlayerProvider({ children }) {
   };
 
   const value = {
-    isPlaying, playPause,
-    pendingTrack, currentTitle, playerStatus,
-    progress, currentTime, duration,
-    trackQueue, setTrackQueue,
+    isPlaying,
+    playPause,
+    pendingTrack,
+    currentTitle,
+    playerStatus,
+    progress,
+    currentTime,
+    duration,
+    trackQueue,
+    setTrackQueue,
+    recentlyPlayed,
     selectAndPlayTrack,
-    playNextTrack, playPreviousTrack,
-    seekBy, seekToPercent,
-    isRepeatEnabled, setIsRepeatEnabled,
-    isShuffleEnabled, setIsShuffleEnabled,
-    hasPrevious, hasNext
+    playPlaylist,
+    playNextTrack,
+    playPreviousTrack,
+    seekBy,
+    seekToPercent,
+    isRepeatEnabled,
+    setIsRepeatEnabled,
+    isShuffleEnabled,
+    setIsShuffleEnabled,
+    hasPrevious,
+    hasNext
   };
 
   return (
