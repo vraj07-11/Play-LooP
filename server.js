@@ -28,7 +28,13 @@ const ytdlpNetworkArgs = [
 ];
 
 app.use(cors());
-app.use(express.static(__dirname));
+
+// Serve the Vite build if it exists (for Render deployment)
+if (fs.existsSync(path.join(__dirname, "dist"))) {
+	app.use(express.static(path.join(__dirname, "dist")));
+} else {
+	app.use(express.static(__dirname));
+}
 
 app.get("/api/search", async (req, res) => {
 	const query = String(req.query.q || "").trim();

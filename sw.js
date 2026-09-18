@@ -8,11 +8,11 @@ const STATIC_ASSETS = [
   '/pwa.js',
   '/player.js',
   '/search.js',
-  '/public/manifest.json',
-  '/public/logo.svg',
-  '/public/favicon.svg',
-  '/public/icon-maskable.svg',
-  '/public/autism.svg'
+  '/manifest.json',
+  '/logo.svg',
+  '/favicon.svg',
+  '/icon-maskable.svg',
+  '/autism.svg'
 ];
 
 // Install Event: Pre-cache static assets

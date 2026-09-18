@@ -4,8 +4,10 @@
   "description": "",
   "main": "pages.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
@@ -23,5 +25,9 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "ytmusic-api": "^5.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.0"
   }
 }

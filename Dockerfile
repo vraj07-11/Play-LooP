@@ -16,12 +16,15 @@ ENV YTDLP_JS_RUNTIME=deno
 ENV NODE_ENV=production
 ENV AUDIO_CACHE_LIMIT=50
 
-# Copy dependency definitions and install production packages
+# Copy dependency definitions and install all packages (including dev for build)
 COPY package*.json ./
-RUN npm ci --omit=dev
-
+RUN npm ci
+  
 # Copy project source files
 COPY . .
+
+# Build the React frontend
+RUN npm run build
 
 # Ensure audio cache directory exists
 RUN mkdir -p /app/audio-cache
