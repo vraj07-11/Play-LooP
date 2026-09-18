@@ -1,24 +1,12 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { fetchApi, getAudioUrl } from '../services/api.js';
+
+export { fetchApi, getAudioUrl };
 
 const PlayerContext = createContext();
 
 export function usePlayer() {
   return useContext(PlayerContext);
-}
-
-// Fetch API helper
-export async function fetchApi(endpoint, options = {}) {
-  try {
-    return await fetch(endpoint, options);
-  } catch (err) {
-    if (err.name === "AbortError") throw err;
-    console.error("fetchApi error:", err);
-    throw err;
-  }
-}
-
-export function getAudioUrl(videoId) {
-  return `/api/audio?id=${encodeURIComponent(videoId)}`;
 }
 
 export function PlayerProvider({ children }) {

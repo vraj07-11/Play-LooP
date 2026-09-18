@@ -1,0 +1,226 @@
+.brand-logo {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  vertical-align: middle;
+}
+
+.search-form {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  width: 20rem;
+  height: 2.5rem;
+  overflow: visible;
+  border: 1px solid rgb(63 63 70);
+  border-radius: 9999px;
+  background-color: rgb(24 24 27);
+}
+
+.search-input {
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  padding: 0 5.25rem 0 1rem;
+  color: white;
+  caret-color: white;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.search-input::placeholder {
+  color: rgb(161 161 170);
+}
+
+.search-suggestions {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 20;
+  width: 100%;
+  padding: 0.35rem;
+  overflow: hidden;
+  border: 1px solid rgb(63 63 70);
+  border-radius: 0.75rem;
+  background-color: rgb(24 24 27);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+}
+
+.search-suggestions.is-hidden {
+  display: none;
+}
+
+.search-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.65rem 0.7rem;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+}
+
+.search-suggestion:hover,
+.search-suggestion:focus-visible {
+  outline: 0;
+  background-color: rgb(63 63 70);
+}
+
+.search-suggestion span {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.search-suggestion strong,
+.search-suggestion small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-suggestion strong {
+  font-weight: 500;
+}
+
+.search-suggestion small {
+  color: rgb(161 161 170);
+}
+
+.search-button,
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: white;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+.search-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.clear-search {
+  position: absolute;
+  top: 0;
+  right: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: white;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+.clear-search.is-hidden {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .header-title {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    font-size: 1.25rem;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+  }
+
+  header nav {
+    gap: 0.5rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .header-actions {
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  .profile-button {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+  }
+
+  .search-form {
+    width: 2.5rem;
+    border: 0;
+    background: transparent;
+    transition: width 0.3s ease;
+  }
+
+  .search-input {
+    display: block;
+    min-width: 0;
+    padding: 0 2.75rem 0 0.85rem;
+    font-size: 0.875rem;
+    text-overflow: ellipsis;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease;
+  }
+
+  .search-input::placeholder {
+    font-size: 0.825rem;
+    color: rgb(161 161 170);
+  }
+
+  .search-form.is-open {
+    width: min(calc(100vw - 5.5rem), 20rem);
+    border: 1px solid rgb(63 63 70);
+    background-color: rgb(24 24 27);
+  }
+
+  .search-form:has(.clear-search:not(.is-hidden)) .search-input {
+    padding-right: 4.75rem;
+  }
+
+  .search-form.is-open .search-input {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .search-form.is-open .search-button {
+    right: 0;
+  }
+
+  .search-form:not(.is-open) .clear-search {
+    display: none;
+  }
+
+  .search-form.is-open .search-suggestions {
+    width: 100%;
+  }
+
+  body.mobile-search-open .header-title {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}

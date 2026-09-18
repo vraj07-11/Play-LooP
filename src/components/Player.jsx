@@ -89,8 +89,8 @@ export default function Player() {
           >
             {isPlaying ? (
               <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                <rect x="6.25" y="5.25" width="3.5" height="13.5" rx="0.75" />
-                <rect x="14.25" y="5.25" width="3.5" height="13.5" rx="0.75" />
+                <rect x="6.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
+                <rect x="14.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
               </svg>
             ) : (
               <svg className="w-7 h-7 text-white translate-x-[1px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">

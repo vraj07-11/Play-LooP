@@ -29,6 +29,11 @@ const ytdlpNetworkArgs = [
 
 app.use(cors());
 
+// Healthcheck endpoint for Docker & Cloud deployments
+app.get("/api/health", (req, res) => {
+	res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // Serve the Vite build if it exists (for Render deployment)
 if (fs.existsSync(path.join(__dirname, "dist"))) {
 	app.use(express.static(path.join(__dirname, "dist")));
@@ -227,6 +232,16 @@ async function enforceAudioCacheLimit(protectedPath) {
 		filesToRemove -= 1;
 	}
 }
+
+// SPA fallback for client-side routing
+app.get("*", (req, res) => {
+	const distIndex = path.join(__dirname, "dist", "index.html");
+	if (fs.existsSync(distIndex)) {
+		res.sendFile(distIndex);
+	} else {
+		res.sendFile(path.join(__dirname, "index.html"));
+	}
+});
 
 async function startServer() {
 	try {

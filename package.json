@@ -2,7 +2,7 @@
   "name": "spotify-clone",
   "version": "1.0.0",
   "description": "",
-  "main": "pages.js",
+  "main": "legacy/pages.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
