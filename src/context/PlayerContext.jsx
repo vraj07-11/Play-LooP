@@ -21,6 +21,30 @@ export function PlayerProvider({ children }) {
   const [recommendationQueue, setRecommendationQueue] = useState([]);
   const [trackHistory, setTrackHistory] = useState([]);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
+  const [recentlyPlayed, setRecentlyPlayed] = useState(() => {
+    try {
+      const saved = localStorage.getItem("playloop_recently_played");
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const addToRecentlyPlayed = (trackObj) => {
+    if (!trackObj || !trackObj.videoId) return;
+    setRecentlyPlayed((prev) => {
+      const currentList = Array.isArray(prev) ? prev : [];
+      const filtered = currentList.filter((t) => t.videoId !== trackObj.videoId);
+      const updated = [trackObj, ...filtered].slice(0, 20); // Cap at max 20
+      try {
+        localStorage.setItem("playloop_recently_played", JSON.stringify(updated));
+      } catch (e) {
+        console.error("Failed to save history", e);
+      }
+      return updated;
+    });
+  };
   
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);

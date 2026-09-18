@@ -10,9 +10,9 @@
   }
 }
 
-/* ==========================================
-   Infinity Loading Animation Styles
-   ========================================== */
+/* 
+  Infinity Loading Animation Styles
+*/
 .infinity-loader-container {
   display: flex;
   flex-direction: column;

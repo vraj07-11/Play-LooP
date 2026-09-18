@@ -34,11 +34,17 @@ export default function Player() {
   return (
     <footer className="player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4">
       <div className="player-track flex items-center gap-4 w-full md:w-1/3 min-w-0">
-        {pendingTrack?.thumbnail && (
-          <img src={pendingTrack.thumbnail} alt="Track thumbnail" className="w-14 h-14 rounded-md object-cover shrink-0" />
-        )}
+        <img 
+          src={pendingTrack?.thumbnail || '/logo.svg'} 
+          alt="Track thumbnail" 
+          className={`w-14 h-14 rounded-md shrink-0 ${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? 'object-contain p-2 bg-zinc-800 border border-zinc-700' : 'object-cover'}`}
+          onError={(e) => {
+            e.target.src = '/logo.svg';
+            e.target.className = 'w-14 h-14 rounded-md shrink-0 object-contain p-2 bg-zinc-800 border border-zinc-700';
+          }}
+        />
         <div className="flex flex-col flex-1 min-w-0">
-          <span className="player-status text-xs text-green-500 font-semibold uppercase tracking-wider mb-1 truncate" data-player-status>
+          <span className="player-status text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1 truncate" data-player-status>
             {playerStatus}
           </span>
           <div className="player-title-row flex items-center gap-2">

@@ -12,18 +12,26 @@ import { Play, Pause, Search, User, Menu, X, Home as HomeIcon, Library, Download
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('home');
+  const [homeKey, setHomeKey] = useState(0);
+
+  const handleSetCurrentView = (view) => {
+    if (view === 'home') {
+      setHomeKey((prev) => prev + 1);
+    }
+    setCurrentView(view);
+  };
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <Header 
         isSidebarOpen={isSidebarOpen} 
         setIsSidebarOpen={setIsSidebarOpen}
-        setCurrentView={setCurrentView}
+        setCurrentView={handleSetCurrentView}
       />
       <main className="relative flex min-h-0 flex-1">
-        <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} setCurrentView={setCurrentView} />
+        <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} setCurrentView={handleSetCurrentView} />
         <section className="app-content" aria-live="polite">
-          {currentView === 'home' && <Home />}
+          {currentView === 'home' && <Home key={homeKey} />}
           {currentView === 'search' && <SearchPage />}
           {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
           {currentView !== 'home' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (

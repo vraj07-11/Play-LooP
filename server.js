@@ -130,25 +130,70 @@ app.get("/api/recommendations", async (req, res) => {
 	}
 });
 
+function shuffleArray(array) {
+	const arr = [...array];
+	for (let i = arr.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[arr[i], arr[j]] = [arr[j], arr[i]];
+	}
+	return arr;
+}
+
 app.get("/api/playlists", async (req, res) => {
 	try {
-		const queries = ["Arijit Singh", "Latest Hindi Hits", "Phonk", "Global Top Hits", "Chill Lofi Beats"];
-		const playlistPromises = queries.map(async (q) => {
+		const categoryPool = [
+			{ query: "Arijit Singh", title: "Arijit Singh Hits", author: "Play LooP" },
+			{ query: "Latest Hindi Songs", title: "Latest Hindi Hits", author: "Play LooP" },
+			{ query: "Phonk Beats", title: "Phonk Drift & Bass", author: "Play LooP" },
+			{ query: "Global Top Hits", title: "Global Top 50", author: "Play LooP" },
+			{ query: "Lofi Chill Beats", title: "Chill Lofi Mix", author: "Play LooP" },
+			{ query: "Bollywood Romantic Songs", title: "Bollywood Romance", author: "Play LooP" },
+			{ query: "Punjabi Party Hits", title: "Punjabi Bangers", author: "Play LooP" },
+			{ query: "EDM Dance Hits", title: "EDM Dance Party", author: "Play LooP" },
+			{ query: "90s Hindi Hits", title: "90s Bollywood Classics", author: "Play LooP" },
+			{ query: "Workout Hype Beats", title: "Gym & Workout Hype", author: "Play LooP" },
+			{ query: "Indie India", title: "Indie India Discovery", author: "Play LooP" },
+			{ query: "Sufi Melodies", title: "Soulful Sufi & Rock", author: "Play LooP" },
+			{ query: "Acoustic Pop Hits", title: "Acoustic Pop Chill", author: "Play LooP" },
+			{ query: "Hip Hop Beats", title: "Desi Hip Hop Heavy", author: "Play LooP" },
+			{ query: "K-Pop Top Hits", title: "K-Pop Dynamite Hits", author: "Play LooP" },
+			{ query: "Synthwave Retro", title: "80s Retro Synthwave", author: "Play LooP" },
+			{ query: "Coke Studio Hits", title: "Coke Studio Essentials", author: "Play LooP" },
+			{ query: "Sad Hindi Songs", title: "Broken Hearts & Rain", author: "Play LooP" }
+		];
+
+		const selectedCategories = shuffleArray(categoryPool).slice(0, 12);
+
+		const playlistPromises = selectedCategories.map(async (cat) => {
 			try {
-				const results = await ytmusic.searchPlaylists(q);
-				return results[0] || null;
+				const searchWithTimeout = Promise.race([
+					ytmusic.searchPlaylists(cat.query),
+					new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500))
+				]);
+				const results = await searchWithTimeout;
+				if (results && results.length > 0 && results[0].playlistId) {
+					const p = results[0];
+					return {
+						playlistId: p.playlistId,
+						title: cat.title,
+						author: p.author?.name || cat.author,
+						thumbnail: p.thumbnails?.[p.thumbnails.length - 1]?.url || p.thumbnail || "/logo.svg",
+						count: p.count || p.songCount || 25
+					};
+				}
 			} catch (e) {
-				return null;
+				/* fallback below */
 			}
+			return {
+				playlistId: `QUERY:${cat.query}`,
+				title: cat.title,
+				author: cat.author,
+				thumbnail: "/logo.svg",
+				count: 20
+			};
 		});
-		const rawPlaylists = await Promise.all(playlistPromises);
-		const playlists = rawPlaylists.filter(Boolean).map((p) => ({
-			playlistId: p.playlistId,
-			title: p.title || p.name,
-			author: p.author?.name || p.artist || "Play LooP",
-			thumbnail: p.thumbnails?.[p.thumbnails.length - 1]?.url || p.thumbnail || "/logo.svg",
-			count: p.count || p.songCount || 25
-		}));
+
+		const playlists = await Promise.all(playlistPromises);
 		res.json(playlists);
 	} catch (error) {
 		console.error("Playlists fetch failed:", error);
@@ -161,23 +206,75 @@ app.get("/api/playlist", async (req, res) => {
 	if (!playlistId) return res.status(400).json({ error: "Playlist ID is required" });
 
 	try {
-		const playlist = await ytmusic.getPlaylist(playlistId);
-		res.json({
-			playlistId: playlist.playlistId || playlistId,
-			title: playlist.title || "Featured Playlist",
-			description: playlist.description || `Curated collection by ${playlist.author?.name || "Play LooP"}`,
-			thumbnail: playlist.thumbnails?.[playlist.thumbnails.length - 1]?.url || "/logo.svg",
-			tracks: (playlist.videos || playlist.tracks || []).map((t) => ({
+		if (playlistId.startsWith("QUERY:")) {
+			const query = playlistId.replace("QUERY:", "");
+			const songs = await ytmusic.searchSongs(query);
+			return res.json({
+				playlistId,
+				title: `${query} Mix`,
+				description: `Curated collection for ${query}`,
+				thumbnail: songs[0]?.thumbnails?.[songs[0].thumbnails.length - 1]?.url || "/logo.svg",
+				tracks: songs.map((t) => ({
+					videoId: t.videoId,
+					title: t.name || t.title,
+					artist: t.artist?.name || t.artists?.[0]?.name || "Various Artists",
+					thumbnail: t.thumbnails?.[t.thumbnails.length - 1]?.url || t.thumbnails?.[0]?.url || "/logo.svg",
+					duration: t.duration || 0
+				}))
+			});
+		}
+
+		const [playlistMeta, videos] = await Promise.all([
+			ytmusic.getPlaylist(playlistId).catch(() => null),
+			ytmusic.getPlaylistVideos(playlistId).catch(() => [])
+		]);
+
+		let tracks = (videos || []).map((t) => ({
+			videoId: t.videoId,
+			title: t.name || t.title,
+			artist: t.artist?.name || t.artists?.[0]?.name || t.artist || "Various Artists",
+			thumbnail: t.thumbnails?.[t.thumbnails.length - 1]?.url || t.thumbnails?.[0]?.url || "/logo.svg",
+			duration: t.duration || 0
+		}));
+
+		if (tracks.length === 0) {
+			const songs = await ytmusic.searchSongs(playlistId);
+			tracks = songs.map((t) => ({
 				videoId: t.videoId,
-				title: t.title,
-				artist: t.artists?.[0]?.name || t.artist || "Various Artists",
-				thumbnail: t.thumbnails?.[0]?.url || playlist.thumbnails?.[0]?.url || "/logo.svg",
+				title: t.name || t.title,
+				artist: t.artist?.name || t.artists?.[0]?.name || "Various Artists",
+				thumbnail: t.thumbnails?.[t.thumbnails.length - 1]?.url || t.thumbnails?.[0]?.url || "/logo.svg",
 				duration: t.duration || 0
-			}))
+			}));
+		}
+
+		return res.json({
+			playlistId: playlistId,
+			title: playlistMeta?.name || playlistMeta?.title || "Featured Playlist",
+			description: playlistMeta?.artist?.name ? `Curated by ${playlistMeta.artist.name}` : "Curated collection by Play LooP",
+			thumbnail: playlistMeta?.thumbnails?.[playlistMeta.thumbnails.length - 1]?.url || tracks[0]?.thumbnail || "/logo.svg",
+			tracks
 		});
 	} catch (error) {
-		console.error("Playlist details failed:", error);
-		res.status(502).json({ error: "Failed to fetch playlist details" });
+		console.error("Playlist details failed, trying search fallback:", error);
+		try {
+			const songs = await ytmusic.searchSongs(playlistId);
+			return res.json({
+				playlistId,
+				title: "Playlist Mix",
+				description: "Curated collection by Play LooP",
+				thumbnail: songs[0]?.thumbnails?.[0]?.url || "/logo.svg",
+				tracks: songs.map((t) => ({
+					videoId: t.videoId,
+					title: t.name || t.title,
+					artist: t.artist?.name || t.artists?.[0]?.name || "Various Artists",
+					thumbnail: t.thumbnails?.[0]?.url || "/logo.svg",
+					duration: t.duration || 0
+				}))
+			});
+		} catch (e) {
+			res.status(502).json({ error: "Failed to fetch playlist details" });
+		}
 	}
 });
 

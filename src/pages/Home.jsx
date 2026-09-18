@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchRecommendedPlaylists, fetchPlaylistDetails } from '../services/api';
+import { fetchRecommendedPlaylists, fetchPlaylistDetails } from '../services/api.js';
 import Carousel from '../components/Carousel';
 import { ArrowLeft, Play } from 'lucide-react';
 
@@ -11,7 +11,7 @@ export default function Home() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [loadingPlaylistDetails, setLoadingPlaylistDetails] = useState(false);
 
-  const { selectAndPlayTrack, playPlaylist, recentlyPlayed } = usePlayer();
+  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [] } = usePlayer();
 
   useEffect(() => {
     const currentHour = new Date().getHours();
@@ -20,12 +20,20 @@ export default function Home() {
     else setGreeting("Good evening");
 
     let isMounted = true;
-    fetchRecommendedPlaylists().then((data) => {
-      if (isMounted) {
-        setPlaylists(data);
-        setLoadingPlaylists(false);
-      }
-    });
+    fetchRecommendedPlaylists()
+      .then((data) => {
+        if (isMounted) {
+          setPlaylists(Array.isArray(data) ? data : []);
+          setLoadingPlaylists(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load recommended playlists:", err);
+        if (isMounted) {
+          setPlaylists([]);
+          setLoadingPlaylists(false);
+        }
+      });
 
     return () => {
       isMounted = false;
@@ -77,10 +85,14 @@ export default function Home() {
           <img
             src={selectedPlaylist.thumbnail || '/logo.svg'}
             alt={selectedPlaylist.title}
-            className="w-44 h-44 sm:w-52 sm:h-52 rounded-xl object-cover shadow-2xl shrink-0"
+            className={`w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-zinc-800 border border-zinc-700' : 'object-cover'}`}
+            onError={(e) => {
+              e.target.src = '/logo.svg';
+              e.target.className = 'w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 object-contain p-6 bg-zinc-800 border border-zinc-700';
+            }}
           />
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left min-w-0">
-            <span className="text-xs uppercase font-semibold text-emerald-400 tracking-wider mb-1">Playlist</span>
+            <span className="text-xs uppercase font-semibold text-zinc-400 tracking-wider mb-1">Playlist</span>
             <h2 className="text-2xl sm:text-4xl font-normal text-white mb-2 leading-tight">
               {selectedPlaylist.title}
             </h2>
@@ -91,7 +103,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={handlePlayPlaylistAll}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded-full transition shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-full transition shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play All
               </button>
@@ -114,16 +126,20 @@ export default function Home() {
                   {idx + 1}
                 </span>
                 <span className="w-6 text-center hidden group-hover:inline-block">
-                  <Play className="w-4 h-4 text-emerald-400 fill-current inline-block" />
+                  <Play className="w-4 h-4 text-white fill-current inline-block" />
                 </span>
                 <img
                   src={track.thumbnail || selectedPlaylist.thumbnail || '/logo.svg'}
                   alt={track.title}
-                  className="track-art"
+                  className={`track-art ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-2 bg-zinc-800' : 'object-cover'}`}
+                  onError={(e) => {
+                    e.target.src = '/logo.svg';
+                    e.target.className = 'track-art object-contain p-2 bg-zinc-800';
+                  }}
                   loading="lazy"
                 />
                 <div className="track-info">
-                  <h3 className="group-hover:text-emerald-400 transition-colors">{track.title}</h3>
+                  <h3 className="group-hover:text-white transition-colors">{track.title}</h3>
                   <p>{track.artist}</p>
                 </div>
                 {track.duration > 0 && (
@@ -149,20 +165,33 @@ export default function Home() {
       </div>
 
       {loadingPlaylistDetails && (
-        <div className="p-4 mb-6 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-sm flex items-center gap-3">
-          <div className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
-          Loading playlist details...
+        <div className="p-4 mb-6 bg-zinc-900/90 border border-zinc-800 text-white rounded-xl text-sm flex items-center justify-center gap-3 shadow-lg">
+          <div className="mini-infinity-loader py-0 px-0">
+            <svg className="mini-infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+              <path className="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
+              <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
+            </svg>
+          </div>
+          <span className="font-medium">
+            Loading playlist details<span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
+          </span>
         </div>
       )}
 
       {/* Recommended Playlists Section */}
       {loadingPlaylists ? (
-        <div className="mb-8">
-          <h3 className="text-xl font-medium text-white mb-4">Recommended Playlists</h3>
-          <div className="flex gap-4 overflow-hidden">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <div key={n} className="flex-none w-40 h-52 bg-zinc-900 border border-zinc-800 rounded-xl animate-pulse" />
-            ))}
+        <div className="mb-8 min-h-[220px] flex flex-col justify-center items-center">
+          <div className="infinity-loader-container py-8" role="status" aria-label="Curating playlists">
+            <div className="infinity-loader-wrapper">
+              <svg className="infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
+                <path className="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
+                <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
+              </svg>
+            </div>
+            <p className="infinity-loader-text">
+              <span>Curating playlists for you</span>
+              <span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
+            </p>
           </div>
         </div>
       ) : (

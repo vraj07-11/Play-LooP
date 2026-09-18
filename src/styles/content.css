@@ -39,9 +39,10 @@
 .page-card {
   min-height: 120px;
   padding: 1.25rem;
-  border: 1px solid rgb(63 63 70);
-  border-radius: 0.5rem;
-  background-color: rgb(24 24 27);
+  border: 1px solid rgba(63, 63, 70, 0.6);
+  border-radius: 0.75rem;
+  background: linear-gradient(145deg, rgba(18, 18, 22, 0.95), rgba(10, 10, 14, 0.98));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
 .page-card h3 {
@@ -71,15 +72,17 @@
   min-width: 0;
   padding: 0.65rem 0.8rem;
   box-sizing: border-box;
-  border: 1px solid rgb(63 63 70);
-  border-radius: 0.5rem;
-  background-color: rgb(24 24 27);
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  border: 1px solid rgba(63, 63, 70, 0.5);
+  border-radius: 0.75rem;
+  background: linear-gradient(145deg, rgba(16, 16, 20, 0.95), rgba(10, 10, 12, 0.98));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .track-card:hover {
-  border-color: rgb(82 82 91);
-  background-color: rgb(39 39 42);
+  border-color: rgba(113, 113, 122, 0.7);
+  background: linear-gradient(145deg, rgba(28, 28, 34, 0.95), rgba(18, 18, 22, 0.98));
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
 }
 
 .track-art {
@@ -87,8 +90,8 @@
   height: 3.25rem;
   flex: 0 0 3.25rem;
   object-fit: cover;
-  border-radius: 0.25rem;
-  background-color: rgb(39 39 42);
+  border-radius: 0.4rem;
+  background-color: rgb(15 15 18);
 }
 
 .track-info {
@@ -171,8 +174,8 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 9999px;
-  background-color: rgba(24, 24, 27, 0.85);
-  border: 1px solid rgb(63 63 70);
+  background-color: rgba(12, 12, 15, 0.9);
+  border: 1px solid rgba(63, 63, 70, 0.8);
   color: white;
   display: flex;
   align-items: center;
@@ -180,11 +183,11 @@
   cursor: pointer;
   backdrop-filter: blur(8px);
   transition: background-color 0.2s, transform 0.15s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 }
 
 .carousel-arrow-btn:hover {
-  background-color: rgb(39 39 42);
+  background-color: rgb(28 28 32);
   transform: translateY(-50%) scale(1.08);
 }
 
@@ -199,30 +202,33 @@
 .square-card {
   flex: 0 0 160px;
   width: 160px;
-  background-color: rgb(24 24 27);
-  border: 1px solid rgb(63 63 70);
-  border-radius: 0.75rem;
+  background: linear-gradient(145deg, rgba(16, 16, 20, 0.95), rgba(10, 10, 13, 0.98));
+  border: 1px solid rgba(63, 63, 70, 0.45);
+  border-radius: 0.85rem;
   padding: 0.85rem;
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
 }
 
 .square-card:hover {
   transform: translateY(-4px);
-  background-color: rgb(39 39 42);
-  border-color: rgb(82 82 91);
+  background: linear-gradient(145deg, rgba(28, 28, 34, 0.95), rgba(18, 18, 22, 0.98));
+  border-color: rgba(113, 113, 122, 0.7);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7);
 }
 
 .square-card-art-container {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 0.5rem;
+  border-radius: 0.55rem;
   overflow: hidden;
   margin-bottom: 0.75rem;
-  background-color: rgb(39 39 42);
+  background-color: rgb(15 15 18);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
 }
 
 .square-card-art {
@@ -243,7 +249,7 @@
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 9999px;
-  background-color: #22c55e;
+  background-color: white;
   color: black;
   display: flex;
   align-items: center;
