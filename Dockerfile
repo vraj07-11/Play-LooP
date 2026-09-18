@@ -15,9 +15,9 @@ ENV YTDLP_PATH=/usr/local/bin/yt-dlp
 ENV YTDLP_JS_RUNTIME=deno
 ENV AUDIO_CACHE_LIMIT=50
 
-# Copy dependency definitions and install all packages (including devDependencies for build)
+# Copy dependency definitions and install all packages
 COPY package*.json ./
-RUN npm ci --include=dev
+RUN npm install
   
 # Copy project source files
 COPY . .
