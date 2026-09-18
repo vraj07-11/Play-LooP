@@ -233,8 +233,8 @@ async function enforceAudioCacheLimit(protectedPath) {
 	}
 }
 
-// SPA fallback for client-side routing
-app.get("*", (req, res) => {
+// SPA fallback for client-side routing (Express 5 compatible)
+app.use((req, res) => {
 	const distIndex = path.join(__dirname, "dist", "index.html");
 	if (fs.existsSync(distIndex)) {
 		res.sendFile(distIndex);
