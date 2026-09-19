@@ -17,20 +17,10 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 ---
 
 ## Tech Stack
-
+- **Frontend:** HTML5, CSS, VANILLA JS, REACT JS
 - **Backend:** Node.js, Express.js
 - **Media Processing:** `yt-dlp`, `ytmusic-api`
+- **Containerization:** Docker
 - **Deployment:** Render
 
 ---
-
-## Project Architecture
-
-```text
-Play-LooP/
-│
-├── public/           # Frontend assets (HTML, CSS, JS)
-├── cache/            # Local directory for cached audio tracks
-├── server.js         # Main Express server and API routes
-├── package.json      # Project dependencies and metadata
-└── README.md         # Project documentation
