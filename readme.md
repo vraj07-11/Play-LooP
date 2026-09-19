@@ -1,6 +1,6 @@
 # Play LooP
 
-Play LooP is a lightweight, full-stack web application designed to stream and enjoy music seamlessly. It acts as a bridge, fetching and streaming audio directly from YouTube with a clean interface and an optimized local caching mechanism.
+Play LooP is a lightweight, full-stack web application designed to stream and enjoy music seamlessly. It acts as a bridge, fetching and streaming ads-free audio directly from YouTube with a clean interface and an optimized local caching mechanism.
 
 ## Live Demo
 Check out the live application here: [play-loop.onrender.com](https://play-loop.onrender.com)
