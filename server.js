@@ -206,7 +206,7 @@ async function getDirectAudioUrl(videoId) {
 		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
 		`https://www.youtube.com/watch?v=${videoId}`
 	];
-	const { stdout } = await execFileAsync(ytdlpPath, getUrlArgs, { timeout: 15000 });
+	const { stdout } = await execFileAsync(ytdlpPath, getUrlArgs, { timeout: 25000 });
 	const directUrl = stdout.trim().split(/\r?\n/)[0];
 	if (!directUrl || !directUrl.startsWith("http")) {
 		throw new Error("Invalid extracted audio URL");
@@ -232,67 +232,38 @@ async function handleHybridAudioStreaming(videoId, res) {
 		}
 	} catch {}
 
-	let isAborted = false;
-	const controller = new AbortController();
-
-	const handleClientDisconnect = () => {
-		if (isAborted) return;
-		isAborted = true;
-		controller.abort();
-		console.log(`[Stream Aborted] Client disconnected/switched song. Cancelled stream for ${videoId}`);
-	};
-
-	res.on("close", handleClientDisconnect);
-	res.on("error", handleClientDisconnect);
-
-	// 2. Fast stream via direct URL extraction + Node fetch() (~0.5s - 1s start)
+	// 2. Direct 302 Redirect to YouTube CDN for instant mobile & cloud playback (~0.5s - 1s start)
 	try {
 		const directUrl = await getDirectAudioUrl(videoId);
-		if (isAborted) return;
+		
+		res.redirect(302, directUrl);
 
-		const audioRes = await fetch(directUrl, {
-			signal: controller.signal
-		});
-
-		if (!audioRes.ok || !audioRes.body) {
-			throw new Error(`Direct audio fetch failed with status ${audioRes.status}`);
-		}
-
-		if (isAborted) return;
-
-		res.setHeader("Content-Type", audioRes.headers.get("content-type") || "audio/mp4");
-		res.setHeader("Accept-Ranges", "bytes");
-		if (audioRes.headers.has("content-length")) {
-			res.setHeader("Content-Length", audioRes.headers.get("content-length"));
-		}
-
-		const fileStream = fs.createWriteStream(audioPath);
-		const reader = audioRes.body.getReader();
-
-		while (!isAborted) {
-			const { done, value } = await reader.read();
-			if (done || isAborted) {
-				fileStream.end();
-				if (!done && isAborted) {
+		// 3. Save to disk cache asynchronously in background for future instant plays (0.01s)
+		if (!activeDownloads.has(safeVideoId)) {
+			activeDownloads.set(safeVideoId, true);
+			fetch(directUrl)
+				.then(async (audioRes) => {
+					if (audioRes.ok && audioRes.body) {
+						const fileStream = fs.createWriteStream(audioPath);
+						const reader = audioRes.body.getReader();
+						while (true) {
+							const { done, value } = await reader.read();
+							if (done) break;
+							fileStream.write(Buffer.from(value));
+						}
+						fileStream.end();
+						enforceAudioCacheLimit(audioPath).catch(() => {});
+					}
+				})
+				.catch(() => {
 					fs.promises.unlink(audioPath).catch(() => {});
-				} else {
-					enforceAudioCacheLimit(audioPath).catch(() => {});
-				}
-				break;
-			}
-			const buffer = Buffer.from(value);
-			if (!res.writableEnded) {
-				res.write(buffer);
-			}
-			fileStream.write(buffer);
+				})
+				.finally(() => {
+					activeDownloads.delete(safeVideoId);
+				});
 		}
-		if (!res.writableEnded) res.end();
+		return;
 	} catch (primaryErr) {
-		if (isAborted || primaryErr.name === "AbortError") {
-			fs.promises.unlink(audioPath).catch(() => {});
-			return;
-		}
-
 		console.warn(`[FastStream Warning] Fast stream failed for ${videoId}, falling back to yt-dlp stdout spawn:`, primaryErr.message);
 		
 		const ytdlpArgs = [
