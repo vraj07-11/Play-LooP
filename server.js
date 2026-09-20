@@ -200,7 +200,9 @@ async function getDirectAudioUrl(videoId) {
 		"--quiet",
 		"--no-warnings",
 		"--no-playlist",
+		"--force-ipv4",
 		...ytdlpRuntimeArgs,
+		...(fs.existsSync(cookiesFilePath) ? ["--cookies", cookiesFilePath] : []),
 		"-g",
 		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
 		`https://www.youtube.com/watch?v=${videoId}`
