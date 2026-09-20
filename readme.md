@@ -13,6 +13,7 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 - **Smart Local Caching:** To optimize performance and reduce latency, extracted audio files are temporarily cached in a local directory.
 - **Storage Management:** Built-in cleanup logic enforces a strict storage limit on cached tracks, preventing disk overflow on the server.
 - **Responsive Interface:** Designed to provide a smooth user experience across various screen sizes.
+- **Progressive Web Application:** For better mobile experience.
 
 ---
 
