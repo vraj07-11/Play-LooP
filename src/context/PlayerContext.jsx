@@ -203,34 +203,6 @@ export function PlayerProvider({ children }) {
       setTrackHistory((prev) => [...prev, trackObj]);
     }
 
-    try {
-      fetchApi(`/api/audio/preload?id=${encodeURIComponent(videoId)}`);
-    } catch (e) {
-      /* ignore preload errors */
-    }
-
-    try {
-      fetchApi(`/api/recommendations?id=${encodeURIComponent(videoId)}`)
-        .then((res) => (res.ok ? res.json() : []))
-        .then((data) => {
-          if (Array.isArray(data)) {
-            setRecommendationQueue(
-              data
-                .filter((t) => t.videoId && t.videoId !== videoId)
-                .map((t) => ({
-                  videoId: t.videoId,
-                  title: t.title || "Unknown track",
-                  artist: t.artists || "Unknown artist",
-                  thumbnail: `https://img.youtube.com/vi/${t.videoId}/hqdefault.jpg`
-                }))
-            );
-          }
-        })
-        .catch((e) => console.error(e));
-    } catch (e) {
-      console.error(e);
-    }
-
     currentActiveEngine.current = "native";
     nativeAudioPlayer.current.src = getAudioUrl(videoId);
     nativeAudioPlayer.current.load();
@@ -243,6 +215,31 @@ export function PlayerProvider({ children }) {
       .catch(() => {
         console.log("Audio play failed, requires user interaction or fallback");
       });
+
+    // Fetch background recommendations after 1s delay to prioritize audio stream on mobile PWA
+    setTimeout(() => {
+      try {
+        fetchApi(`/api/recommendations?id=${encodeURIComponent(videoId)}`)
+          .then((res) => (res.ok ? res.json() : []))
+          .then((data) => {
+            if (Array.isArray(data)) {
+              setRecommendationQueue(
+                data
+                  .filter((t) => t.videoId && t.videoId !== videoId)
+                  .map((t) => ({
+                    videoId: t.videoId,
+                    title: t.title || "Unknown track",
+                    artist: t.artists || "Unknown artist",
+                    thumbnail: `https://img.youtube.com/vi/${t.videoId}/hqdefault.jpg`
+                  }))
+              );
+            }
+          })
+          .catch((e) => console.error(e));
+      } catch (e) {
+        console.error(e);
+      }
+    }, 1200);
   };
 
   const playPlaylist = (tracks, startIndex = 0) => {
