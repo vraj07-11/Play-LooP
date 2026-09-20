@@ -220,7 +220,7 @@ async function handleHybridAudioStreaming(videoId, res) {
 
 	await fs.promises.mkdir(audioCacheDirectory, { recursive: true });
 
-	// 1. If song is already in cache, serve directly from disk (0.01s instant play)
+	// 1. If song is already in local cache, serve directly from disk (0.01s instant play)
 	try {
 		const stat = await fs.promises.stat(audioPath);
 		if (stat.size > 64 * 1024) {
@@ -232,91 +232,62 @@ async function handleHybridAudioStreaming(videoId, res) {
 		}
 	} catch {}
 
-	// 2. Direct 302 Redirect to YouTube CDN for instant mobile & cloud playback (~0.5s - 1s start)
-	try {
-		const directUrl = await getDirectAudioUrl(videoId);
-		
-		res.redirect(302, directUrl);
+	// 2. Stream real-time audio to browser & write to cache simultaneously
+	const ytdlpArgs = [
+		"--quiet",
+		"--no-warnings",
+		"--no-progress",
+		"--no-playlist",
+		...ytdlpRuntimeArgs,
+		...ytdlpNetworkArgs,
+		"-o", "-",
+		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+		`https://www.youtube.com/watch?v=${videoId}`
+	];
 
-		// 3. Save to disk cache asynchronously in background for future instant plays (0.01s)
-		if (!activeDownloads.has(safeVideoId)) {
-			activeDownloads.set(safeVideoId, true);
-			fetch(directUrl)
-				.then(async (audioRes) => {
-					if (audioRes.ok && audioRes.body) {
-						const fileStream = fs.createWriteStream(audioPath);
-						const reader = audioRes.body.getReader();
-						while (true) {
-							const { done, value } = await reader.read();
-							if (done) break;
-							fileStream.write(Buffer.from(value));
-						}
-						fileStream.end();
-						enforceAudioCacheLimit(audioPath).catch(() => {});
-					}
-				})
-				.catch(() => {
-					fs.promises.unlink(audioPath).catch(() => {});
-				})
-				.finally(() => {
-					activeDownloads.delete(safeVideoId);
-				});
-		}
-		return;
-	} catch (primaryErr) {
-		console.warn(`[FastStream Warning] Fast stream failed for ${videoId}, falling back to yt-dlp stdout spawn:`, primaryErr.message);
-		
-		const ytdlpArgs = [
-			"--quiet",
-			"--no-warnings",
-			"--no-progress",
-			"--no-playlist",
-			...ytdlpRuntimeArgs,
-			...ytdlpNetworkArgs,
-			"-o", "-",
-			"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
-			`https://www.youtube.com/watch?v=${videoId}`
-		];
+	const ytdlpProcess = spawn(ytdlpPath, ytdlpArgs);
+	const passThrough = new PassThrough();
+	const fileStream = fs.createWriteStream(audioPath);
 
-		const ytdlpProcess = spawn(ytdlpPath, ytdlpArgs);
-		const passThrough = new PassThrough();
-		const fileStream = fs.createWriteStream(audioPath);
+	const cleanup = () => {
+		try { ytdlpProcess.kill("SIGKILL"); } catch {}
+		try { fileStream.destroy(); } catch {}
+	};
 
-		const cleanupYtdlp = () => {
-			try { ytdlpProcess.kill("SIGKILL"); } catch {}
-			try { fileStream.destroy(); } catch {}
+	res.on("close", () => {
+		if (!res.writableEnded) {
+			cleanup();
 			fs.promises.unlink(audioPath).catch(() => {});
-		};
+		}
+	});
 
-		res.on("close", cleanupYtdlp);
+	res.setHeader("Content-Type", "audio/mp4");
+	res.setHeader("Accept-Ranges", "bytes");
 
-		res.setHeader("Content-Type", "audio/mp4");
-		res.setHeader("Accept-Ranges", "bytes");
+	ytdlpProcess.stdout.pipe(passThrough);
+	passThrough.pipe(res);
+	passThrough.pipe(fileStream);
 
-		ytdlpProcess.stdout.pipe(passThrough);
-		passThrough.pipe(res);
-		passThrough.pipe(fileStream);
+	fileStream.on("finish", () => {
+		enforceAudioCacheLimit(audioPath).catch(() => {});
+	});
 
-		fileStream.on("finish", () => {
-			enforceAudioCacheLimit(audioPath).catch(() => {});
-		});
+	ytdlpProcess.on("error", (err) => {
+		console.error(`[Stream Error] yt-dlp spawn failed for ${videoId}:`, err.message);
+		cleanup();
+		fs.promises.unlink(audioPath).catch(() => {});
+		if (!res.headersSent) {
+			res.status(502).json({ error: "Streaming failed", detail: err.message });
+		}
+	});
 
-		ytdlpProcess.on("error", (err) => {
-			console.error(`[Stream Error] yt-dlp fallback failed for ${videoId}:`, err.message);
-			cleanupYtdlp();
-			if (!res.headersSent) {
-				res.status(502).json({ error: "Streaming failed", detail: err.message });
-			}
-		});
-
-		ytdlpProcess.stderr.on("data", (data) => {
-			const stderr = data.toString();
-			if (stderr.includes("does not look like a Netscape format cookies file")) {
-				console.warn("[Stream] Deleting invalid cookies.txt...");
-				try { fs.unlinkSync(cookiesFilePath); } catch {}
-			}
-		});
-	}
+	ytdlpProcess.stderr.on("data", (data) => {
+		const stderr = data.toString();
+		if (stderr.includes("does not look like a Netscape format cookies file")) {
+			console.warn("[Stream] Deleting invalid cookies.txt...");
+			try { fs.unlinkSync(cookiesFilePath); } catch {}
+		}
+	});
 }
 
 app.get("/api/audio/preload", async (req, res) => {
