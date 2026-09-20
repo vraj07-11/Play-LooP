@@ -392,22 +392,35 @@ app.use((req, res) => {
 });
 
 async function startServer() {
+	const server = app.listen(port, () => {
+		console.log(`Play LooP is running at http://localhost:${port}`);
+	});
+
+	server.on("error", (error) => {
+		if (error.code === "EADDRINUSE") {
+			console.error(`Port ${port} is already in use. Use the existing server or stop it before restarting.`);
+		} else {
+			console.error("Server failed:", error);
+		}
+		process.exitCode = 1;
+	});
+
+	const handleShutdown = (signal) => {
+		console.log(`${signal} received. Closing HTTP server gracefully...`);
+		server.close(() => {
+			console.log("HTTP server closed.");
+			process.exit(0);
+		});
+	};
+
+	process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+	process.on("SIGINT", () => handleShutdown("SIGINT"));
+
 	try {
 		await ytmusic.initialize();
-		const server = app.listen(port, () => {
-			console.log(`Play LooP is running at http://localhost:${port}`);
-		});
-		server.on("error", (error) => {
-			if (error.code === "EADDRINUSE") {
-				console.error(`Port ${port} is already in use. Use the existing server or stop it before restarting.`);
-			} else {
-				console.error("Server failed:", error);
-			}
-			process.exitCode = 1;
-		});
+		console.log("YouTube Music API initialized successfully.");
 	} catch (error) {
-		console.error("Failed to initialize YouTube Music API:", error);
-		process.exitCode = 1;
+		console.error("Warning: Failed to initialize YouTube Music API on startup:", error.message || error);
 	}
 }
 
