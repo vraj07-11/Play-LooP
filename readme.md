@@ -9,7 +9,7 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 
 ## Features
 
-- **Direct Audio Streaming:** Leverages `yt-dlp` and `ytmusic-api` under the hood to pull accurate search results, music recommendations, and high-quality audio streams.
+- **Direct Audio Streaming:** Leverages `yt-dlp` , `iframe` (if yt-dlp fails) and `ytmusic-api` under the hood to pull accurate search results, music recommendations, and high-quality audio streams.
 - **Smart Local Caching:** To optimize performance and reduce latency, extracted audio files are temporarily cached in a local directory.
 - **Storage Management:** Built-in cleanup logic enforces a strict storage limit on cached tracks, preventing disk overflow on the server.
 - **Responsive Interface:** Designed to provide a smooth user experience across various screen sizes.
@@ -19,7 +19,7 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 ## Tech Stack
 - **Frontend:** HTML5, CSS, Vanilla Js, React Js
 - **Backend:** Node.js, Express.js
-- **Media Processing:** `yt-dlp`, `ytmusic-api`, iframe
+- **Media Processing:** `yt-dlp`, `ytmusic-api`
 - **Containerization:** Docker
 - **Deployment:** Render
 
