@@ -85,7 +85,19 @@ export default function SearchPage() {
               const thumbnail = track.thumbnails?.find((item) => item?.url)?.url || `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`;
               
               return (
-                <article key={idx} className="track-card">
+                <article 
+                  key={idx} 
+                  className="track-card cursor-pointer select-none group"
+                  onClick={() => selectAndPlayTrack(track.videoId, title, artist, thumbnail)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      selectAndPlayTrack(track.videoId, title, artist, thumbnail);
+                    }
+                  }}
+                >
                   <img 
                     src={thumbnail} 
                     alt="" 
@@ -96,16 +108,6 @@ export default function SearchPage() {
                     <h3>{title}</h3>
                     <p>{artist}</p>
                   </div>
-                  <button 
-                    type="button" 
-                    className="track-play" 
-                    aria-label={`Play ${title}`}
-                    onClick={() => selectAndPlayTrack(track.videoId, title, artist, thumbnail)}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                      <polygon points="6 3 20 12 6 21 6 3"></polygon>
-                    </svg>
-                  </button>
                 </article>
               );
             })

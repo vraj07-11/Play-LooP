@@ -97,6 +97,21 @@ if (fs.existsSync(path.join(__dirname, "dist"))) {
 	app.use(express.static(__dirname));
 }
 
+async function safeYtmusicCall(action) {
+	try {
+		return await action();
+	} catch (error) {
+		console.warn("[YTMusic] API call failed, re-initializing session...", error.message || error);
+		try {
+			await ytmusic.initialize();
+			return await action();
+		} catch (retryError) {
+			console.error("[YTMusic] Re-initialization retry failed:", retryError.message || retryError);
+			throw retryError;
+		}
+	}
+}
+
 app.get("/api/search", async (req, res) => {
 	const query = String(req.query.q || "").trim();
 
@@ -105,7 +120,7 @@ app.get("/api/search", async (req, res) => {
 	}
 
 	try {
-		const songs = await ytmusic.searchSongs(query);
+		const songs = await safeYtmusicCall(() => ytmusic.searchSongs(query));
 		res.json(await filterEmbeddableSongs(songs));
 	} catch (error) {
 		console.error("Search failed:", error);
@@ -178,7 +193,7 @@ app.get("/api/recommendations", async (req, res) => {
 	if (!videoId) return res.status(400).json({ error: "Video ID is required" });
 
 	try {
-		const recommendations = await ytmusic.getUpNexts(videoId);
+		const recommendations = await safeYtmusicCall(() => ytmusic.getUpNexts(videoId));
 		res.json(recommendations);
 	} catch (error) {
 		console.error("Recommendations failed:", error);
@@ -223,7 +238,7 @@ app.get("/api/playlists", async (req, res) => {
 		const playlistPromises = selectedCategories.map(async (cat) => {
 			try {
 				const searchWithTimeout = Promise.race([
-					ytmusic.searchPlaylists(cat.query),
+					safeYtmusicCall(() => ytmusic.searchPlaylists(cat.query)),
 					new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500))
 				]);
 				const results = await searchWithTimeout;
@@ -264,7 +279,7 @@ app.get("/api/playlist", async (req, res) => {
 	try {
 		if (playlistId.startsWith("QUERY:")) {
 			const query = playlistId.replace("QUERY:", "");
-			const songs = await ytmusic.searchSongs(query);
+			const songs = await safeYtmusicCall(() => ytmusic.searchSongs(query));
 			return res.json({
 				playlistId,
 				title: `${query} Mix`,
@@ -281,8 +296,8 @@ app.get("/api/playlist", async (req, res) => {
 		}
 
 		const [playlistMeta, videos] = await Promise.all([
-			ytmusic.getPlaylist(playlistId).catch(() => null),
-			ytmusic.getPlaylistVideos(playlistId).catch(() => [])
+			safeYtmusicCall(() => ytmusic.getPlaylist(playlistId)).catch(() => null),
+			safeYtmusicCall(() => ytmusic.getPlaylistVideos(playlistId)).catch(() => [])
 		]);
 
 		let tracks = (videos || []).map((t) => ({
@@ -294,7 +309,7 @@ app.get("/api/playlist", async (req, res) => {
 		}));
 
 		if (tracks.length === 0) {
-			const songs = await ytmusic.searchSongs(playlistId);
+			const songs = await safeYtmusicCall(() => ytmusic.searchSongs(playlistId));
 			tracks = songs.map((t) => ({
 				videoId: t.videoId,
 				title: t.name || t.title,
@@ -314,7 +329,7 @@ app.get("/api/playlist", async (req, res) => {
 	} catch (error) {
 		console.error("Playlist details failed, trying search fallback:", error);
 		try {
-			const songs = await ytmusic.searchSongs(playlistId);
+			const songs = await safeYtmusicCall(() => ytmusic.searchSongs(playlistId));
 			return res.json({
 				playlistId,
 				title: "Playlist Mix",
