@@ -9,6 +9,49 @@ body {
   touch-action: pan-y;
 }
 
+/* Prevent accidental text selection & image dragging across UI elements */
+body,
+button,
+a,
+img,
+svg,
+header,
+nav,
+aside,
+section,
+footer,
+.select-none,
+.app-content,
+.track-card,
+.page-card,
+.carousel-card,
+.player-container,
+.sidebar,
+.underline-link {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+  pointer-events: auto;
+}
+
+/* Enable text selection inside input fields and textboxes */
+input,
+textarea,
+[contenteditable="true"],
+.selectable-text {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
 h1 {
   display: flex;
   align-items: center;

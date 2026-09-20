@@ -18,17 +18,58 @@ const audioCacheLimit = Number.isInteger(configuredCacheLimit) && configuredCach
 	? configuredCacheLimit
 	: 50;
 const activeDownloads = new Map();
-const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
-	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
-	: [];
+function formatNetscapeCookies(rawInput) {
+	if (!rawInput || typeof rawInput !== "string") return null;
+
+	let text = rawInput.trim();
+
+	if (!text.includes("# Netscape") && !text.includes("\t") && !text.includes("=")) {
+		try {
+			const decoded = Buffer.from(text, "base64").toString("utf-8");
+			if (decoded.includes("=") || decoded.includes("\t") || decoded.includes("# Netscape")) {
+				text = decoded.trim();
+			}
+		} catch {}
+	}
+
+	if (text.includes("# Netscape") || text.includes("\t")) {
+		if (!text.startsWith("# Netscape HTTP Cookie File")) {
+			text = "# Netscape HTTP Cookie File\n" + text;
+		}
+		return text;
+	}
+
+	if (text.includes("=")) {
+		const lines = ["# Netscape HTTP Cookie File"];
+		const pairs = text.split(";");
+		for (const pair of pairs) {
+			const trimmed = pair.trim();
+			if (!trimmed) continue;
+			const eqIdx = trimmed.indexOf("=");
+			if (eqIdx > 0) {
+				const name = trimmed.substring(0, eqIdx).trim();
+				const value = trimmed.substring(eqIdx + 1).trim();
+				lines.push(`.youtube.com\tTRUE\t/\tTRUE\t2147483647\t${name}\t${value}`);
+			}
+		}
+		if (lines.length > 1) {
+			return lines.join("\n");
+		}
+	}
+
+	return null;
+}
+
 const cookiesFilePath = path.join(__dirname, "cookies.txt");
-if (process.env.YOUTUBE_COOKIES && !fs.existsSync(cookiesFilePath)) {
+if (process.env.YOUTUBE_COOKIES) {
 	try {
-		const cookieData = process.env.YOUTUBE_COOKIES.includes(";") && !process.env.YOUTUBE_COOKIES.includes("\t")
-			? Buffer.from(process.env.YOUTUBE_COOKIES, "base64").toString("utf-8")
-			: process.env.YOUTUBE_COOKIES;
-		fs.writeFileSync(cookiesFilePath, cookieData);
-		console.log("[Audio] Wrote YOUTUBE_COOKIES env variable to cookies.txt");
+		const formattedCookies = formatNetscapeCookies(process.env.YOUTUBE_COOKIES);
+		if (formattedCookies) {
+			fs.writeFileSync(cookiesFilePath, formattedCookies);
+			console.log("[Audio] Formatted and wrote YOUTUBE_COOKIES env variable to cookies.txt");
+		} else {
+			console.warn("[Audio] Could not format YOUTUBE_COOKIES env variable into Netscape format.");
+		}
 	} catch (e) {
 		console.warn("[Audio] Failed to write YOUTUBE_COOKIES:", e.message);
 	}
@@ -38,6 +79,7 @@ const ytdlpNetworkArgs = [
 	"--force-ipv4",
 	"--extractor-args",
 	"youtube:player_client=mweb,android,web",
+	...(process.env.YTDLP_PROXY ? ["--proxy", process.env.YTDLP_PROXY] : []),
 	...(fs.existsSync(cookiesFilePath) ? ["--cookies", cookiesFilePath] : [])
 ];
 
@@ -322,7 +364,7 @@ async function getCachedAudio(videoId) {
 	if (!activeDownloads.has(videoId)) {
 		const download = (async () => {
 			await fs.promises.mkdir(audioCacheDirectory, { recursive: true });
-			await execFileAsync(ytdlpPath, [
+			const currentArgs = [
 				"--quiet",
 				"--no-warnings",
 				"--no-progress",
@@ -332,13 +374,24 @@ async function getCachedAudio(videoId) {
 				"--no-part",
 				"-f",
 				"140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
-				"-x",
-				"--audio-format",
-				"m4a",
 				"-o",
 				audioPath,
 				`https://www.youtube.com/watch?v=${videoId}`
-			], { timeout: 120000 });
+			];
+
+			try {
+				await execFileAsync(ytdlpPath, currentArgs, { timeout: 120000 });
+			} catch (err) {
+				const stderr = String(err.stderr || err.message || "");
+				if (stderr.includes("does not look like a Netscape format cookies file")) {
+					console.warn("[Audio] Cookie file invalid, deleting cookies.txt and retrying without cookies...");
+					try { fs.unlinkSync(cookiesFilePath); } catch {}
+					const fallbackArgs = currentArgs.filter((arg, idx, arr) => arg !== "--cookies" && arr[idx - 1] !== "--cookies");
+					await execFileAsync(ytdlpPath, fallbackArgs, { timeout: 120000 });
+				} else {
+					throw err;
+				}
+			}
 		})();
 
 		download.catch((err) => {
@@ -349,12 +402,12 @@ async function getCachedAudio(videoId) {
 	}
 
 	const waitForPartialOrComplete = async () => {
-		for (let i = 0; i < 35; i++) {
+		for (let i = 0; i < 40; i++) {
 			try {
 				const stat = await fs.promises.stat(audioPath);
-				if (stat.size > 64 * 1024) return audioPath;
+				if (stat.size > 16 * 1024) return audioPath;
 			} catch {}
-			await new Promise((resolve) => setTimeout(resolve, 150));
+			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
 		try {
 			await activeDownloads.get(videoId);

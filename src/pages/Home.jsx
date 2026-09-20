@@ -40,14 +40,33 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const handlePopState = (e) => {
+      const state = e.state;
+      if (!state || !state.playlistId) {
+        setSelectedPlaylist(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const handlePlaylistClick = async (playlist) => {
     if (!playlist || !playlist.playlistId) return;
     setLoadingPlaylistDetails(true);
     const details = await fetchPlaylistDetails(playlist.playlistId);
     if (details) {
+      window.history.pushState({ view: 'home', playlistId: playlist.playlistId }, '', `#/playlist/${playlist.playlistId}`);
       setSelectedPlaylist(details);
     }
     setLoadingPlaylistDetails(false);
+  };
+
+  const handleBackToHome = () => {
+    setSelectedPlaylist(null);
+    if (window.history.state && window.history.state.playlistId) {
+      window.history.back();
+    }
   };
 
   const handlePlayPlaylistAll = () => {
@@ -72,11 +91,11 @@ export default function Home() {
   // If a playlist is selected, render the Playlist Details View
   if (selectedPlaylist) {
     return (
-      <div className="max-w-5xl mx-auto pb-12">
+      <div className="max-w-5xl mx-auto pb-12 select-none">
         <button
           type="button"
-          onClick={() => setSelectedPlaylist(null)}
-          className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white rounded-full text-sm transition cursor-pointer"
+          onClick={handleBackToHome}
+          className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white rounded-full text-sm transition cursor-pointer select-none"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </button>
