@@ -107,7 +107,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
       setShowSuggestions(false);
       setIsSearching(false);
       setHasSearched(false);
-      window.location.hash = `#search?q=${encodeURIComponent(query.trim())}`;
+      window.location.hash = `#/search?q=${encodeURIComponent(query.trim())}`;
       setCurrentView('search');
       
       const input = searchFormRef.current?.querySelector('input');
@@ -125,7 +125,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
     setShowSuggestions(false);
     setIsSearching(false);
     setHasSearched(false);
-    window.location.hash = `#search?q=${encodeURIComponent(suggestion)}`;
+    window.location.hash = `#/search?q=${encodeURIComponent(suggestion)}`;
     setCurrentView('search');
     
     const input = searchFormRef.current?.querySelector('input');

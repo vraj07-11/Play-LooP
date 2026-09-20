@@ -39,10 +39,10 @@ export default function Carousel({ title, items, onItemClick, onPlayClick, rende
                 <img 
                   src={item.thumbnail || '/logo.svg'} 
                   alt={item.title} 
-                  className={`square-card-art ${(!item.thumbnail || item.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-zinc-800' : 'object-cover'}`}
+                  className={`square-card-art ${(!item.thumbnail || item.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-black border border-zinc-900' : 'object-cover'}`}
                   onError={(e) => {
                     e.target.src = '/logo.svg';
-                    e.target.className = 'square-card-art object-contain p-6 bg-zinc-800';
+                    e.target.className = 'square-card-art object-contain p-6 bg-black border border-zinc-900';
                   }}
                   loading="lazy"
                 />

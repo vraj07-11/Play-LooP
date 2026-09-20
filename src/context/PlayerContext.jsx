@@ -171,7 +171,25 @@ export function PlayerProvider({ children }) {
     }
   }, [isPlaying]);
 
+  const stopAllPlayback = () => {
+    try {
+      if (nativeAudioPlayer.current) {
+        nativeAudioPlayer.current.pause();
+        nativeAudioPlayer.current.currentTime = 0;
+        nativeAudioPlayer.current.src = "";
+      }
+    } catch (e) {}
+
+    try {
+      if (youtubePlayer.current && typeof youtubePlayer.current.stopVideo === 'function') {
+        youtubePlayer.current.stopVideo();
+      }
+    } catch (e) {}
+  };
+
   const selectAndPlayTrack = (videoId, title, artist, thumbnail, isFromHistory = false) => {
+    stopAllPlayback();
+
     const trackObj = { videoId, title, artist, thumbnail };
     setPendingTrack(trackObj);
     setCurrentTitle(title);

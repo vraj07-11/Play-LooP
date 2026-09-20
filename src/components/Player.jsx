@@ -37,10 +37,10 @@ export default function Player() {
         <img 
           src={pendingTrack?.thumbnail || '/logo.svg'} 
           alt="Track thumbnail" 
-          className={`w-14 h-14 rounded-md shrink-0 ${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? 'object-contain p-2 bg-zinc-800 border border-zinc-700' : 'object-cover'}`}
+          className={`w-14 h-14 rounded-md shrink-0 ${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? 'object-contain p-2 bg-black border border-zinc-900' : 'object-cover'}`}
           onError={(e) => {
             e.target.src = '/logo.svg';
-            e.target.className = 'w-14 h-14 rounded-md shrink-0 object-contain p-2 bg-zinc-800 border border-zinc-700';
+            e.target.className = 'w-14 h-14 rounded-md shrink-0 object-contain p-2 bg-black border border-zinc-900';
           }}
         />
         <div className="flex flex-col flex-1 min-w-0">

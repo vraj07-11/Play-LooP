@@ -31,15 +31,23 @@ function App() {
       }
 
       const state = event.state;
+      const hash = window.location.hash;
+
       if (state && state.view) {
         setCurrentView(state.view);
+      } else if (hash.includes('search')) {
+        setCurrentView('search');
       } else {
         setCurrentView('home');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
   }, []);
 
   const handleSetCurrentView = (view) => {
@@ -48,7 +56,11 @@ function App() {
     }
 
     if (view !== currentView) {
-      window.history.pushState({ view }, '', `#/${view}`);
+      const currentHash = window.location.hash;
+      const targetHash = currentHash.startsWith(`#/${view}`) || currentHash.startsWith(`#${view}`)
+        ? currentHash
+        : `#/${view}`;
+      window.history.pushState({ view }, '', targetHash);
       setCurrentView(view);
     }
 

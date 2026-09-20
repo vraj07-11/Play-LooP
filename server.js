@@ -3,7 +3,8 @@ const fs = require("node:fs");
 const express = require("express");
 const cors = require("cors");
 const YTMusic = require("ytmusic-api");
-const { execFile } = require("node:child_process");
+const { spawn, execFile } = require("node:child_process");
+const { PassThrough } = require("node:stream");
 const { promisify } = require("node:util");
 
 const app = express();
@@ -13,11 +14,14 @@ const execFileAsync = promisify(execFile);
 const youtubeApiKey = process.env.YOUTUBE_API_KEY;
 const ytdlpPath = process.env.YTDLP_PATH || (process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
 const audioCacheDirectory = path.join(__dirname, "audio-cache");
-const configuredCacheLimit = Number.parseInt(process.env.AUDIO_CACHE_LIMIT || "50", 10);
+const configuredCacheLimit = Number.parseInt(process.env.AUDIO_CACHE_LIMIT || "10", 10);
 const audioCacheLimit = Number.isInteger(configuredCacheLimit) && configuredCacheLimit > 0
 	? configuredCacheLimit
-	: 50;
+	: 10;
 const activeDownloads = new Map();
+const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
+	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
+	: [];
 function formatNetscapeCookies(rawInput) {
 	if (!rawInput || typeof rawInput !== "string") return null;
 
@@ -112,6 +116,33 @@ async function safeYtmusicCall(action) {
 	}
 }
 
+async function ytdlpSearchFallback(query) {
+	try {
+		const { stdout } = await execFileAsync(ytdlpPath, [
+			`ytsearch12:${query}`,
+			"--dump-single-json",
+			"--flat-playlist",
+			"--skip-download",
+			"--no-warnings",
+			...ytdlpRuntimeArgs,
+			...ytdlpNetworkArgs
+		], { timeout: 10000 });
+
+		const data = JSON.parse(stdout);
+		const entries = Array.isArray(data.entries) ? data.entries : [];
+		return entries.map((entry) => ({
+			videoId: entry.id,
+			name: entry.title || "Unknown Track",
+			artist: { name: entry.uploader || entry.channel || "YouTube" },
+			thumbnails: [{ url: `https://img.youtube.com/vi/${entry.id}/hqdefault.jpg` }],
+			duration: entry.duration || 0
+		}));
+	} catch (err) {
+		console.error("ytdlpSearchFallback error:", err.message || err);
+		return [];
+	}
+}
+
 app.get("/api/search", async (req, res) => {
 	const query = String(req.query.q || "").trim();
 
@@ -120,10 +151,21 @@ app.get("/api/search", async (req, res) => {
 	}
 
 	try {
-		const songs = await safeYtmusicCall(() => ytmusic.searchSongs(query));
+		let songs = [];
+		try {
+			songs = await safeYtmusicCall(() => ytmusic.searchSongs(query));
+		} catch (primaryErr) {
+			console.warn("[Search] Primary YTMusic search failed, using yt-dlp search fallback...", primaryErr.message);
+			songs = await ytdlpSearchFallback(query);
+		}
+
+		if (!songs || songs.length === 0) {
+			songs = await ytdlpSearchFallback(query);
+		}
+
 		res.json(await filterEmbeddableSongs(songs));
 	} catch (error) {
-		console.error("Search failed:", error);
+		console.error("Search endpoint error:", error);
 		res.status(500).json({ error: "Failed to fetch search results" });
 	}
 });
@@ -153,14 +195,185 @@ async function filterEmbeddableSongs(songs) {
 	}
 }
 
+async function getDirectAudioUrl(videoId) {
+	const getUrlArgs = [
+		"--quiet",
+		"--no-warnings",
+		"--no-playlist",
+		...ytdlpRuntimeArgs,
+		"-g",
+		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+		`https://www.youtube.com/watch?v=${videoId}`
+	];
+	const { stdout } = await execFileAsync(ytdlpPath, getUrlArgs, { timeout: 15000 });
+	const directUrl = stdout.trim().split(/\r?\n/)[0];
+	if (!directUrl || !directUrl.startsWith("http")) {
+		throw new Error("Invalid extracted audio URL");
+	}
+	return directUrl;
+}
+
+async function handleHybridAudioStreaming(videoId, res) {
+	const safeVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+	const audioPath = path.join(audioCacheDirectory, `${safeVideoId}.m4a`);
+
+	await fs.promises.mkdir(audioCacheDirectory, { recursive: true });
+
+	// 1. If song is already in cache, serve directly from disk (0.01s instant play)
+	try {
+		const stat = await fs.promises.stat(audioPath);
+		if (stat.size > 64 * 1024) {
+			return res.sendFile(audioPath, {
+				acceptRanges: true,
+				cacheControl: false,
+				maxAge: 0
+			});
+		}
+	} catch {}
+
+	let isAborted = false;
+	const controller = new AbortController();
+
+	const handleClientDisconnect = () => {
+		if (isAborted) return;
+		isAborted = true;
+		controller.abort();
+		console.log(`[Stream Aborted] Client disconnected/switched song. Cancelled stream for ${videoId}`);
+	};
+
+	res.on("close", handleClientDisconnect);
+	res.on("error", handleClientDisconnect);
+
+	// 2. Fast stream via direct URL extraction + Node fetch() (~0.5s - 1s start)
+	try {
+		const directUrl = await getDirectAudioUrl(videoId);
+		if (isAborted) return;
+
+		const audioRes = await fetch(directUrl, {
+			signal: controller.signal,
+			headers: {
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+				"Accept": "*/*"
+			}
+		});
+
+		if (!audioRes.ok || !audioRes.body) {
+			throw new Error(`Direct audio fetch failed with status ${audioRes.status}`);
+		}
+
+		if (isAborted) return;
+
+		res.setHeader("Content-Type", audioRes.headers.get("content-type") || "audio/mp4");
+		res.setHeader("Accept-Ranges", "bytes");
+		if (audioRes.headers.has("content-length")) {
+			res.setHeader("Content-Length", audioRes.headers.get("content-length"));
+		}
+
+		const fileStream = fs.createWriteStream(audioPath);
+		const reader = audioRes.body.getReader();
+
+		while (!isAborted) {
+			const { done, value } = await reader.read();
+			if (done || isAborted) {
+				fileStream.end();
+				if (!done && isAborted) {
+					fs.promises.unlink(audioPath).catch(() => {});
+				} else {
+					enforceAudioCacheLimit(audioPath).catch(() => {});
+				}
+				break;
+			}
+			const buffer = Buffer.from(value);
+			if (!res.writableEnded) {
+				res.write(buffer);
+			}
+			fileStream.write(buffer);
+		}
+		if (!res.writableEnded) res.end();
+	} catch (primaryErr) {
+		if (isAborted || primaryErr.name === "AbortError") {
+			fs.promises.unlink(audioPath).catch(() => {});
+			return;
+		}
+
+		console.warn(`[FastStream Warning] Fast stream failed for ${videoId}, falling back to yt-dlp stdout spawn:`, primaryErr.message);
+		
+		const ytdlpArgs = [
+			"--quiet",
+			"--no-warnings",
+			"--no-progress",
+			"--no-playlist",
+			...ytdlpRuntimeArgs,
+			...ytdlpNetworkArgs,
+			"-o", "-",
+			"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+			`https://www.youtube.com/watch?v=${videoId}`
+		];
+
+		const ytdlpProcess = spawn(ytdlpPath, ytdlpArgs);
+		const passThrough = new PassThrough();
+		const fileStream = fs.createWriteStream(audioPath);
+
+		const cleanupYtdlp = () => {
+			try { ytdlpProcess.kill("SIGKILL"); } catch {}
+			try { fileStream.destroy(); } catch {}
+			fs.promises.unlink(audioPath).catch(() => {});
+		};
+
+		res.on("close", cleanupYtdlp);
+
+		res.setHeader("Content-Type", "audio/mp4");
+		res.setHeader("Accept-Ranges", "bytes");
+
+		ytdlpProcess.stdout.pipe(passThrough);
+		passThrough.pipe(res);
+		passThrough.pipe(fileStream);
+
+		fileStream.on("finish", () => {
+			enforceAudioCacheLimit(audioPath).catch(() => {});
+		});
+
+		ytdlpProcess.on("error", (err) => {
+			console.error(`[Stream Error] yt-dlp fallback failed for ${videoId}:`, err.message);
+			cleanupYtdlp();
+			if (!res.headersSent) {
+				res.status(502).json({ error: "Streaming failed", detail: err.message });
+			}
+		});
+
+		ytdlpProcess.stderr.on("data", (data) => {
+			const stderr = data.toString();
+			if (stderr.includes("does not look like a Netscape format cookies file")) {
+				console.warn("[Stream] Deleting invalid cookies.txt...");
+				try { fs.unlinkSync(cookiesFilePath); } catch {}
+			}
+		});
+	}
+}
+
 app.get("/api/audio/preload", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
 	if (!videoId) return res.status(400).json({ error: "Video ID is required" });
 
 	try {
-		getCachedAudio(videoId).catch((error) => {
-			console.warn(`[Preload] Background pre-download warning for ${videoId}:`, error.message);
-		});
+		const safeVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+		const audioPath = path.join(audioCacheDirectory, `${safeVideoId}.m4a`);
+		if (!fs.existsSync(audioPath)) {
+			const currentArgs = [
+				"--quiet",
+				"--no-warnings",
+				"--no-progress",
+				"--no-playlist",
+				...ytdlpRuntimeArgs,
+				...ytdlpNetworkArgs,
+				"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+				"-o", audioPath,
+				`https://www.youtube.com/watch?v=${videoId}`
+			];
+			execFileAsync(ytdlpPath, currentArgs, { timeout: 120000 })
+				.then(() => enforceAudioCacheLimit(audioPath))
+				.catch(() => {});
+		}
 		res.json({ ok: true, preloading: videoId });
 	} catch (error) {
 		res.status(500).json({ error: "Preload trigger failed" });
@@ -173,14 +386,9 @@ app.get("/api/audio", async (req, res) => {
 	if (!videoId) return res.status(400).send("Video ID is required");
 
 	try {
-		const audioPath = await getCachedAudio(videoId);
-		res.sendFile(audioPath, {
-			acceptRanges: true,
-			cacheControl: false,
-			maxAge: 0
-		});
+		await handleHybridAudioStreaming(videoId, res);
 	} catch (error) {
-		console.error("Audio proxy failed:", error.message || error);
+		console.error("Audio stream failed:", error.message || error);
 		if (!res.headersSent) {
 			res.status(502).json({ error: "Audio extraction failed", detail: getExtractorError(error) });
 		}
@@ -364,112 +572,34 @@ function getExtractorError(error) {
 		.join(" ");
 }
 
-async function getCachedAudio(videoId) {
-	const safeVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-	const audioPath = path.join(audioCacheDirectory, `${safeVideoId}.m4a`);
 
-	try {
-		const file = await fs.promises.stat(audioPath);
-		if (file.size > 0) return audioPath;
-	} catch {
-	}
-
-	let lastDownloadError = null;
-
-	if (!activeDownloads.has(videoId)) {
-		const download = (async () => {
-			await fs.promises.mkdir(audioCacheDirectory, { recursive: true });
-			const currentArgs = [
-				"--quiet",
-				"--no-warnings",
-				"--no-progress",
-				"--no-playlist",
-				...ytdlpRuntimeArgs,
-				...ytdlpNetworkArgs,
-				"--no-part",
-				"-f",
-				"140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
-				"-o",
-				audioPath,
-				`https://www.youtube.com/watch?v=${videoId}`
-			];
-
-			try {
-				await execFileAsync(ytdlpPath, currentArgs, { timeout: 120000 });
-			} catch (err) {
-				const stderr = String(err.stderr || err.message || "");
-				if (stderr.includes("does not look like a Netscape format cookies file")) {
-					console.warn("[Audio] Cookie file invalid, deleting cookies.txt and retrying without cookies...");
-					try { fs.unlinkSync(cookiesFilePath); } catch {}
-					const fallbackArgs = currentArgs.filter((arg, idx, arr) => arg !== "--cookies" && arr[idx - 1] !== "--cookies");
-					await execFileAsync(ytdlpPath, fallbackArgs, { timeout: 120000 });
-				} else {
-					throw err;
-				}
-			}
-		})();
-
-		download.catch((err) => {
-			lastDownloadError = err;
-			console.warn(`[Audio] Extraction download error for ${videoId}:`, err.message);
-		});
-		activeDownloads.set(videoId, download);
-	}
-
-	const waitForPartialOrComplete = async () => {
-		for (let i = 0; i < 40; i++) {
-			try {
-				const stat = await fs.promises.stat(audioPath);
-				if (stat.size > 16 * 1024) return audioPath;
-			} catch {}
-			await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-		try {
-			await activeDownloads.get(videoId);
-		} catch (err) {
-			lastDownloadError = err;
-			console.warn(`[Audio] Download failed or timed out for ${videoId}`);
-		}
-
-		try {
-			const stat = await fs.promises.stat(audioPath);
-			if (stat.size > 0) return audioPath;
-		} catch {}
-
-		throw lastDownloadError || new Error("Audio extraction failed or file was not created");
-	};
-
-	try {
-		await waitForPartialOrComplete();
-		await enforceAudioCacheLimit(audioPath);
-	} finally {
-		activeDownloads.get(videoId)?.finally(() => activeDownloads.delete(videoId));
-	}
-
-	return audioPath;
-}
 
 async function enforceAudioCacheLimit(protectedPath) {
-	const entries = await fs.promises.readdir(audioCacheDirectory, { withFileTypes: true });
-	const audioFiles = await Promise.all(
-		entries
-			.filter((entry) => entry.isFile() && entry.name.endsWith(".m4a"))
-			.map(async (entry) => {
-				const filePath = path.join(audioCacheDirectory, entry.name);
-				const stats = await fs.promises.stat(filePath);
-				return { filePath, modifiedAt: stats.mtimeMs };
-			})
-	);
+	try {
+		const entries = await fs.promises.readdir(audioCacheDirectory, { withFileTypes: true });
+		const cacheFiles = await Promise.all(
+			entries
+				.filter((entry) => entry.isFile())
+				.map(async (entry) => {
+					const filePath = path.join(audioCacheDirectory, entry.name);
+					const stats = await fs.promises.stat(filePath).catch(() => null);
+					return stats ? { filePath, modifiedAt: stats.mtimeMs } : null;
+				})
+		);
 
-	if (audioFiles.length <= audioCacheLimit) return;
+		const validFiles = cacheFiles.filter(Boolean);
+		if (validFiles.length <= audioCacheLimit) return;
 
-	audioFiles.sort((first, second) => first.modifiedAt - second.modifiedAt);
-	let filesToRemove = audioFiles.length - audioCacheLimit;
-	for (const file of audioFiles) {
-		if (filesToRemove === 0) break;
-		if (file.filePath === protectedPath) continue;
-		await fs.promises.rm(file.filePath, { force: true });
-		filesToRemove -= 1;
+		validFiles.sort((first, second) => first.modifiedAt - second.modifiedAt);
+		let filesToRemove = validFiles.length - audioCacheLimit;
+		for (const file of validFiles) {
+			if (filesToRemove === 0) break;
+			if (file.filePath === protectedPath) continue;
+			await fs.promises.rm(file.filePath, { force: true }).catch(() => {});
+			filesToRemove -= 1;
+		}
+	} catch (err) {
+		console.warn("[Cache Cleanup] Error enforcing cache limit:", err.message);
 	}
 }
 

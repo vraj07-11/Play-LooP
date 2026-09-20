@@ -104,10 +104,10 @@ export default function Home() {
           <img
             src={selectedPlaylist.thumbnail || '/logo.svg'}
             alt={selectedPlaylist.title}
-            className={`w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-zinc-800 border border-zinc-700' : 'object-cover'}`}
+            className={`w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-black border border-zinc-900' : 'object-cover'}`}
             onError={(e) => {
               e.target.src = '/logo.svg';
-              e.target.className = 'w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 object-contain p-6 bg-zinc-800 border border-zinc-700';
+              e.target.className = 'w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 object-contain p-6 bg-black border border-zinc-900';
             }}
           />
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left min-w-0">
@@ -150,10 +150,10 @@ export default function Home() {
                 <img
                   src={track.thumbnail || selectedPlaylist.thumbnail || '/logo.svg'}
                   alt={track.title}
-                  className={`track-art ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-2 bg-zinc-800' : 'object-cover'}`}
+                  className={`track-art ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-black border border-zinc-900' : 'object-cover'}`}
                   onError={(e) => {
                     e.target.src = '/logo.svg';
-                    e.target.className = 'track-art object-contain p-2 bg-zinc-800';
+                    e.target.className = 'track-art object-contain p-1.5 bg-black border border-zinc-900';
                   }}
                   loading="lazy"
                 />

@@ -10,7 +10,7 @@ export default function SearchPage() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      const match = hash.match(/#search\?q=(.+)/);
+      const match = hash.match(/#\/?search\?q=(.+)/);
       if (match) {
         const q = decodeURIComponent(match[1]);
         setQuery(q);
@@ -20,7 +20,11 @@ export default function SearchPage() {
 
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handleHashChange);
+    };
   }, []);
 
   const performSearch = async (searchTerm) => {
@@ -102,7 +106,10 @@ export default function SearchPage() {
                     src={thumbnail} 
                     alt="" 
                     className="track-art" 
-                    onError={(e) => { e.target.src = "/logo.svg"; }}
+                    onError={(e) => {
+                      e.target.src = "/logo.svg";
+                      e.target.className = "track-art object-contain p-1.5 bg-black border border-zinc-900";
+                    }}
                   />
                   <div className="track-info">
                     <h3>{title}</h3>

@@ -7,12 +7,25 @@ export default function DownloadPage() {
   const [installStatusMsg, setInstallStatusMsg] = useState('');
 
   useEffect(() => {
+    const promptObj = window.deferredPwaPrompt || deferredPrompt;
+    if (promptObj) {
+      setDeferredPrompt(promptObj);
+      try {
+        promptObj.prompt();
+      } catch (e) {}
+    }
+
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
+      window.deferredPwaPrompt = e;
       setDeferredPrompt(e);
+      try {
+        e.prompt();
+      } catch (err) {}
     };
 
     const handleAppInstalled = () => {
+      window.deferredPwaPrompt = null;
       setDeferredPrompt(null);
       setIsInstalled(true);
       setInstallStatusMsg('Play LooP is installed on your device!');
@@ -31,18 +44,43 @@ export default function DownloadPage() {
     };
   }, []);
 
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+  const triggerInstall = async (promptObj) => {
+    try {
+      promptObj.prompt();
+      const { outcome } = await promptObj.userChoice;
       if (outcome === 'accepted') {
+        window.deferredPwaPrompt = null;
         setDeferredPrompt(null);
         setIsInstalled(true);
       }
+    } catch (err) {
+      console.warn('Install prompt error:', err);
+    }
+  };
+
+  const handleInstallClick = async () => {
+    const promptObj = window.deferredPwaPrompt || deferredPrompt;
+    if (promptObj) {
+      await triggerInstall(promptObj);
     } else if (isInstalled) {
       setInstallStatusMsg('Play LooP is already installed on your device!');
     } else {
-      alert('To install Play LooP:\n\n• On Chrome / Edge: Click the install icon in the address bar.\n• On iOS / Safari: Tap Share and choose "Add to Home Screen".\n• On Android: Tap menu (⋮) and choose "Add to Home screen".');
+      const manifestData = {
+        name: "Play LooP",
+        short_name: "Play LooP",
+        start_url: "/",
+        display: "standalone",
+        background_color: "#000000",
+        theme_color: "#000000"
+      };
+      const blob = new Blob([JSON.stringify(manifestData, null, 2)], { type: "application/json" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'playloop.webmanifest';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setInstallStatusMsg('Initiated Play LooP PWA app download!');
     }
   };
 
