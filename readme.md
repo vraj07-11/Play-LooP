@@ -17,9 +17,9 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 ---
 
 ## Tech Stack
-- **Frontend:** HTML5, CSS, VANILLA JS, REACT JS
+- **Frontend:** HTML5, CSS, Vanilla Js, React Js
 - **Backend:** Node.js, Express.js
-- **Media Processing:** `yt-dlp`, `ytmusic-api`
+- **Media Processing:** `yt-dlp`, `ytmusic-api`, iframe
 - **Containerization:** Docker
 - **Deployment:** Render
 
