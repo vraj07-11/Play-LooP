@@ -200,9 +200,8 @@ async function getDirectAudioUrl(videoId) {
 		"--quiet",
 		"--no-warnings",
 		"--no-playlist",
-		"--force-ipv4",
 		...ytdlpRuntimeArgs,
-		...(fs.existsSync(cookiesFilePath) ? ["--cookies", cookiesFilePath] : []),
+		...ytdlpNetworkArgs,
 		"-g",
 		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
 		`https://www.youtube.com/watch?v=${videoId}`
@@ -252,11 +251,7 @@ async function handleHybridAudioStreaming(videoId, res) {
 		if (isAborted) return;
 
 		const audioRes = await fetch(directUrl, {
-			signal: controller.signal,
-			headers: {
-				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-				"Accept": "*/*"
-			}
+			signal: controller.signal
 		});
 
 		if (!audioRes.ok || !audioRes.body) {
