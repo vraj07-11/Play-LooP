@@ -21,10 +21,24 @@ const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
 	: [];
+const cookiesFilePath = path.join(__dirname, "cookies.txt");
+if (process.env.YOUTUBE_COOKIES && !fs.existsSync(cookiesFilePath)) {
+	try {
+		const cookieData = process.env.YOUTUBE_COOKIES.includes(";") && !process.env.YOUTUBE_COOKIES.includes("\t")
+			? Buffer.from(process.env.YOUTUBE_COOKIES, "base64").toString("utf-8")
+			: process.env.YOUTUBE_COOKIES;
+		fs.writeFileSync(cookiesFilePath, cookieData);
+		console.log("[Audio] Wrote YOUTUBE_COOKIES env variable to cookies.txt");
+	} catch (e) {
+		console.warn("[Audio] Failed to write YOUTUBE_COOKIES:", e.message);
+	}
+}
+
 const ytdlpNetworkArgs = [
 	"--force-ipv4",
 	"--extractor-args",
-	"youtube:player_client=android,web,ios"
+	"youtube:player_client=mweb,android,web",
+	...(fs.existsSync(cookiesFilePath) ? ["--cookies", cookiesFilePath] : [])
 ];
 
 app.use(cors());
@@ -109,7 +123,7 @@ app.get("/api/audio", async (req, res) => {
 			maxAge: 0
 		});
 	} catch (error) {
-		console.error("Audio proxy failed:", error);
+		console.error("Audio proxy failed:", error.message || error);
 		if (!res.headersSent) {
 			res.status(502).json({ error: "Audio extraction failed", detail: getExtractorError(error) });
 		}
@@ -303,6 +317,8 @@ async function getCachedAudio(videoId) {
 	} catch {
 	}
 
+	let lastDownloadError = null;
+
 	if (!activeDownloads.has(videoId)) {
 		const download = (async () => {
 			await fs.promises.mkdir(audioCacheDirectory, { recursive: true });
@@ -326,6 +342,7 @@ async function getCachedAudio(videoId) {
 		})();
 
 		download.catch((err) => {
+			lastDownloadError = err;
 			console.warn(`[Audio] Extraction download error for ${videoId}:`, err.message);
 		});
 		activeDownloads.set(videoId, download);
@@ -342,9 +359,16 @@ async function getCachedAudio(videoId) {
 		try {
 			await activeDownloads.get(videoId);
 		} catch (err) {
+			lastDownloadError = err;
 			console.warn(`[Audio] Download failed or timed out for ${videoId}`);
 		}
-		return audioPath;
+
+		try {
+			const stat = await fs.promises.stat(audioPath);
+			if (stat.size > 0) return audioPath;
+		} catch {}
+
+		throw lastDownloadError || new Error("Audio extraction failed or file was not created");
 	};
 
 	try {
