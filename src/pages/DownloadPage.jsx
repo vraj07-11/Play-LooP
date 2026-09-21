@@ -10,18 +10,12 @@ export default function DownloadPage() {
     const promptObj = window.deferredPwaPrompt || deferredPrompt;
     if (promptObj) {
       setDeferredPrompt(promptObj);
-      try {
-        promptObj.prompt();
-      } catch (e) {}
     }
 
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       window.deferredPwaPrompt = e;
       setDeferredPrompt(e);
-      try {
-        e.prompt();
-      } catch (err) {}
     };
 
     const handleAppInstalled = () => {
