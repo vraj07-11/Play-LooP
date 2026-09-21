@@ -195,6 +195,8 @@ async function filterEmbeddableSongs(songs) {
 	}
 }
 
+const defaultAudioFormat = "249/250/139/ba[abr<=70]/ba[abr<=96]/ba[ext=webm]/ba[ext=m4a]/bestaudio[abr<=96]/worstaudio";
+
 async function getDirectAudioUrl(videoId) {
 	const getUrlArgs = [
 		"--quiet",
@@ -203,7 +205,7 @@ async function getDirectAudioUrl(videoId) {
 		...ytdlpRuntimeArgs,
 		...ytdlpNetworkArgs,
 		"-g",
-		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+		"-f", defaultAudioFormat,
 		`https://www.youtube.com/watch?v=${videoId}`
 	];
 	const { stdout } = await execFileAsync(ytdlpPath, getUrlArgs, { timeout: 25000 });
@@ -212,6 +214,26 @@ async function getDirectAudioUrl(videoId) {
 		throw new Error("Invalid extracted audio URL");
 	}
 	return directUrl;
+}
+
+const directUrlCache = new Map();
+
+function triggerBackgroundDiskPreload(videoId, audioPath) {
+	if (fs.existsSync(audioPath)) return;
+	const currentArgs = [
+		"--quiet",
+		"--no-warnings",
+		"--no-progress",
+		"--no-playlist",
+		...ytdlpRuntimeArgs,
+		...ytdlpNetworkArgs,
+		"-f", defaultAudioFormat,
+		"-o", audioPath,
+		`https://www.youtube.com/watch?v=${videoId}`
+	];
+	execFileAsync(ytdlpPath, currentArgs, { timeout: 120000 })
+		.then(() => enforceAudioCacheLimit(audioPath))
+		.catch(() => {});
 }
 
 async function handleHybridAudioStreaming(videoId, res) {
@@ -232,7 +254,28 @@ async function handleHybridAudioStreaming(videoId, res) {
 		}
 	} catch {}
 
-	// 2. Stream real-time audio to browser & write to cache simultaneously
+	// 2. Check if direct CDN URL is cached in memory (valid for 3 hours)
+	const cached = directUrlCache.get(safeVideoId);
+	if (cached && Date.now() < cached.expiresAt) {
+		triggerBackgroundDiskPreload(videoId, audioPath);
+		return res.redirect(302, cached.url);
+	}
+
+	// 3. Fast-extract direct YouTube CDN audio URL with yt-dlp (-g) and 302 Redirect (~1s)
+	try {
+		const directUrl = await getDirectAudioUrl(videoId);
+		directUrlCache.set(safeVideoId, {
+			url: directUrl,
+			expiresAt: Date.now() + 3 * 3600 * 1000
+		});
+
+		triggerBackgroundDiskPreload(videoId, audioPath);
+		return res.redirect(302, directUrl);
+	} catch (extractError) {
+		console.warn(`[Stream Direct URL fallback] Direct extraction failed for ${videoId}, using pipe streaming:`, extractError.message);
+	}
+
+	// 4. Fallback to real-time pipe streaming if direct extraction failed
 	const ytdlpArgs = [
 		"--quiet",
 		"--no-warnings",
@@ -241,7 +284,7 @@ async function handleHybridAudioStreaming(videoId, res) {
 		...ytdlpRuntimeArgs,
 		...ytdlpNetworkArgs,
 		"-o", "-",
-		"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+		"-f", defaultAudioFormat,
 		`https://www.youtube.com/watch?v=${videoId}`
 	];
 
@@ -305,7 +348,7 @@ app.get("/api/audio/preload", async (req, res) => {
 				"--no-playlist",
 				...ytdlpRuntimeArgs,
 				...ytdlpNetworkArgs,
-				"-f", "140/ba[ext=m4a]/ba[ext=webm]/bestaudio/best",
+				"-f", defaultAudioFormat,
 				"-o", audioPath,
 				`https://www.youtube.com/watch?v=${videoId}`
 			];

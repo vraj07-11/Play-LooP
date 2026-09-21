@@ -290,6 +290,33 @@ export function PlayerProvider({ children }) {
     selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true);
   }, [trackHistory]);
 
+  // Auto-Pre-Download Next Track in Queue/Recommendations for Instant 0-Latency Transition
+  useEffect(() => {
+    if (!pendingTrack?.videoId) return;
+
+    let nextTrackObj = null;
+    if (trackQueue.length > 0) {
+      if (isShuffleEnabled) {
+        const randomIndex = Math.floor(Math.random() * trackQueue.length);
+        nextTrackObj = trackQueue[randomIndex];
+      } else {
+        const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
+        nextTrackObj = trackQueue[nextIndex];
+      }
+    } else if (recommendationQueue.length > 0) {
+      nextTrackObj = isShuffleEnabled
+        ? recommendationQueue[Math.floor(Math.random() * recommendationQueue.length)]
+        : recommendationQueue[0];
+    }
+
+    if (nextTrackObj?.videoId && nextTrackObj.videoId !== pendingTrack.videoId) {
+      console.log(`[Audio Engine] Auto pre-downloading next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
+      fetchApi(`/api/audio/preload?id=${encodeURIComponent(nextTrackObj.videoId)}`).catch((err) => {
+        console.warn("[Audio Engine] Preload trigger warning:", err);
+      });
+    }
+  }, [pendingTrack, currentTrackIndex, trackQueue, recommendationQueue, isShuffleEnabled]);
+
   const seekBy = (seconds) => {
     if (!Number.isFinite(duration) || duration <= 0) return;
     if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
