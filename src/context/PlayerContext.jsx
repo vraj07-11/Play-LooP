@@ -48,11 +48,18 @@ export function PlayerProvider({ children }) {
   
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
+  const [upcomingTrack, setUpcomingTrack] = useState(null);
 
   const nativeAudioPlayer = useRef(new Audio());
   const youtubePlayer = useRef(null);
   const currentActiveEngine = useRef("native");
   const pendingTrackRef = useRef(null);
+  const upcomingTrackRef = useRef(null);
+
+  const setUpcoming = (track) => {
+    upcomingTrackRef.current = track;
+    setUpcomingTrack(track);
+  };
 
   useEffect(() => {
     pendingTrackRef.current = pendingTrack;
@@ -253,27 +260,31 @@ export function PlayerProvider({ children }) {
   };
 
   const playNextTrack = useCallback(() => {
-    let nextTrackObj = null;
+    let nextTrackObj = upcomingTrackRef.current;
 
-    if (trackQueue.length > 0) {
-      // If playing within a playlist queue
-      if (isShuffleEnabled) {
-        const randomIndex = Math.floor(Math.random() * trackQueue.length);
-        setCurrentTrackIndex(randomIndex);
-        nextTrackObj = trackQueue[randomIndex];
-      } else {
-        const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
-        setCurrentTrackIndex(nextIndex);
-        nextTrackObj = trackQueue[nextIndex];
+    if (!nextTrackObj || nextTrackObj.videoId === pendingTrackRef.current?.videoId) {
+      if (trackQueue.length > 0) {
+        if (isShuffleEnabled) {
+          const candidates = trackQueue.filter((t) => t.videoId !== pendingTrackRef.current?.videoId);
+          const pool = candidates.length > 0 ? candidates : trackQueue;
+          const randomIndex = Math.floor(Math.random() * pool.length);
+          nextTrackObj = pool[randomIndex];
+        } else {
+          const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
+          nextTrackObj = trackQueue[nextIndex];
+        }
+      } else if (recommendationQueue.length > 0) {
+        const candidates = recommendationQueue.filter((t) => t.videoId !== pendingTrackRef.current?.videoId);
+        const pool = candidates.length > 0 ? candidates : recommendationQueue;
+        nextTrackObj = isShuffleEnabled
+          ? pool[Math.floor(Math.random() * pool.length)]
+          : pool[0];
       }
-    } else if (recommendationQueue.length > 0) {
-      // Fallback recommendation queue
-      if (isShuffleEnabled) {
-        const randomIndex = Math.floor(Math.random() * recommendationQueue.length);
-        nextTrackObj = recommendationQueue[randomIndex];
-      } else {
-        nextTrackObj = recommendationQueue[0];
-      }
+    }
+
+    if (nextTrackObj && trackQueue.length > 0) {
+      const idx = trackQueue.findIndex((t) => t.videoId === nextTrackObj.videoId);
+      if (idx !== -1) setCurrentTrackIndex(idx);
     }
 
     if (nextTrackObj) {
@@ -297,20 +308,26 @@ export function PlayerProvider({ children }) {
     let nextTrackObj = null;
     if (trackQueue.length > 0) {
       if (isShuffleEnabled) {
-        const randomIndex = Math.floor(Math.random() * trackQueue.length);
-        nextTrackObj = trackQueue[randomIndex];
+        const candidates = trackQueue.filter((t) => t.videoId !== pendingTrack.videoId);
+        const pool = candidates.length > 0 ? candidates : trackQueue;
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        nextTrackObj = pool[randomIndex];
       } else {
         const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
         nextTrackObj = trackQueue[nextIndex];
       }
     } else if (recommendationQueue.length > 0) {
+      const candidates = recommendationQueue.filter((t) => t.videoId !== pendingTrack.videoId);
+      const pool = candidates.length > 0 ? candidates : recommendationQueue;
       nextTrackObj = isShuffleEnabled
-        ? recommendationQueue[Math.floor(Math.random() * recommendationQueue.length)]
-        : recommendationQueue[0];
+        ? pool[Math.floor(Math.random() * pool.length)]
+        : pool[0];
     }
 
+    setUpcoming(nextTrackObj);
+
     if (nextTrackObj?.videoId && nextTrackObj.videoId !== pendingTrack.videoId) {
-      console.log(`[Audio Engine] Auto pre-downloading next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
+      console.log(`[Audio Engine] Auto pre-downloading locked next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
       fetchApi(`/api/audio/preload?id=${encodeURIComponent(nextTrackObj.videoId)}`).catch((err) => {
         console.warn("[Audio Engine] Preload trigger warning:", err);
       });
