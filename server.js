@@ -23,8 +23,8 @@ const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
 	: [];
 
-// Concurrency Queue to prevent RAM spikes by limiting active yt-dlp subprocesses
-const MAX_CONCURRENT_YTDLP = 2;
+// Concurrency Queue to prevent RAM spikes by limiting active yt-dlp subprocesses to 1
+const MAX_CONCURRENT_YTDLP = 1;
 let activeYtdlpCount = 0;
 const ytdlpQueue = [];
 
@@ -52,11 +52,14 @@ async function execFileAsyncWithLimit(file, args, options = {}) {
 	const releaseSlot = await acquireYtdlpSlot();
 	try {
 		return await execFileAsync(file, args, {
-			maxBuffer: 5 * 1024 * 1024,
+			maxBuffer: 1 * 1024 * 1024,
 			...options
 		});
 	} finally {
 		releaseSlot();
+		if (global.gc) {
+			try { global.gc(); } catch {}
+		}
 	}
 }
 
@@ -71,7 +74,7 @@ function setDirectUrlCache(key, value) {
 	directUrlCache.set(key, value);
 }
 
-// Periodic cleanup of expired entries every 15 minutes
+// Periodic cleanup of expired entries and V8 GC trigger every 5 minutes
 setInterval(() => {
 	const now = Date.now();
 	for (const [key, item] of directUrlCache.entries()) {
@@ -79,7 +82,10 @@ setInterval(() => {
 			directUrlCache.delete(key);
 		}
 	}
-}, 15 * 60 * 1000).unref();
+	if (global.gc) {
+		try { global.gc(); } catch {}
+	}
+}, 5 * 60 * 1000).unref();
 function formatNetscapeCookies(rawInput) {
 	if (!rawInput || typeof rawInput !== "string") return null;
 
