@@ -1,5 +1,5 @@
 {
-  "name": "spotify-clone",
+  "name": "Play-LooP",
   "version": "1.0.0",
   "description": "",
   "main": "legacy/pages.js",
@@ -11,16 +11,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vraj07-11/SPOTIFY-CLONE.git"
+    "url": "git+https://github.com/vraj07-11/Play-LooP.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/vraj07-11/SPOTIFY-CLONE/issues"
+    "url": "https://github.com/vraj07-11/Play-LooP/issues"
   },
-  "homepage": "https://github.com/vraj07-11/SPOTIFY-CLONE#readme",
+  "homepage": "https://github.com/vraj07-11/Play-LooP#readme",
   "dependencies": {
     "@vitejs/plugin-react": "^6.1.1",
     "cors": "^2.8.6",

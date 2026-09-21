@@ -14,6 +14,7 @@ ENV PATH="/root/.deno/bin:/usr/local/bin:${PATH}"
 ENV YTDLP_PATH=/usr/local/bin/yt-dlp
 ENV YTDLP_JS_RUNTIME=deno
 ENV AUDIO_CACHE_LIMIT=10
+ENV NODE_OPTIONS="--max-old-space-size=384"
 
 # Copy dependency definitions and install all packages
 COPY package*.json ./

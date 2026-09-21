@@ -109,7 +109,34 @@ export function PlayerProvider({ children }) {
       }
     }
     
-    // Initialize YouTube Player Fallback
+    // Fallback handler when iframe fails (e.g. video embedding disabled)
+    const fallbackToNativeStream = (trackObj, isFromHistory = false) => {
+      console.warn(`[Player Engine] Fallback to backend yt-dlp stream for track: ${trackObj.title}`);
+      currentActiveEngine.current = "native";
+      const targetUrl = getAudioUrl(trackObj.videoId);
+
+      try {
+        if (youtubePlayer.current && typeof youtubePlayer.current.stopVideo === 'function') {
+          youtubePlayer.current.stopVideo();
+        }
+      } catch (e) {}
+
+      nativeAudioPlayer.current.src = targetUrl;
+      nativeAudioPlayer.current.load();
+      nativeAudioPlayer.current
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          setPlayerStatus("Playing (fallback)");
+        })
+        .catch((err) => {
+          console.error("[Audio Engine] Fallback native playback failed:", err);
+          setPlayerStatus("Playback failed");
+          setIsPlaying(false);
+        });
+    };
+
+    // Initialize YouTube Player as Primary Engine
     window.onYouTubeIframeAPIReady = () => {
       if (youtubePlayer.current || !document.getElementById("youtubePlayer")) return;
       try {
@@ -118,7 +145,7 @@ export function PlayerProvider({ children }) {
           width: "1",
           playerVars: { autoplay: 1, controls: 0, disablekb: 1, fs: 0, origin: window.location.origin },
           events: {
-            onReady: () => console.log("YouTube Player ready"),
+            onReady: () => console.log("YouTube Player primary engine ready"),
             onStateChange: (event) => {
                if (currentActiveEngine.current === "youtube") {
                   if (event.data === window.YT.PlayerState.ENDED) {
@@ -131,6 +158,12 @@ export function PlayerProvider({ children }) {
                      setPlayerStatus("Paused");
                   }
                }
+            },
+            onError: (event) => {
+              console.warn(`[YouTube Iframe] Error event ${event.data}. Triggering backend yt-dlp stream fallback.`);
+              if (pendingTrackRef.current) {
+                fallbackToNativeStream(pendingTrackRef.current);
+              }
             }
           }
         });
@@ -166,25 +199,24 @@ export function PlayerProvider({ children }) {
     };
 
     const handleError = (e) => {
-      if (currentActiveEngine.current === "native" && pendingTrackRef.current?.videoId) {
-        console.warn("[Audio Engine] Native audio playback error, switching to YouTube fallback...", e);
-        currentActiveEngine.current = "youtube";
-        if (youtubePlayer.current?.loadVideoById) {
-          youtubePlayer.current.loadVideoById(pendingTrackRef.current.videoId);
-          setIsPlaying(true);
-          setPlayerStatus("Playing");
-        } else {
-          setPlayerStatus("Playback failed");
-          setIsPlaying(false);
-        }
+      if (currentActiveEngine.current === "native") {
+        console.error("[Audio Engine] Native audio playback error:", e);
+        setPlayerStatus("Playback failed");
+        setIsPlaying(false);
       }
     };
     
     const nativeAudio = nativeAudioPlayer.current;
+    const upcomingAudio = upcomingAudioPlayer.current;
+
     nativeAudio.addEventListener('timeupdate', handleTimeUpdate);
     nativeAudio.addEventListener('ended', handleEnded);
     nativeAudio.addEventListener('error', handleError);
-    
+
+    upcomingAudio.addEventListener('timeupdate', handleTimeUpdate);
+    upcomingAudio.addEventListener('ended', handleEnded);
+    upcomingAudio.addEventListener('error', handleError);
+
     const ytInterval = setInterval(() => {
       if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.getCurrentTime) {
          const cTime = youtubePlayer.current.getCurrentTime();
@@ -193,14 +225,27 @@ export function PlayerProvider({ children }) {
             setCurrentTime(cTime);
             setDuration(dur);
             setProgress((cTime / dur) * 100);
+
+            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+              try {
+                navigator.mediaSession.setPositionState({
+                  duration: dur,
+                  playbackRate: 1,
+                  position: cTime
+                });
+              } catch (e) {}
+            }
          }
       }
     }, 500);
-    
+
     return () => {
       nativeAudio.removeEventListener('timeupdate', handleTimeUpdate);
       nativeAudio.removeEventListener('ended', handleEnded);
       nativeAudio.removeEventListener('error', handleError);
+      upcomingAudio.removeEventListener('timeupdate', handleTimeUpdate);
+      upcomingAudio.removeEventListener('ended', handleEnded);
+      upcomingAudio.removeEventListener('error', handleError);
       clearInterval(ytInterval);
     };
   }, []);
@@ -247,23 +292,7 @@ export function PlayerProvider({ children }) {
     } catch (e) {}
   };
 
-  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isFromHistory = false) => {
-    stopAllPlayback();
-
-    const trackObj = { videoId, title, artist, thumbnail };
-    setPendingTrack(trackObj);
-    setCurrentTitle(title);
-    setPlayerStatus("Loading...");
-    setProgress(0);
-    setCurrentTime(0);
-
-    addToRecentlyPlayed(trackObj);
-
-    if (!isFromHistory) {
-      setTrackHistory((prev) => [...prev, trackObj]);
-    }
-
-    // Set Media Session Metadata for Mobile Background Playback & Lock Screen
+  const applyMediaSessionMetadata = (title, artist, thumbnail, videoId) => {
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -279,21 +308,60 @@ export function PlayerProvider({ children }) {
         console.warn("MediaMetadata update error:", e);
       }
     }
+  };
 
-    currentActiveEngine.current = "native";
-    nativeAudioPlayer.current.src = getAudioUrl(videoId);
-    nativeAudioPlayer.current.load();
-    nativeAudioPlayer.current
-      .play()
-      .then(() => {
+  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isFromHistory = false) => {
+    const trackObj = { videoId, title, artist, thumbnail };
+
+    stopAllPlayback();
+
+    setPendingTrack(trackObj);
+    setCurrentTitle(title);
+    setPlayerStatus("Loading...");
+    setProgress(0);
+    setCurrentTime(0);
+
+    addToRecentlyPlayed(trackObj);
+
+    if (!isFromHistory) {
+      setTrackHistory((prev) => [...prev, trackObj]);
+    }
+
+    applyMediaSessionMetadata(title, artist, thumbnail, videoId);
+
+    // Primary Playback Engine: Hidden YouTube Iframe
+    if (youtubePlayer.current && typeof youtubePlayer.current.loadVideoById === "function") {
+      console.log(`[Audio Engine] Playing track (${title}) via primary Hidden YouTube Iframe...`);
+      currentActiveEngine.current = "youtube";
+      try {
+        youtubePlayer.current.loadVideoById(videoId);
         setIsPlaying(true);
         setPlayerStatus("Playing");
-      })
-      .catch(() => {
-        console.log("Audio play failed, requires user interaction or fallback");
-      });
+      } catch (err) {
+        console.warn("[Audio Engine] YouTube Iframe load failed, resorting to backend yt-dlp stream:", err);
+        const targetUrl = getAudioUrl(videoId);
+        currentActiveEngine.current = "native";
+        nativeAudioPlayer.current.src = targetUrl;
+        nativeAudioPlayer.current.load();
+        nativeAudioPlayer.current.play().then(() => {
+          setIsPlaying(true);
+          setPlayerStatus("Playing (fallback)");
+        }).catch(console.error);
+      }
+    } else {
+      // Fallback: Backend yt-dlp Audio Stream
+      console.log(`[Audio Engine] YouTube Iframe player not available yet. Streaming via backend yt-dlp...`);
+      const targetUrl = getAudioUrl(videoId);
+      currentActiveEngine.current = "native";
+      nativeAudioPlayer.current.src = targetUrl;
+      nativeAudioPlayer.current.load();
+      nativeAudioPlayer.current.play().then(() => {
+        setIsPlaying(true);
+        setPlayerStatus("Playing (fallback)");
+      }).catch(console.error);
+    }
 
-    // Fetch background recommendations after 1s delay to prioritize audio stream on mobile PWA
+    // Recommendations for Queue
     setTimeout(() => {
       try {
         fetchApi(`/api/recommendations?id=${encodeURIComponent(videoId)}`)

@@ -22,6 +22,64 @@ const activeDownloads = new Map();
 const ytdlpRuntimeArgs = process.env.YTDLP_JS_RUNTIME
 	? ["--js-runtimes", process.env.YTDLP_JS_RUNTIME]
 	: [];
+
+// Concurrency Queue to prevent RAM spikes by limiting active yt-dlp subprocesses
+const MAX_CONCURRENT_YTDLP = 2;
+let activeYtdlpCount = 0;
+const ytdlpQueue = [];
+
+function acquireYtdlpSlot() {
+	return new Promise((resolve) => {
+		if (activeYtdlpCount < MAX_CONCURRENT_YTDLP) {
+			activeYtdlpCount++;
+			resolve(() => releaseYtdlpSlot());
+		} else {
+			ytdlpQueue.push(resolve);
+		}
+	});
+}
+
+function releaseYtdlpSlot() {
+	if (ytdlpQueue.length > 0) {
+		const next = ytdlpQueue.shift();
+		next(() => releaseYtdlpSlot());
+	} else {
+		activeYtdlpCount = Math.max(0, activeYtdlpCount - 1);
+	}
+}
+
+async function execFileAsyncWithLimit(file, args, options = {}) {
+	const releaseSlot = await acquireYtdlpSlot();
+	try {
+		return await execFileAsync(file, args, {
+			maxBuffer: 5 * 1024 * 1024,
+			...options
+		});
+	} finally {
+		releaseSlot();
+	}
+}
+
+const directUrlCache = new Map();
+const MAX_DIRECT_URL_CACHE_SIZE = 100;
+
+function setDirectUrlCache(key, value) {
+	if (directUrlCache.size >= MAX_DIRECT_URL_CACHE_SIZE) {
+		const oldestKey = directUrlCache.keys().next().value;
+		if (oldestKey) directUrlCache.delete(oldestKey);
+	}
+	directUrlCache.set(key, value);
+}
+
+// Periodic cleanup of expired entries every 15 minutes
+setInterval(() => {
+	const now = Date.now();
+	for (const [key, item] of directUrlCache.entries()) {
+		if (!item || now >= item.expiresAt) {
+			directUrlCache.delete(key);
+		}
+	}
+}, 15 * 60 * 1000).unref();
 function formatNetscapeCookies(rawInput) {
 	if (!rawInput || typeof rawInput !== "string") return null;
 
@@ -118,7 +176,7 @@ async function safeYtmusicCall(action) {
 
 async function ytdlpSearchFallback(query) {
 	try {
-		const { stdout } = await execFileAsync(ytdlpPath, [
+		const { stdout } = await execFileAsyncWithLimit(ytdlpPath, [
 			`ytsearch12:${query}`,
 			"--dump-single-json",
 			"--flat-playlist",
@@ -195,7 +253,7 @@ async function filterEmbeddableSongs(songs) {
 	}
 }
 
-const defaultAudioFormat = "249/250/139/ba[abr<=70]/ba[abr<=96]/ba[ext=webm]/ba[ext=m4a]/bestaudio[abr<=96]/worstaudio";
+const defaultAudioFormat = "249/250/139/ba[abr<=70]/ba[abr<=96]/ba[ext=webm]/ba[ext=m4a]/bestaudio[abr<=96]/ba/bestaudio/best";
 
 async function getDirectAudioUrl(videoId) {
 	const getUrlArgs = [
@@ -208,15 +266,13 @@ async function getDirectAudioUrl(videoId) {
 		"-f", defaultAudioFormat,
 		`https://www.youtube.com/watch?v=${videoId}`
 	];
-	const { stdout } = await execFileAsync(ytdlpPath, getUrlArgs, { timeout: 25000 });
+	const { stdout } = await execFileAsyncWithLimit(ytdlpPath, getUrlArgs, { timeout: 25000 });
 	const directUrl = stdout.trim().split(/\r?\n/)[0];
 	if (!directUrl || !directUrl.startsWith("http")) {
 		throw new Error("Invalid extracted audio URL");
 	}
 	return directUrl;
 }
-
-const directUrlCache = new Map();
 
 function triggerBackgroundDiskPreload(videoId, audioPath) {
 	if (fs.existsSync(audioPath)) return;
@@ -231,7 +287,7 @@ function triggerBackgroundDiskPreload(videoId, audioPath) {
 		"-o", audioPath,
 		`https://www.youtube.com/watch?v=${videoId}`
 	];
-	execFileAsync(ytdlpPath, currentArgs, { timeout: 120000 })
+	execFileAsyncWithLimit(ytdlpPath, currentArgs, { timeout: 120000 })
 		.then(() => enforceAudioCacheLimit(audioPath))
 		.catch(() => {});
 }
@@ -264,7 +320,7 @@ async function handleHybridAudioStreaming(videoId, res) {
 	// 3. Fast-extract direct YouTube CDN audio URL with yt-dlp (-g) and 302 Redirect (~1s)
 	try {
 		const directUrl = await getDirectAudioUrl(videoId);
-		directUrlCache.set(safeVideoId, {
+		setDirectUrlCache(safeVideoId, {
 			url: directUrl,
 			expiresAt: Date.now() + 3 * 3600 * 1000
 		});
@@ -288,11 +344,21 @@ async function handleHybridAudioStreaming(videoId, res) {
 		`https://www.youtube.com/watch?v=${videoId}`
 	];
 
+	const releaseSlot = await acquireYtdlpSlot();
 	const ytdlpProcess = spawn(ytdlpPath, ytdlpArgs);
+	let slotReleased = false;
+	const safeRelease = () => {
+		if (!slotReleased) {
+			slotReleased = true;
+			releaseSlot();
+		}
+	};
+
 	const passThrough = new PassThrough();
 	const fileStream = fs.createWriteStream(audioPath);
 
 	const cleanup = () => {
+		safeRelease();
 		try { ytdlpProcess.kill("SIGKILL"); } catch {}
 		try { fileStream.destroy(); } catch {}
 	};
@@ -301,6 +367,8 @@ async function handleHybridAudioStreaming(videoId, res) {
 		if (!res.writableEnded) {
 			cleanup();
 			fs.promises.unlink(audioPath).catch(() => {});
+		} else {
+			safeRelease();
 		}
 	});
 
@@ -428,7 +496,7 @@ app.get("/api/playlists", async (req, res) => {
 
 		const selectedCategories = shuffleArray(categoryPool).slice(0, 12);
 
-		const playlistPromises = selectedCategories.map(async (cat) => {
+		const fetchCategoryPlaylist = async (cat) => {
 			try {
 				const searchWithTimeout = Promise.race([
 					safeYtmusicCall(() => ytmusic.searchPlaylists(cat.query)),
@@ -455,9 +523,17 @@ app.get("/api/playlists", async (req, res) => {
 				thumbnail: "/logo.svg",
 				count: 20
 			};
-		});
+		};
 
-		const playlists = await Promise.all(playlistPromises);
+		// Batch requests in chunks of 3 to prevent memory and API connection spikes
+		const playlists = [];
+		const chunkSize = 3;
+		for (let i = 0; i < selectedCategories.length; i += chunkSize) {
+			const chunk = selectedCategories.slice(i, i + chunkSize);
+			const chunkResults = await Promise.all(chunk.map(fetchCategoryPlaylist));
+			playlists.push(...chunkResults);
+		}
+
 		res.json(playlists);
 	} catch (error) {
 		console.error("Playlists fetch failed:", error);
