@@ -21,7 +21,8 @@ function App() {
   useEffect(() => {
     // Set initial history state if none exists
     if (!window.history.state) {
-      window.history.replaceState({ view: 'home', root: true }, '', '#/home');
+      const initialHash = window.location.hash;
+      window.history.replaceState({ view: 'home', root: true }, '', initialHash || '#/home');
     }
 
     const handlePopState = (event) => {
@@ -37,7 +38,9 @@ function App() {
         setCurrentView(state.view);
       } else if (hash.includes('search')) {
         setCurrentView('search');
-      } else {
+      } else if (hash.includes('download') || hash.includes('Download')) {
+        setCurrentView('download');
+      } else if (!hash.includes('player')) {
         setCurrentView('home');
       }
     };

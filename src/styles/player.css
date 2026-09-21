@@ -159,8 +159,9 @@
 
 .player-controls .repeat-button.is-active,
 .player-controls .shuffle-button.is-active {
-  color: rgb(34 197 94) !important;
+  color: #ffffff !important;
   position: relative;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
 }
 
 .player-controls .repeat-button.is-active::after,
@@ -173,8 +174,8 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background-color: rgb(34 197 94);
-  box-shadow: 0 0 6px rgb(34 197 94);
+  background-color: #ffffff;
+  box-shadow: 0 0 6px #ffffff;
 }
 
 .repeat-button,
@@ -192,47 +193,15 @@
 
 .player-controls .repeat-button.is-active:hover:not(:disabled),
 .player-controls .shuffle-button.is-active:hover:not(:disabled) {
-  color: rgb(74 222 128) !important;
+  color: #ffffff !important;
 }
 
-.player-skip-button.seek-button {
-  width: 2.25rem;
-  height: 2.25rem;
-  flex: 0 0 2.25rem;
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
-
-.seek-button {
-  width: 2.25rem;
-  height: 2.25rem;
-  flex-basis: 2.25rem;
-  flex: 0 0 2.25rem;
-  color: white;
-  border: 0;
-  background: transparent;
-  transition: transform 0.14s ease, opacity 0.14s ease;
-}
-
-.seek-button:hover:not(:disabled) {
-  color: white;
-  background: transparent;
-}
-
-.seek-button:active:not(:disabled) {
-  transform: scale(0.82);
-  opacity: 0.7;
-}
-
-.seek-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.player-skip-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .progress-bar {
@@ -243,11 +212,12 @@
   appearance: none;
   background: transparent;
   touch-action: pan-x;
+  accent-color: #ffffff !important;
+  outline: none !important;
 }
 
-.progress-bar:disabled {
-  cursor: default;
-  opacity: 0.4;
+.progress-bar:focus {
+  outline: none !important;
 }
 
 .progress-bar::-webkit-slider-runnable-track {
@@ -258,22 +228,26 @@
 }
 
 .progress-bar:hover::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, #1db954 var(--progress), rgb(82 82 91) var(--progress));
+  background: linear-gradient(to right, #ffffff var(--progress), rgb(82 82 91) var(--progress));
 }
 
 .progress-bar::-webkit-slider-thumb {
-  width: 0.8rem;
-  height: 0.8rem;
-  margin-top: -0.275rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-top: -0.3rem;
   appearance: none;
+  -webkit-appearance: none;
   border: 0;
   border-radius: 9999px;
-  background: white;
+  background: #ffffff !important;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
   transition: transform 0.15s ease;
 }
 
-.progress-bar:hover::-webkit-slider-thumb {
-  transform: scale(1.25);
+.progress-bar:hover::-webkit-slider-thumb,
+.progress-bar:active::-webkit-slider-thumb {
+  transform: scale(1.3);
+  background: #ffffff !important;
 }
 
 .progress-bar::-moz-range-track {
@@ -289,11 +263,12 @@
 }
 
 .progress-bar::-moz-range-thumb {
-  width: 0.8rem;
-  height: 0.8rem;
+  width: 0.85rem;
+  height: 0.85rem;
   border: 0;
   border-radius: 9999px;
-  background: white;
+  background: #ffffff !important;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
 }
 
 .player-time {

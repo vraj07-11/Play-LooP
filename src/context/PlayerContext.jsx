@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { fetchApi, getAudioUrl } from '../services/api.js';
+import { fetchSyncedLyrics } from '../services/lyrics.js';
 
 export { fetchApi, getAudioUrl };
 
@@ -530,6 +531,57 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const seekToTime = (timeInSeconds) => {
+    const targetTime = Math.max(0, Math.min(duration || 3600, timeInSeconds));
+    if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+      nativeAudioPlayer.current.currentTime = targetTime;
+      setCurrentTime(targetTime);
+      if (duration > 0) setProgress((targetTime / duration) * 100);
+    } else if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.seekTo) {
+      youtubePlayer.current.seekTo(targetTime, true);
+      setCurrentTime(targetTime);
+      if (duration > 0) setProgress((targetTime / duration) * 100);
+    }
+  };
+
+  const [lyricsData, setLyricsData] = useState(null);
+  const [isLyricsLoading, setIsLyricsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!pendingTrack?.title) {
+      setLyricsData(null);
+      setIsLyricsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLyricsLoading(true);
+    setLyricsData(null);
+
+    fetchSyncedLyrics(
+      pendingTrack.title,
+      pendingTrack.artist || pendingTrack.channelTitle || '',
+      duration || 0
+    )
+      .then((data) => {
+        if (isMounted) {
+          setLyricsData(data);
+          setIsLyricsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Lyrics fetch failed:', err);
+        if (isMounted) {
+          setLyricsData(null);
+          setIsLyricsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [pendingTrack?.videoId, pendingTrack?.title]);
+
   const value = {
     isPlaying,
     playPause,
@@ -548,6 +600,9 @@ export function PlayerProvider({ children }) {
     playPreviousTrack,
     seekBy,
     seekToPercent,
+    seekToTime,
+    lyricsData,
+    isLyricsLoading,
     isRepeatEnabled,
     setIsRepeatEnabled,
     isShuffleEnabled,

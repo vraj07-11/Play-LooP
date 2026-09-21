@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, CheckCircle, Smartphone, Monitor, WifiOff } from 'lucide-react';
+import { Download, CheckCircle, Smartphone, Monitor, Info } from 'lucide-react';
 
 export default function DownloadPage() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -95,7 +95,7 @@ export default function DownloadPage() {
         </div>
 
         <p className="text-zinc-300 text-sm leading-relaxed">
-          Install Play LooP on your desktop or mobile home screen for fast access, full-screen playback, and seamless offline listening experience.
+          Install Play LooP on your desktop or mobile home screen for fast access and full-screen playback.
         </p>
 
         {isInstalled ? (
@@ -120,7 +120,7 @@ export default function DownloadPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
         <div className="page-card flex flex-col justify-between">
           <div className="space-y-2">
             <div className="p-2 w-fit rounded-lg bg-zinc-800 text-emerald-400 mb-3">
@@ -140,16 +140,21 @@ export default function DownloadPage() {
             <p className="text-sm text-zinc-400">Add Play LooP to your Windows, Mac, or Linux desktop for instant launch from taskbar or dock.</p>
           </div>
         </div>
+      </div>
 
-        <div className="page-card flex flex-col justify-between">
-          <div className="space-y-2">
-            <div className="p-2 w-fit rounded-lg bg-zinc-800 text-emerald-400 mb-3">
-              <WifiOff className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-medium text-white">Offline Listening</h3>
-            <p className="text-sm text-zinc-400">Fast caching enables smooth listening and quick load times even on poor network connections.</p>
-          </div>
+      {/* Mobile Background Playback Note */}
+      <div className="p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl space-y-2.5">
+        <div className="flex items-center gap-2 text-zinc-300">
+          <Info className="w-4 h-4 text-red-500 shrink-0" />
+          <h4 className="text-sm font-medium text-zinc-200">Mobile Background Playback</h4>
         </div>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          If background playback stops on mobile, we recommend using <span className="text-zinc-200">Brave Browser</span>:
+        </p>
+        <ul className="text-xs text-zinc-400 space-y-1 pl-5 list-disc">
+          <li>Ensure <span className="text-zinc-200">Settings &rarr; Media &rarr; Background play</span> is turned on.</li>
+          <li>In <span className="text-zinc-200">Brave App Info &rarr; Battery usage</span>, enable <span className="text-zinc-200">Allow background usage</span> for continuous audio playback.</li>
+        </ul>
       </div>
     </div>
   );

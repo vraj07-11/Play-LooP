@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronDown, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { ChevronDown, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 
 export default function FullPlayer({
   isOpen,
   onClose,
+  initialShowLyrics = false,
   pendingTrack,
   isPlaying,
   playPause,
@@ -25,7 +26,20 @@ export default function FullPlayer({
   hasNext,
   formatTime
 }) {
-  const { playerButtonStyle = 'white' } = usePlayer();
+  const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime } = usePlayer();
+  const [showLyrics, setShowLyrics] = useState(initialShowLyrics);
+  const lyricsScrollRef = useRef(null);
+  const lyricsListRef = useRef(null);
+  const touchStartY = useRef(null);
+  const userInteractingRef = useRef(false);
+  const userInteractionTimer = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShowLyrics(Boolean(initialShowLyrics));
+      userInteractingRef.current = false;
+    }
+  }, [isOpen, initialShowLyrics]);
 
   // HD Thumbnail resolution handling with fallback
   const [imgSrc, setImgSrc] = useState('/logo.svg');
@@ -33,6 +47,10 @@ export default function FullPlayer({
 
   useEffect(() => {
     if (!pendingTrack) return;
+
+    // Always reset to cover art when switching tracks
+    setShowLyrics(false);
+    userInteractingRef.current = false;
 
     const videoId = pendingTrack.videoId;
     const rawThumb = pendingTrack.thumbnail || '';
@@ -92,49 +110,49 @@ export default function FullPlayer({
     };
   }, [isOpen, onClose]);
 
+  const syncedLyrics = Array.isArray(lyricsData?.syncedLyrics) ? lyricsData.syncedLyrics : [];
+  
+  let activeLyricIndex = -1;
+  if (syncedLyrics.length > 0) {
+    for (let i = syncedLyrics.length - 1; i >= 0; i--) {
+      if (currentTime >= syncedLyrics[i].time) {
+        activeLyricIndex = i;
+        break;
+      }
+    }
+  }
+
+  // Handle user interaction with lyrics to pause auto-scrolling for 3 seconds
+  const handleUserInteraction = () => {
+    userInteractingRef.current = true;
+    if (userInteractionTimer.current) {
+      clearTimeout(userInteractionTimer.current);
+    }
+    userInteractionTimer.current = setTimeout(() => {
+      userInteractingRef.current = false;
+    }, 3000);
+  };
+
+  useEffect(() => {
+    if (showLyrics && activeLyricIndex >= 0 && lyricsListRef.current && !userInteractingRef.current) {
+      try {
+        const activeEl = lyricsListRef.current.children?.[activeLyricIndex];
+        if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+          activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } catch (e) {}
+    }
+  }, [activeLyricIndex, showLyrics]);
+
   if (!isOpen || !pendingTrack) return null;
+
+  const isDefaultLogo = !imgSrc || imgSrc === '/logo.svg';
 
   const handleProgressChange = (e) => {
     seekToPercent(e.target.value);
   };
 
-  // Helper for rendering Play/Pause main button
   const renderPlayPauseButton = () => {
-    if (playerButtonStyle === 'emerald') {
-      return (
-        <button 
-          type="button" 
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-emerald-500 to-emerald-400 text-black flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.55)] hover:shadow-[0_0_35px_rgba(16,185,129,0.8)] hover:scale-105 active:scale-95 transition-all cursor-pointer border border-emerald-300/30 shrink-0"
-          onClick={playPause}
-          aria-label="Play or Pause"
-        >
-          {isPlaying ? (
-            <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-black text-black" />
-          ) : (
-            <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-black text-black translate-x-[2px]" />
-          )}
-        </button>
-      );
-    }
-
-    if (playerButtonStyle === 'glass') {
-      return (
-        <button 
-          type="button" 
-          className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-zinc-900/80 backdrop-blur-md text-emerald-400 border-2 border-emerald-400/60 flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.35)] hover:shadow-[0_0_35px_rgba(16,185,129,0.6)] hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
-          onClick={playPause}
-          aria-label="Play or Pause"
-        >
-          {isPlaying ? (
-            <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-emerald-400 text-emerald-400" />
-          ) : (
-            <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-emerald-400 text-emerald-400 translate-x-[2px]" />
-          )}
-        </button>
-      );
-    }
-
-    // Default 'white' style (Ultra-Clean White Pearl)
     return (
       <button 
         type="button" 
@@ -151,35 +169,63 @@ export default function FullPlayer({
     );
   };
 
-  // Helper classes for secondary toolbar buttons depending on theme
   const getSecondaryBtnClass = (isActive = false) => {
-    if (playerButtonStyle === 'emerald') {
-      return isActive 
-        ? 'text-emerald-400 hover:text-emerald-300 drop-shadow-[0_0_8px_rgba(16,185,129,0.7)]' 
-        : 'text-zinc-400 hover:text-emerald-400';
-    }
-    if (playerButtonStyle === 'glass') {
-      return isActive 
-        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-400/50 shadow-[0_0_12px_rgba(16,185,129,0.3)]' 
-        : 'bg-zinc-900/60 border border-white/10 text-zinc-300 hover:text-white hover:border-emerald-400/40';
-    }
-    // White Pearl default
     return isActive 
-      ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]' 
+      ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]' 
       : 'text-zinc-400 hover:text-white';
   };
 
-  const isDefaultLogo = !imgSrc || imgSrc === '/logo.svg';
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMoveCover = (e) => {
+    if (touchStartY.current !== null && e.touches && e.touches[0]) {
+      const deltaY = e.touches[0].clientY - touchStartY.current;
+      // Swiping UP (deltaY < -20) on cover image smoothly opens lyrics
+      if (deltaY < -20) {
+        setShowLyrics(true);
+        touchStartY.current = null;
+      }
+    }
+  };
+
+  const handleTouchMoveLyrics = (e) => {
+    if (touchStartY.current !== null && e.touches && e.touches[0]) {
+      const deltaY = e.touches[0].clientY - touchStartY.current;
+      const scrollTop = lyricsScrollRef.current?.scrollTop || 0;
+      // Swiping DOWN (deltaY > 25) ONLY at top of lyrics (scrollTop <= 5) returns to cover art
+      if (deltaY > 25 && scrollTop <= 5) {
+        setShowLyrics(false);
+        touchStartY.current = null;
+      }
+    }
+  };
+
+  const handleWheelCover = (e) => {
+    if (e.deltaY > 10 || e.deltaY < -10) {
+      setShowLyrics(true);
+    }
+  };
+
+  const handleWheelLyrics = (e) => {
+    const scrollTop = lyricsScrollRef.current?.scrollTop || 0;
+    if (e.deltaY < -10 && scrollTop <= 5) {
+      setShowLyrics(false);
+    }
+  };
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950/95 text-white backdrop-blur-2xl transition-all duration-300 animate-slide-up select-none overflow-y-auto"
+      className="fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-300 animate-slide-up select-none overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-label="Expanded Music Player"
     >
       {/* Background Ambient Glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10 opacity-35">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10 opacity-30">
         {!isDefaultLogo ? (
           <img 
             src={imgSrc} 
@@ -187,9 +233,9 @@ export default function FullPlayer({
             className="w-full h-full object-cover blur-3xl scale-150 transition-all duration-700"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-b from-emerald-950/40 via-zinc-950/80 to-zinc-950 blur-2xl" />
+          <div className="w-full h-full bg-gradient-to-b from-zinc-800/40 via-zinc-950/90 to-zinc-950 blur-2xl" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/60 via-zinc-950/85 to-zinc-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/70 via-zinc-950/90 to-zinc-950" />
       </div>
 
       {/* Header */}
@@ -207,50 +253,153 @@ export default function FullPlayer({
           <span className="text-[10px] sm:text-xs uppercase tracking-widest text-zinc-400 font-semibold">
             Playing From Queue
           </span>
-          <span className="text-xs sm:text-sm font-medium text-emerald-400 truncate max-w-[200px] sm:max-w-xs">
+          <span className="text-xs sm:text-sm font-medium text-white/90 truncate max-w-[200px] sm:max-w-xs">
             {playerStatus || "Playing"}
           </span>
         </div>
 
-        <div className="w-7 h-7" aria-hidden="true" />
+        <div className="w-10" />
       </header>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-4 max-w-lg mx-auto w-full">
-        {/* Album Artwork Container */}
-        <div className="relative w-full max-w-[320px] sm:max-w-[360px] aspect-square mb-8 rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.8)] border border-white/10 group flex items-center justify-center bg-zinc-950">
-          {!isDefaultLogo ? (
-            <img 
-              src={imgSrc} 
-              alt={currentTitle || 'Track cover'} 
-              onError={handleImageError}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black relative">
-              <div className="absolute inset-0 bg-emerald-500/10 blur-2xl rounded-full scale-75 pointer-events-none" />
+        {/* Animated Dual Viewport Container for Artwork & Lyrics */}
+        <div className="relative w-full max-w-[340px] sm:max-w-[380px] h-[340px] sm:h-[380px] mb-6 overflow-hidden rounded-2xl select-none shadow-[0_25px_60px_rgba(0,0,0,0.9)] z-10">
+          {/* Album Artwork Container */}
+          <div 
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMoveCover}
+            onWheel={handleWheelCover}
+            title="Scroll or swipe UP to view lyrics"
+            className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 transition-all duration-500 ease-out transform ${
+              showLyrics 
+                ? '-translate-y-full opacity-0 pointer-events-none scale-95' 
+                : 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10'
+            }`}
+          >
+            {!isDefaultLogo ? (
               <img 
-                src="/logo.svg" 
-                alt="Play LooP" 
-                className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_20px_rgba(16,185,129,0.6)] mb-3 transition-transform duration-500 group-hover:scale-110" 
+                src={imgSrc} 
+                alt={currentTitle || 'Track cover'} 
+                onError={handleImageError}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
-              <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400/80">Play LooP</span>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black relative">
+                <div className="absolute inset-0 bg-white/5 blur-2xl rounded-full scale-75 pointer-events-none" />
+                <img 
+                  src="/logo.svg" 
+                  alt="Play LooP" 
+                  className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] mb-3 transition-transform duration-500 group-hover:scale-110" 
+                />
+                <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Play LooP</span>
+              </div>
+            )}
+
+            {/* Micro hint overlay */}
+            <div className="absolute bottom-3 inset-x-0 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <span className="bg-black/75 backdrop-blur-md text-[11px] font-medium text-white px-3.5 py-1.5 rounded-full border border-white/20 flex items-center gap-1.5 shadow-lg">
+                <ChartBar className="w-3.5 h-3.5" /> Scroll / Swipe UP for Lyrics
+              </span>
             </div>
-          )}
+          </div>
+
+          {/* Lyrics Container */}
+          <div 
+            ref={lyricsScrollRef}
+            onScroll={handleUserInteraction}
+            onTouchStart={(e) => {
+              handleTouchStart(e);
+              handleUserInteraction();
+            }}
+            onTouchMove={handleTouchMoveLyrics}
+            onWheel={(e) => {
+              handleWheelLyrics(e);
+              handleUserInteraction();
+            }}
+            className={`absolute inset-0 w-full h-full rounded-2xl border border-white/10 bg-zinc-900/95 backdrop-blur-xl p-4 overflow-y-auto flex flex-col scrollbar-none shadow-[0_20px_50px_rgba(0,0,0,0.9)] transition-all duration-500 ease-out transform ${
+              showLyrics 
+                ? 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10' 
+                : 'translate-y-full opacity-0 pointer-events-none scale-95'
+            }`}
+          >
+            {isLyricsLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center space-y-3">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-zinc-400 font-medium">Fetching synchronized lyrics...</span>
+              </div>
+            ) : lyricsData?.isInstrumental ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                <span className="text-white font-semibold text-sm mb-1">Instrumental Track</span>
+                <span className="text-xs text-zinc-400">This track does not contain vocal lyrics.</span>
+              </div>
+            ) : syncedLyrics.length > 0 ? (
+              <div ref={lyricsListRef} className="space-y-3 py-16 text-center">
+                {syncedLyrics.map((line, idx) => {
+                  const isActive = idx === activeLyricIndex;
+                  return (
+                    <p
+                      key={idx}
+                      onClick={() => {
+                        if (seekToTime) seekToTime(line.time);
+                        userInteractingRef.current = false;
+                        if (userInteractionTimer.current) clearTimeout(userInteractionTimer.current);
+                      }}
+                      className={`cursor-pointer transition-all duration-300 px-3 py-2 rounded-xl select-none ${
+                        isActive
+                          ? 'text-white font-extrabold text-lg sm:text-xl scale-105 drop-shadow-[0_0_16px_rgba(255,255,255,0.8)] bg-white/10 backdrop-blur-md border-l-2 border-white pl-4'
+                          : 'text-zinc-400 hover:text-zinc-200 text-sm sm:text-base opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      {line.text}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : lyricsData?.plainLyrics ? (
+              <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap text-center py-4">
+                {lyricsData.plainLyrics}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                <ChartBar className="w-8 h-8 text-zinc-600 mb-2" />
+                <span className="text-sm text-zinc-300 font-medium">No Synced Lyrics Found</span>
+                <span className="text-xs text-zinc-500 mt-1">Enjoy the music!</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Track Title and Artist */}
-        <div className="w-full text-left mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight line-clamp-2 mb-1">
-            {currentTitle || "Unknown Track"}
-          </h2>
-          <p className="text-zinc-400 text-sm sm:text-base font-medium truncate">
-            {pendingTrack?.channelTitle || pendingTrack?.artist || "Play LooP"}
-          </p>
+        {/* Track Title, Artist, and Right-Aligned YouTube Music Style Lyrics Pill Button */}
+        <div className="w-full flex items-end justify-between gap-4 mb-5 select-none relative z-20">
+          <div className="flex-1 min-w-0 text-left">
+            <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight line-clamp-2 mb-1 drop-shadow-none">
+              {currentTitle || "Unknown Track"}
+            </h2>
+            <p className="text-zinc-400 text-sm sm:text-base font-medium truncate">
+              {pendingTrack?.channelTitle || pendingTrack?.artist || "Play LooP"}
+            </p>
+          </div>
+
+          {/* YouTube Music style Circular Rectangle (Pill) Lyrics Button */}
+          <button 
+            type="button"
+            onClick={() => setShowLyrics(!showLyrics)}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-normal transition-all cursor-pointer border shrink-0 select-none ${
+              showLyrics 
+                ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105 font-medium' 
+                : 'bg-white/10 hover:bg-white/20 text-white border-white/15 backdrop-blur-md shadow-md active:scale-95'
+            }`}
+            title={showLyrics ? "Show Album Cover" : "Show Lyrics"}
+            aria-label={showLyrics ? "Show Album Cover" : "Show Lyrics"}
+          >
+            <ChartBar className={`w-4 h-4 ${showLyrics ? 'text-black' : 'text-white'}`} />
+            <span>Lyrics</span>
+          </button>
         </div>
 
         {/* Scrubbing / Progress Bar */}
-        <div className="w-full flex flex-col gap-2 mb-6">
+        <div className="w-full flex flex-col gap-2 mb-6 relative z-20">
           <input 
             className="progress-bar flex-1 cursor-pointer outline-none h-2"
             style={{ '--progress': `${progress || 0}%` }}
@@ -268,7 +417,7 @@ export default function FullPlayer({
         </div>
 
         {/* Media Control Toolbar */}
-        <div className="w-full flex items-center justify-between px-1">
+        <div className="w-full flex items-center justify-between px-1 relative z-20">
           {/* Shuffle */}
           <button 
             type="button" 
@@ -298,12 +447,10 @@ export default function FullPlayer({
             aria-label="Rewind 10 seconds"
             title="Rewind 10 seconds"
           >
-            <svg className="w-8 h-8 sm:w-9 sm:h-9" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" strokeWidth="3.2" stroke="currentColor" fill="none">
-              <polyline points="9.57 15.41 12.17 24.05 20.81 21.44" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M26.93,41.41V23a.09.09,0,0,0-.16-.07s-2.58,3.69-4.17,4.78" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="32.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
-              <path d="M12.14,23.94a21.91,21.91,0,1,1-.91,13.25" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <div className="relative flex items-center justify-center">
+              <RotateCcw className="w-6 h-6 sm:w-7 sm:h-7" />
+              <span className="absolute text-[9px] font-bold font-sans translate-y-[0.5px]">10</span>
+            </div>
           </button>
 
           {/* Main Play / Pause Button */}
@@ -317,12 +464,10 @@ export default function FullPlayer({
             aria-label="Forward 10 seconds"
             title="Forward 10 seconds"
           >
-            <svg className="w-8 h-8 sm:w-9 sm:h-9" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" strokeWidth="3.2" stroke="currentColor" fill="none">
-              <path d="M23.93,41.41V23a.09.09,0,0,0-.16-.07s-2.58,3.69-4.17,4.78" strokeLinecap="round" strokeLinejoin="round" />
-              <rect x="29.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
-              <polyline points="54.43 15.41 51.83 24.05 43.19 21.44" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M51.86,23.94a21.91,21.91,0,1,0,.91,13.25" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <div className="relative flex items-center justify-center">
+              <RotateCw className="w-6 h-6 sm:w-7 sm:h-7" />
+              <span className="absolute text-[9px] font-bold font-sans translate-y-[0.5px]">10</span>
+            </div>
           </button>
 
           {/* Next Track */}

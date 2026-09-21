@@ -160,7 +160,13 @@ app.get("/api/health", (req, res) => {
 
 // Serve the Vite build if it exists (for Render deployment)
 if (fs.existsSync(path.join(__dirname, "dist"))) {
-	app.use(express.static(path.join(__dirname, "dist")));
+	app.use(express.static(path.join(__dirname, "dist"), {
+		etag: false,
+		maxAge: 0,
+		setHeaders: (res) => {
+			res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+		}
+	}));
 } else {
 	app.use(express.static(__dirname));
 }

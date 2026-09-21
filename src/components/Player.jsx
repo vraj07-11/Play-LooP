@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp } from 'lucide-react';
+import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, RotateCcw, RotateCw } from 'lucide-react';
 import FullPlayer from './FullPlayer';
 
 export default function Player() {
@@ -31,20 +31,24 @@ export default function Player() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    if (isExpanded && !pendingTrack) {
+      setIsExpanded(false);
+    }
+  }, [isExpanded, pendingTrack]);
+
   const openFullPlayer = () => {
     if (!isExpanded) {
-      window.history.pushState({ fullPlayer: true }, '', '#/player');
+      const currentState = window.history.state || {};
+      window.history.pushState({ ...currentState, fullPlayer: true }, '', '#/player');
       setIsExpanded(true);
     }
   };
 
   const closeFullPlayer = () => {
-    if (isExpanded) {
-      if (window.location.hash.includes('player')) {
-        window.history.back();
-      } else {
-        setIsExpanded(false);
-      }
+    setIsExpanded(false);
+    if (window.location.hash.includes('player')) {
+      window.history.back();
     }
   };
 
@@ -98,7 +102,7 @@ export default function Player() {
               {playerStatus}
             </span>
             <div className="player-title-row flex items-center gap-2">
-              <span className="player-title text-sm font-semibold truncate text-white group-hover:text-emerald-400 transition-colors" data-current-title>
+              <span className="player-title text-sm font-semibold truncate text-white group-hover:text-zinc-200 transition-colors" data-current-title>
                 {currentTitle}
               </span>
             </div>
@@ -109,7 +113,7 @@ export default function Player() {
           <div className="player-buttons flex items-center gap-3 md:gap-4 mb-2">
             <button 
               type="button" 
-              className={`player-skip-button repeat-button ${isRepeatEnabled ? 'is-active text-emerald-500' : 'text-zinc-400 hover:text-white'}`}
+              className={`player-skip-button repeat-button ${isRepeatEnabled ? 'is-active text-white' : 'text-zinc-400 hover:text-white'}`}
               onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
               aria-label="Repeat"
             >
@@ -129,13 +133,12 @@ export default function Player() {
               className="player-skip-button seek-button text-zinc-400 hover:text-white transition-colors"
               onClick={() => seekBy(-10)} 
               aria-label="Rewind 10 seconds"
+              title="Rewind 10 seconds"
             >
-              <svg className="seek-icon w-[1.65rem] h-[1.65rem] sm:w-[1.25rem] sm:h-[1.25rem]" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" strokeWidth="3.2" stroke="currentColor" fill="none">
-                <polyline points="9.57 15.41 12.17 24.05 20.81 21.44" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M26.93,41.41V23a.09.09,0,0,0-.16-.07s-2.58,3.69-4.17,4.78" strokeLinecap="round" strokeLinejoin="round" />
-                <rect x="32.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
-                <path d="M12.14,23.94a21.91,21.91,0,1,1-.91,13.25" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <div className="relative flex items-center justify-center">
+                <RotateCcw className="w-5 h-5" />
+                <span className="absolute text-[8px] font-bold font-sans translate-y-[0.5px]">10</span>
+              </div>
             </button>
             <button 
               type="button" 
@@ -159,13 +162,12 @@ export default function Player() {
               className="player-skip-button seek-button text-zinc-400 hover:text-white transition-colors"
               onClick={() => seekBy(10)} 
               aria-label="Forward 10 seconds"
+              title="Forward 10 seconds"
             >
-              <svg className="seek-icon w-[1.65rem] h-[1.65rem] sm:w-[1.25rem] sm:h-[1.25rem]" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" strokeWidth="3.2" stroke="currentColor" fill="none">
-                <path d="M23.93,41.41V23a.09.09,0,0,0-.16-.07s-2.58,3.69-4.17,4.78" strokeLinecap="round" strokeLinejoin="round" />
-                <rect x="29.19" y="22.52" width="11.41" height="18.89" rx="5.7" />
-                <polyline points="54.43 15.41 51.83 24.05 43.19 21.44" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M51.86,23.94a21.91,21.91,0,1,0,.91,13.25" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <div className="relative flex items-center justify-center">
+                <RotateCw className="w-5 h-5" />
+                <span className="absolute text-[8px] font-bold font-sans translate-y-[0.5px]">10</span>
+              </div>
             </button>
             <button 
               type="button" 
@@ -178,7 +180,7 @@ export default function Player() {
             </button>
             <button 
               type="button" 
-              className={`player-skip-button shuffle-button ${isShuffleEnabled ? 'is-active text-emerald-500' : 'text-zinc-400 hover:text-white'}`}
+              className={`player-skip-button shuffle-button ${isShuffleEnabled ? 'is-active text-white' : 'text-zinc-400 hover:text-white'}`}
               onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
               aria-label="Shuffle"
             >
