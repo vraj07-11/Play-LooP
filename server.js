@@ -687,8 +687,8 @@ app.use((req, res) => {
 });
 
 async function startServer() {
-	const server = app.listen(port, () => {
-		console.log(`Play LooP is running at http://localhost:${port}`);
+	const server = app.listen(port, "0.0.0.0", () => {
+		console.log(`Play LooP is running at http://0.0.0.0:${port}`);
 	});
 
 	server.on("error", (error) => {
@@ -712,10 +712,13 @@ async function startServer() {
 	process.on("SIGINT", () => handleShutdown("SIGINT"));
 
 	try {
-		await ytmusic.initialize();
+		await Promise.race([
+			ytmusic.initialize(),
+			new Promise((_, reject) => setTimeout(() => reject(new Error("Initialization timed out (5s)")), 5000))
+		]);
 		console.log("YouTube Music API initialized successfully.");
 	} catch (error) {
-		console.error("Warning: Failed to initialize YouTube Music API on startup:", error.message || error);
+		console.error("Warning: YouTube Music API initialization notice:", error.message || error);
 	}
 }
 
