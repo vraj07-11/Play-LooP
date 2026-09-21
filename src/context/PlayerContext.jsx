@@ -50,6 +50,23 @@ export function PlayerProvider({ children }) {
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
   const [upcomingTrack, setUpcomingTrack] = useState(null);
 
+  const [playerButtonStyle, setPlayerButtonStyleState] = useState(() => {
+    try {
+      return localStorage.getItem("playloop_button_style") || "white";
+    } catch (e) {
+      return "white";
+    }
+  });
+
+  const setPlayerButtonStyle = (style) => {
+    setPlayerButtonStyleState(style);
+    try {
+      localStorage.setItem("playloop_button_style", style);
+    } catch (e) {
+      console.error("Failed to save player button style", e);
+    }
+  };
+
   const nativeAudioPlayer = useRef(new Audio());
   const upcomingAudioPlayer = useRef(new Audio());
   const youtubePlayer = useRef(null);
@@ -536,7 +553,9 @@ export function PlayerProvider({ children }) {
     isShuffleEnabled,
     setIsShuffleEnabled,
     hasPrevious,
-    hasNext
+    hasNext,
+    playerButtonStyle,
+    setPlayerButtonStyle
   };
 
   return (
