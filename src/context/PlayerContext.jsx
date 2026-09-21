@@ -51,6 +51,7 @@ export function PlayerProvider({ children }) {
   const [upcomingTrack, setUpcomingTrack] = useState(null);
 
   const nativeAudioPlayer = useRef(new Audio());
+  const upcomingAudioPlayer = useRef(new Audio());
   const youtubePlayer = useRef(null);
   const currentActiveEngine = useRef("native");
   const pendingTrackRef = useRef(null);
@@ -71,6 +72,42 @@ export function PlayerProvider({ children }) {
 
   useEffect(() => {
     nativeAudioPlayer.current.preload = "auto";
+    upcomingAudioPlayer.current.preload = "auto";
+    
+    // Register Browser Media Session API Action Handlers for Mobile Background Controls
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.setActionHandler('play', () => {
+          if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+            nativeAudioPlayer.current.play().catch(console.error);
+          } else if (youtubePlayer.current?.playVideo) {
+            youtubePlayer.current.playVideo();
+          }
+          setIsPlaying(true);
+          setPlayerStatus("Playing");
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+          if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+            nativeAudioPlayer.current.pause();
+          } else if (youtubePlayer.current?.pauseVideo) {
+            youtubePlayer.current.pauseVideo();
+          }
+          setIsPlaying(false);
+          setPlayerStatus("Paused");
+        });
+        navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousTrack());
+        navigator.mediaSession.setActionHandler('nexttrack', () => playNextTrack());
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime !== undefined && nativeAudioPlayer.current) {
+            nativeAudioPlayer.current.currentTime = details.seekTime;
+          }
+        });
+        navigator.mediaSession.setActionHandler('seekforward', () => seekBy(10));
+        navigator.mediaSession.setActionHandler('seekbackward', () => seekBy(-10));
+      } catch (e) {
+        console.warn("MediaSession handler error:", e);
+      }
+    }
     
     // Initialize YouTube Player Fallback
     window.onYouTubeIframeAPIReady = () => {
@@ -111,6 +148,16 @@ export function PlayerProvider({ children }) {
         setCurrentTime(nativeAudioPlayer.current.currentTime);
         setDuration(nativeAudioPlayer.current.duration);
         setProgress((nativeAudioPlayer.current.currentTime / nativeAudioPlayer.current.duration) * 100);
+
+        if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+          try {
+            navigator.mediaSession.setPositionState({
+              duration: nativeAudioPlayer.current.duration,
+              playbackRate: nativeAudioPlayer.current.playbackRate || 1,
+              position: nativeAudioPlayer.current.currentTime
+            });
+          } catch (e) {}
+        }
       }
     };
 
@@ -167,6 +214,9 @@ export function PlayerProvider({ children }) {
       }
       setIsPlaying(false);
       setPlayerStatus("Paused");
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = "paused";
+      }
     } else {
       if (currentActiveEngine.current === "native") {
         nativeAudioPlayer.current.play().catch(e => console.error(e));
@@ -175,6 +225,9 @@ export function PlayerProvider({ children }) {
       }
       setIsPlaying(true);
       setPlayerStatus("Playing");
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = "playing";
+      }
     }
   }, [isPlaying]);
 
@@ -208,6 +261,23 @@ export function PlayerProvider({ children }) {
 
     if (!isFromHistory) {
       setTrackHistory((prev) => [...prev, trackObj]);
+    }
+
+    // Set Media Session Metadata for Mobile Background Playback & Lock Screen
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: title || "Play LooP Track",
+          artist: artist || "Play LooP",
+          album: "Play LooP",
+          artwork: [
+            { src: thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`, sizes: "512x512", type: "image/jpeg" }
+          ]
+        });
+        navigator.mediaSession.playbackState = "playing";
+      } catch (e) {
+        console.warn("MediaMetadata update error:", e);
+      }
     }
 
     currentActiveEngine.current = "native";
@@ -301,7 +371,7 @@ export function PlayerProvider({ children }) {
     selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true);
   }, [trackHistory]);
 
-  // Auto-Pre-Download Next Track in Queue/Recommendations for Instant 0-Latency Transition
+  // Auto-Pre-Download & Pre-buffer Next Track in Queue/Recommendations for Instant 0-Latency Transition
   useEffect(() => {
     if (!pendingTrack?.videoId) return;
 
@@ -327,10 +397,18 @@ export function PlayerProvider({ children }) {
     setUpcoming(nextTrackObj);
 
     if (nextTrackObj?.videoId && nextTrackObj.videoId !== pendingTrack.videoId) {
-      console.log(`[Audio Engine] Auto pre-downloading locked next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
+      console.log(`[Audio Engine] Auto pre-downloading & preloading next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
+      // 1. Server pre-download & direct URL cache trigger
       fetchApi(`/api/audio/preload?id=${encodeURIComponent(nextTrackObj.videoId)}`).catch((err) => {
         console.warn("[Audio Engine] Preload trigger warning:", err);
       });
+
+      // 2. Client browser audio pre-buffer
+      if (upcomingAudioPlayer.current) {
+        upcomingAudioPlayer.current.preload = "auto";
+        upcomingAudioPlayer.current.src = getAudioUrl(nextTrackObj.videoId);
+        upcomingAudioPlayer.current.load();
+      }
     }
   }, [pendingTrack, currentTrackIndex, trackQueue, recommendationQueue, isShuffleEnabled]);
 

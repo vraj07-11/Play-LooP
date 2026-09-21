@@ -340,22 +340,25 @@ app.get("/api/audio/preload", async (req, res) => {
 	try {
 		const safeVideoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
 		const audioPath = path.join(audioCacheDirectory, `${safeVideoId}.m4a`);
-		if (!fs.existsSync(audioPath)) {
-			const currentArgs = [
-				"--quiet",
-				"--no-warnings",
-				"--no-progress",
-				"--no-playlist",
-				...ytdlpRuntimeArgs,
-				...ytdlpNetworkArgs,
-				"-f", defaultAudioFormat,
-				"-o", audioPath,
-				`https://www.youtube.com/watch?v=${videoId}`
-			];
-			execFileAsync(ytdlpPath, currentArgs, { timeout: 120000 })
-				.then(() => enforceAudioCacheLimit(audioPath))
-				.catch(() => {});
+
+		// 1. Fast pre-resolve direct YouTube CDN Audio URL into memory cache if missing
+		const cached = directUrlCache.get(safeVideoId);
+		if (!cached || Date.now() >= cached.expiresAt) {
+			getDirectAudioUrl(videoId)
+				.then((directUrl) => {
+					directUrlCache.set(safeVideoId, {
+						url: directUrl,
+						expiresAt: Date.now() + 3 * 3600 * 1000
+					});
+				})
+				.catch((err) => {
+					console.warn(`[Audio Preload] Direct URL extraction failed for ${videoId}:`, err.message);
+				});
 		}
+
+		// 2. Trigger background disk caching
+		triggerBackgroundDiskPreload(videoId, audioPath);
+
 		res.json({ ok: true, preloading: videoId });
 	} catch (error) {
 		res.status(500).json({ error: "Preload trigger failed" });
