@@ -389,3 +389,19 @@
   animation: full-player-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Closing animation */
+@keyframes full-player-slide-down {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-down {
+  animation: full-player-slide-down 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

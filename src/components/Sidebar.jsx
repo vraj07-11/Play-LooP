@@ -12,7 +12,7 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentVie
 
   return (
     <aside
-      className={`sidebar w-70 bg-black border-r flex flex-col overflow-y-auto border-zinc-800 text-white p-5 transition-transform duration-300 ease-in-out ${isSidebarOpen ? '' : 'is-closed -translate-x-full md:translate-x-0'} md:static absolute inset-y-0 left-0 z-20`}
+      className={`sidebar w-70 bg-black border-r flex flex-col overflow-y-auto border-zinc-800 text-white p-5 transition-transform duration-300 ${isSidebarOpen ? '' : 'is-closed'} md:static absolute inset-y-0 left-0 z-20`}
     >
       <nav className="mt-1">
         <ul className="border-b border-zinc-800 pb-5">

@@ -144,7 +144,7 @@ export default function FullPlayer({
     }
   }, [activeLyricIndex, showLyrics]);
 
-  if (!isOpen || !pendingTrack) return null;
+  if (!pendingTrack) return null;
 
   const isDefaultLogo = !imgSrc || imgSrc === '/logo.svg';
 
@@ -219,7 +219,7 @@ export default function FullPlayer({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-300 animate-slide-up select-none overflow-y-auto"
+      className={`fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-300 ${isOpen ? 'animate-slide-up' : 'animate-slide-down'} select-none overflow-y-auto`}
       role="dialog"
       aria-modal="true"
       aria-label="Expanded Music Player"
