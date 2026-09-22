@@ -546,22 +546,37 @@ export function PlayerProvider({ children }) {
 
   const [lyricsData, setLyricsData] = useState(null);
   const [isLyricsLoading, setIsLyricsLoading] = useState(false);
+  const lastFetchedLyricsRef = useRef({ videoId: null, duration: 0 });
+
+  const roundedDuration = Math.round(pendingTrack?.duration || duration || 0);
 
   useEffect(() => {
     if (!pendingTrack?.title) {
       setLyricsData(null);
       setIsLyricsLoading(false);
+      lastFetchedLyricsRef.current = { videoId: null, duration: 0 };
+      return;
+    }
+
+    const trackId = pendingTrack.videoId || pendingTrack.title;
+
+    // Skip refetch if already fetched with valid positive duration for this track
+    if (
+      lastFetchedLyricsRef.current.videoId === trackId &&
+      lastFetchedLyricsRef.current.duration > 0
+    ) {
       return;
     }
 
     let isMounted = true;
     setIsLyricsLoading(true);
     setLyricsData(null);
+    lastFetchedLyricsRef.current = { videoId: trackId, duration: roundedDuration };
 
     fetchSyncedLyrics(
       pendingTrack.title,
       pendingTrack.artist || pendingTrack.channelTitle || '',
-      duration || 0
+      roundedDuration
     )
       .then((data) => {
         if (isMounted) {
@@ -580,7 +595,7 @@ export function PlayerProvider({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [pendingTrack?.videoId, pendingTrack?.title]);
+  }, [pendingTrack?.videoId, pendingTrack?.title, roundedDuration]);
 
   const value = {
     isPlaying,

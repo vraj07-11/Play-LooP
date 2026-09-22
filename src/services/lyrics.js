@@ -115,8 +115,30 @@ export async function fetchSyncedLyrics(title, artist, duration) {
     if (searchRes.ok) {
       const results = await searchRes.json();
       if (Array.isArray(results) && results.length > 0) {
-        // Find best candidate with synced lyrics
-        const bestMatch = results.find(item => item.syncedLyrics) || results[0];
+        // Find best candidate prioritizing synced lyrics and closest duration match
+        let bestMatch = null;
+        const candidatesWithSynced = results.filter(item => item.syncedLyrics);
+
+        if (candidatesWithSynced.length > 0) {
+          if (duration && duration > 0) {
+            candidatesWithSynced.sort((a, b) => {
+              const diffA = Math.abs((a.duration || 0) - duration);
+              const diffB = Math.abs((b.duration || 0) - duration);
+              return diffA - diffB;
+            });
+          }
+          bestMatch = candidatesWithSynced[0];
+        } else if (duration && duration > 0) {
+          const sorted = [...results].sort((a, b) => {
+            const diffA = Math.abs((a.duration || 0) - duration);
+            const diffB = Math.abs((b.duration || 0) - duration);
+            return diffA - diffB;
+          });
+          bestMatch = sorted[0];
+        } else {
+          bestMatch = results[0];
+        }
+
         if (bestMatch.instrumental) {
           return { syncedLyrics: [], plainLyrics: '', isInstrumental: true };
         }
