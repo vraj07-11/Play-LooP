@@ -28,11 +28,18 @@ export default function FullPlayer({
 }) {
   const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(initialShowLyrics);
+  const [coverAnim, setCoverAnim] = useState('');
   const lyricsScrollRef = useRef(null);
   const lyricsListRef = useRef(null);
   const touchStartY = useRef(null);
+  const touchStartX = useRef(null);
   const userInteractingRef = useRef(false);
   const userInteractionTimer = useRef(null);
+
+  // Reset animation when track changes
+  useEffect(() => {
+    setCoverAnim('');
+  }, [pendingTrack]);
 
   useEffect(() => {
     if (isOpen) {
@@ -111,7 +118,7 @@ export default function FullPlayer({
   }, [isOpen, onClose]);
 
   const syncedLyrics = Array.isArray(lyricsData?.syncedLyrics) ? lyricsData.syncedLyrics : [];
-  
+
   let activeLyricIndex = -1;
   if (syncedLyrics.length > 0) {
     for (let i = syncedLyrics.length - 1; i >= 0; i--) {
@@ -140,7 +147,7 @@ export default function FullPlayer({
         if (activeEl && typeof activeEl.scrollIntoView === 'function') {
           activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [activeLyricIndex, showLyrics]);
 
@@ -154,8 +161,8 @@ export default function FullPlayer({
 
   const renderPlayPauseButton = () => {
     return (
-      <button 
-        type="button" 
+      <button
+        type="button"
         className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_25px_rgba(255,255,255,0.4)] hover:shadow-[0_0_35px_rgba(255,255,255,0.65)] hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0"
         onClick={playPause}
         aria-label="Play or Pause"
@@ -170,24 +177,50 @@ export default function FullPlayer({
   };
 
   const getSecondaryBtnClass = (isActive = false) => {
-    return isActive 
-      ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]' 
+    return isActive
+      ? 'text-white filter drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]'
       : 'text-zinc-400 hover:text-white';
   };
 
   const handleTouchStart = (e) => {
     if (e.touches && e.touches[0]) {
       touchStartY.current = e.touches[0].clientY;
+      touchStartX.current = e.touches[0].clientX;
     }
   };
 
   const handleTouchMoveCover = (e) => {
-    if (touchStartY.current !== null && e.touches && e.touches[0]) {
+    if (touchStartY.current !== null && touchStartX.current !== null && e.touches && e.touches[0]) {
       const deltaY = e.touches[0].clientY - touchStartY.current;
-      // Swiping UP (deltaY < -20) on cover image smoothly opens lyrics
+      const deltaX = e.touches[0].clientX - touchStartX.current;
+      // Vertical swipe up to show lyrics
       if (deltaY < -20) {
         setShowLyrics(true);
         touchStartY.current = null;
+        touchStartX.current = null;
+        return;
+      }
+      // Swipe left for next track
+      if (deltaX < -30) {
+        setCoverAnim('animate-slide-left');
+        setTimeout(() => {
+          playNextTrack();
+          setCoverAnim('');
+        }, 500);
+        touchStartY.current = null;
+        touchStartX.current = null;
+        return;
+      }
+      // Swipe right for previous track
+      if (deltaX > 30) {
+        setCoverAnim('animate-slide-right');
+        setTimeout(() => {
+          playPreviousTrack();
+          setCoverAnim('');
+        }, 500);
+        touchStartY.current = null;
+        touchStartX.current = null;
+        return;
       }
     }
   };
@@ -218,8 +251,8 @@ export default function FullPlayer({
   };
 
   return (
-    <div 
-      className={`fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-300 ${isOpen ? 'animate-slide-up' : 'animate-slide-down'} select-none overflow-y-auto`}
+    <div
+      className={`fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-300 ${isOpen ? 'animate-slide-up' : 'animate-slide-down'} select-none overflow-y-auto overscroll-none`}
       role="dialog"
       aria-modal="true"
       aria-label="Expanded Music Player"
@@ -227,9 +260,9 @@ export default function FullPlayer({
       {/* Background Ambient Glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10 opacity-30">
         {!isDefaultLogo ? (
-          <img 
-            src={imgSrc} 
-            alt="" 
+          <img
+            src={imgSrc}
+            alt=""
             className="w-full h-full object-cover blur-3xl scale-150 transition-all duration-700"
           />
         ) : (
@@ -240,7 +273,7 @@ export default function FullPlayer({
 
       {/* Header */}
       <header className="flex items-center justify-between px-6 pt-6 pb-2 shrink-0">
-        <button 
+        <button
           type="button"
           onClick={onClose}
           className="p-2 -ml-2 rounded-full text-zinc-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
@@ -266,31 +299,30 @@ export default function FullPlayer({
         {/* Animated Dual Viewport Container for Artwork & Lyrics */}
         <div className="relative w-full max-w-[340px] sm:max-w-[380px] h-[340px] sm:h-[380px] mb-6 overflow-hidden rounded-2xl select-none shadow-[0_25px_60px_rgba(0,0,0,0.9)] z-10">
           {/* Album Artwork Container */}
-          <div 
+          <div
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMoveCover}
             onWheel={handleWheelCover}
             title="Scroll or swipe UP to view lyrics"
-            className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 transition-all duration-500 ease-out transform ${
-              showLyrics 
-                ? '-translate-y-full opacity-0 pointer-events-none scale-95' 
+            className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 touch-none transition-all duration-500 ease-out transform ${coverAnim} ${showLyrics
+                ? '-translate-y-full opacity-0 pointer-events-none scale-95'
                 : 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10'
-            }`}
+              }`}
           >
             {!isDefaultLogo ? (
-              <img 
-                src={imgSrc} 
-                alt={currentTitle || 'Track cover'} 
+              <img
+                src={imgSrc}
+                alt={currentTitle || 'Track cover'}
                 onError={handleImageError}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black relative">
                 <div className="absolute inset-0 bg-white/5 blur-2xl rounded-full scale-75 pointer-events-none" />
-                <img 
-                  src="/logo.svg" 
-                  alt="Play LooP" 
-                  className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] mb-3 transition-transform duration-500 group-hover:scale-110" 
+                <img
+                  src="/logo.svg"
+                  alt="Play LooP"
+                  className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] mb-3 transition-transform duration-500 group-hover:scale-110"
                 />
                 <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Play LooP</span>
               </div>
@@ -305,7 +337,7 @@ export default function FullPlayer({
           </div>
 
           {/* Lyrics Container */}
-          <div 
+          <div
             ref={lyricsScrollRef}
             onScroll={handleUserInteraction}
             onTouchStart={(e) => {
@@ -317,11 +349,10 @@ export default function FullPlayer({
               handleWheelLyrics(e);
               handleUserInteraction();
             }}
-            className={`absolute inset-0 w-full h-full rounded-2xl border border-white/10 bg-zinc-900/95 backdrop-blur-xl p-4 overflow-y-auto flex flex-col scrollbar-none shadow-[0_20px_50px_rgba(0,0,0,0.9)] transition-all duration-500 ease-out transform ${
-              showLyrics 
-                ? 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10' 
+            className={`absolute inset-0 w-full h-full rounded-2xl border border-white/10 bg-zinc-900/95 backdrop-blur-xl p-4 overflow-y-auto flex flex-col scrollbar-none shadow-[0_20px_50px_rgba(0,0,0,0.9)] transition-all duration-500 ease-out transform ${showLyrics
+                ? 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10'
                 : 'translate-y-full opacity-0 pointer-events-none scale-95'
-            }`}
+              }`}
           >
             {isLyricsLoading ? (
               <div className="flex-1 flex flex-col items-center justify-center space-y-3">
@@ -345,11 +376,10 @@ export default function FullPlayer({
                         userInteractingRef.current = false;
                         if (userInteractionTimer.current) clearTimeout(userInteractionTimer.current);
                       }}
-                      className={`cursor-pointer transition-all duration-300 px-3 py-2 rounded-xl select-none ${
-                        isActive
+                      className={`cursor-pointer transition-all duration-300 px-3 py-2 rounded-xl select-none ${isActive
                           ? 'text-white font-extrabold text-lg sm:text-xl scale-105 drop-shadow-[0_0_16px_rgba(255,255,255,0.8)] bg-white/10 backdrop-blur-md border-l-2 border-white pl-4'
                           : 'text-zinc-400 hover:text-zinc-200 text-sm sm:text-base opacity-60 hover:opacity-100'
-                      }`}
+                        }`}
                     >
                       {line.text}
                     </p>
@@ -382,14 +412,13 @@ export default function FullPlayer({
           </div>
 
           {/* YouTube Music style Circular Rectangle (Pill) Lyrics Button */}
-          <button 
+          <button
             type="button"
             onClick={() => setShowLyrics(!showLyrics)}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-normal transition-all cursor-pointer border shrink-0 select-none ${
-              showLyrics 
-                ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105 font-medium' 
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-medium tracking-normal transition-all cursor-pointer border shrink-0 select-none ${showLyrics
+                ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105 font-medium'
                 : 'bg-white/10 hover:bg-white/20 text-white border-white/15 backdrop-blur-md shadow-md active:scale-95'
-            }`}
+              }`}
             title={showLyrics ? "Show Album Cover" : "Show Lyrics"}
             aria-label={showLyrics ? "Show Album Cover" : "Show Lyrics"}
           >
@@ -400,10 +429,10 @@ export default function FullPlayer({
 
         {/* Scrubbing / Progress Bar */}
         <div className="w-full flex flex-col gap-2 mb-6 relative z-20">
-          <input 
+          <input
             className="progress-bar flex-1 cursor-pointer outline-none h-2"
             style={{ '--progress': `${progress || 0}%` }}
-            type="range" 
+            type="range"
             min="0" max="100" step="0.1"
             value={progress || 0}
             onChange={handleProgressChange}
@@ -419,8 +448,8 @@ export default function FullPlayer({
         {/* Media Control Toolbar */}
         <div className="w-full flex items-center justify-between px-1 relative z-20">
           {/* Shuffle */}
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(isShuffleEnabled)}`}
             onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
             aria-label="Shuffle"
@@ -429,10 +458,16 @@ export default function FullPlayer({
           </button>
 
           {/* Previous Track */}
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`p-2 sm:p-2.5 rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${getSecondaryBtnClass(false)}`}
-            onClick={playPreviousTrack}
+            onClick={() => {
+              setCoverAnim('animate-slide-right');
+              setTimeout(() => {
+                playPreviousTrack();
+                setCoverAnim('');
+              }, 500);
+            }}
             disabled={!hasPrevious}
             aria-label="Previous track"
           >
@@ -440,10 +475,10 @@ export default function FullPlayer({
           </button>
 
           {/* Rewind 10s */}
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(false)}`}
-            onClick={() => seekBy(-10)} 
+            onClick={() => seekBy(-10)}
             aria-label="Rewind 10 seconds"
             title="Rewind 10 seconds"
           >
@@ -457,10 +492,10 @@ export default function FullPlayer({
           {renderPlayPauseButton()}
 
           {/* Forward 10s */}
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(false)}`}
-            onClick={() => seekBy(10)} 
+            onClick={() => seekBy(10)}
             aria-label="Forward 10 seconds"
             title="Forward 10 seconds"
           >
@@ -471,10 +506,16 @@ export default function FullPlayer({
           </button>
 
           {/* Next Track */}
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`p-2 sm:p-2.5 rounded-full transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer ${getSecondaryBtnClass(false)}`}
-            onClick={playNextTrack}
+            onClick={() => {
+              setCoverAnim('animate-slide-left');
+              setTimeout(() => {
+                playNextTrack();
+                setCoverAnim('');
+              }, 500);
+            }}
             disabled={!hasNext}
             aria-label="Next track"
           >
@@ -482,8 +523,8 @@ export default function FullPlayer({
           </button>
 
           {/* Repeat */}
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(isRepeatEnabled)}`}
             onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
             aria-label="Repeat"

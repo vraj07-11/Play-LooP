@@ -51,6 +51,92 @@ export function PlayerProvider({ children }) {
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
   const [upcomingTrack, setUpcomingTrack] = useState(null);
 
+  // ----- Deterministic 5‑track window -----
+  const WINDOW_SIZE = 5;
+  const CENTER_INDEX = 2; // current track sits at index 2
+  const [trackWindow, setTrackWindow] = useState([]); // up to 5 track objects
+  const [preloadedCovers, setPreloadedCovers] = useState({}); // videoId -> image src
+
+  // Helper to fetch a random track from queues
+  const fetchNextRandomTrack = useCallback(() => {
+    if (trackQueue.length) {
+      const next = trackQueue[0];
+      setTrackQueue(q => q.slice(1));
+      return next;
+    }
+    if (recommendationQueue.length) {
+      const next = recommendationQueue[0];
+      setRecommendationQueue(q => q.slice(1));
+      return next;
+    }
+    return null;
+  }, [trackQueue, recommendationQueue]);
+
+  // Helper to fetch a random previous track (prefer history)
+  const fetchPrevRandomTrack = useCallback(() => {
+    if (trackHistory.length > 1) {
+      const prev = trackHistory[trackHistory.length - 2];
+      setTrackHistory(h => h.slice(0, -1));
+      return prev;
+    }
+    // fallback to next random (will be placed at start)
+    return fetchNextRandomTrack();
+  }, [trackHistory, fetchNextRandomTrack]);
+
+  // Preload cover images for neighbour tracks
+  const preloadCoverImages = useCallback((windowArr) => {
+    const ids = [];
+    if (windowArr[1]) ids.push(windowArr[1].videoId);
+    if (windowArr[3]) ids.push(windowArr[3].videoId);
+    ids.forEach(id => {
+      const track = windowArr.find(t => t && t.videoId === id);
+      const src = track?.thumbnail || '/logo.svg';
+      const img = new Image();
+      img.onload = () => setPreloadedCovers(prev => ({ ...prev, [id]: src }));
+      img.onerror = () => setPreloadedCovers(prev => ({ ...prev, [id]: '/logo.svg' }));
+      img.src = src;
+    });
+  }, []);
+
+  // Initialise the track window when the first pendingTrack arrives
+  useEffect(() => {
+    if (pendingTrack && trackWindow.length === 0) {
+      if (!isShuffleEnabled && trackQueue.length > 0 && currentTrackIndex !== -1) {
+        const getTrackSafe = (idx) => {
+          let safeIdx = idx % trackQueue.length;
+          if (safeIdx < 0) safeIdx += trackQueue.length;
+          return trackQueue[safeIdx] || null;
+        };
+        const filled = [
+          getTrackSafe(currentTrackIndex - 2),
+          getTrackSafe(currentTrackIndex - 1),
+          getTrackSafe(currentTrackIndex),
+          getTrackSafe(currentTrackIndex + 1),
+          getTrackSafe(currentTrackIndex + 2),
+        ];
+        setTrackWindow(filled);
+        preloadCoverImages(filled);
+      } else {
+        const initial = [null, null, pendingTrack, null, null];
+        // fill empty slots with random tracks
+        const fill = (arr) => {
+          const newArr = [...arr];
+          for (let i = 0; i < newArr.length; i++) {
+            if (!newArr[i]) {
+              const random = fetchNextRandomTrack();
+              if (random) newArr[i] = random;
+            }
+          }
+          return newArr;
+        };
+        const filled = fill(initial);
+        setTrackWindow(filled);
+        preloadCoverImages(filled);
+      }
+    }
+  }, [pendingTrack, trackWindow.length, fetchNextRandomTrack, preloadCoverImages, isShuffleEnabled, trackQueue, currentTrackIndex]);
+
+  // ----- Existing player button style state -----
   const [playerButtonStyle, setPlayerButtonStyleState] = useState(() => {
     try {
       return localStorage.getItem("playloop_button_style") || "white";
@@ -145,7 +231,7 @@ export function PlayerProvider({ children }) {
         .play()
         .then(() => {
           setIsPlaying(true);
-          setPlayerStatus("Playing (fallback)");
+          setPlayerStatus("Playing");
         })
         .catch((err) => {
           console.error("[Audio Engine] Fallback native playback failed:", err);
@@ -363,7 +449,7 @@ export function PlayerProvider({ children }) {
         nativeAudioPlayer.current.load();
         nativeAudioPlayer.current.play().then(() => {
           setIsPlaying(true);
-          setPlayerStatus("Playing (fallback)");
+          setPlayerStatus("Playing");
         }).catch(console.error);
       }
     } else {
@@ -375,7 +461,7 @@ export function PlayerProvider({ children }) {
       nativeAudioPlayer.current.load();
       nativeAudioPlayer.current.play().then(() => {
         setIsPlaying(true);
-        setPlayerStatus("Playing (fallback)");
+        setPlayerStatus("Playing");
       }).catch(console.error);
     }
 
@@ -416,8 +502,35 @@ export function PlayerProvider({ children }) {
   };
 
   const playNextTrack = useCallback(() => {
+    // Deterministic navigation for playlist mode when shuffle is disabled
+    if (!isShuffleEnabled && trackQueue.length > 0) {
+      const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
+      setCurrentTrackIndex(nextIndex);
+      
+      const getTrackSafe = (idx) => {
+        let safeIdx = idx % trackQueue.length;
+        if (safeIdx < 0) safeIdx += trackQueue.length;
+        return trackQueue[safeIdx] || null;
+      };
+      
+      const newWindow = [
+        getTrackSafe(nextIndex - 2),
+        getTrackSafe(nextIndex - 1),
+        getTrackSafe(nextIndex),
+        getTrackSafe(nextIndex + 1),
+        getTrackSafe(nextIndex + 2),
+      ];
+      
+      setTrackWindow(newWindow);
+      const newCurrent = newWindow[CENTER_INDEX];
+      if (newCurrent) {
+        selectAndPlayTrack(newCurrent.videoId, newCurrent.title, newCurrent.artist, newCurrent.thumbnail);
+      }
+      preloadCoverImages(newWindow);
+      return; // exit early
+    }
+    // Fallback to original random/queue logic
     let nextTrackObj = upcomingTrackRef.current;
-
     if (!nextTrackObj || nextTrackObj.videoId === pendingTrackRef.current?.videoId) {
       if (trackQueue.length > 0) {
         if (isShuffleEnabled) {
@@ -437,25 +550,51 @@ export function PlayerProvider({ children }) {
           : pool[0];
       }
     }
-
     if (nextTrackObj && trackQueue.length > 0) {
       const idx = trackQueue.findIndex((t) => t.videoId === nextTrackObj.videoId);
       if (idx !== -1) setCurrentTrackIndex(idx);
     }
-
     if (nextTrackObj) {
       selectAndPlayTrack(nextTrackObj.videoId, nextTrackObj.title, nextTrackObj.artist, nextTrackObj.thumbnail);
     }
-  }, [isShuffleEnabled, recommendationQueue, trackQueue, currentTrackIndex]);
+  }, [isShuffleEnabled, recommendationQueue, trackQueue, currentTrackIndex, fetchNextRandomTrack, preloadCoverImages, setPendingTrack, setTrackWindow, trackWindow]);
 
   const playPreviousTrack = useCallback(() => {
+    if (!isShuffleEnabled && trackQueue.length > 0) {
+      let prevIndex = (currentTrackIndex - 1) % trackQueue.length;
+      if (prevIndex < 0) prevIndex += trackQueue.length;
+      setCurrentTrackIndex(prevIndex);
+      
+      const getTrackSafe = (idx) => {
+        let safeIdx = idx % trackQueue.length;
+        if (safeIdx < 0) safeIdx += trackQueue.length;
+        return trackQueue[safeIdx] || null;
+      };
+      
+      const newWindow = [
+        getTrackSafe(prevIndex - 2),
+        getTrackSafe(prevIndex - 1),
+        getTrackSafe(prevIndex),
+        getTrackSafe(prevIndex + 1),
+        getTrackSafe(prevIndex + 2),
+      ];
+      
+      setTrackWindow(newWindow);
+      const newCurrent = newWindow[CENTER_INDEX];
+      if (newCurrent) {
+        selectAndPlayTrack(newCurrent.videoId, newCurrent.title, newCurrent.artist, newCurrent.thumbnail, true);
+      }
+      preloadCoverImages(newWindow);
+      return;
+    }
+    // Fallback to history navigation for shuffle or random mode
     if (trackHistory.length < 2) return;
     const historyCopy = [...trackHistory];
     historyCopy.pop();
     const previousTrack = historyCopy[historyCopy.length - 1];
     setTrackHistory(historyCopy);
     selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true);
-  }, [trackHistory]);
+  }, [trackHistory, isShuffleEnabled, trackQueue, fetchPrevRandomTrack, preloadCoverImages, setTrackWindow, trackWindow]);
 
   // Auto-Pre-Download & Pre-buffer Next Track in Queue/Recommendations for Instant 0-Latency Transition
   useEffect(() => {
@@ -568,7 +707,6 @@ export function PlayerProvider({ children }) {
       return;
     }
 
-    let isMounted = true;
     setIsLyricsLoading(true);
     setLyricsData(null);
     lastFetchedLyricsRef.current = { videoId: trackId, duration: roundedDuration };
@@ -579,22 +717,18 @@ export function PlayerProvider({ children }) {
       roundedDuration
     )
       .then((data) => {
-        if (isMounted) {
+        if (lastFetchedLyricsRef.current.videoId === trackId) {
           setLyricsData(data);
           setIsLyricsLoading(false);
         }
       })
       .catch((err) => {
         console.warn('Lyrics fetch failed:', err);
-        if (isMounted) {
+        if (lastFetchedLyricsRef.current.videoId === trackId) {
           setLyricsData(null);
           setIsLyricsLoading(false);
         }
       });
-
-    return () => {
-      isMounted = false;
-    };
   }, [pendingTrack?.videoId, pendingTrack?.title, roundedDuration]);
 
   const value = {
