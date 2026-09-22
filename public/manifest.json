@@ -3,7 +3,12 @@
   "short_name": "Play LooP",
   "description": "Stream and discover your favorite music with Play LooP.",
   "start_url": "/",
+  "id": "/",
+  "scope": "/",
   "display": "standalone",
+  "launch_handler": {
+    "client_mode": ["focus-existing", "auto"]
+  },
   "background_color": "#000000",
   "theme_color": "#000000",
   "orientation": "portrait-primary",
