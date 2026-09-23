@@ -20,7 +20,9 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 ## Tech Stack
 - **Frontend:** HTML5, CSS, Vanilla Js, React Js
 - **Backend:** Node.js, Express.js
-- **Media Processing:** `yt-dlp`, `ytmusic-api`
+- **Media Processing:** `saavncdn`
+- **Player:** `Play LooP Player`
+- **Recommendation System:** `Hybrid - Play-Loop + Last.fm + Saavn`
 - **Containerization:** Docker
 - **Deployment:** Render
 
