@@ -56,7 +56,8 @@ async function fetchJioSaavn(callParams) {
 	const res = await fetch(url.toString(), {
 		headers: {
 			"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-			"Cookie": "L=english"
+			"Cookie": "L=english",
+			"X-Forwarded-For": "103.15.253.250"
 		}
 	});
 	
