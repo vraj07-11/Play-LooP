@@ -48,9 +48,9 @@ export default function SearchPage() {
   const handleTrackClick = (track) => {
     selectAndPlayTrack(
       track.videoId,
-      track.title || "Unknown track",
-      track.artists || "Unknown artist",
-      `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`
+      track.title || track.name || "Unknown track",
+      typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist"),
+      track.thumbnail || '/logo.svg'
     );
   };
 
@@ -84,9 +84,9 @@ export default function SearchPage() {
             <p className="muted-text">No tracks found.</p>
           ) : (
             results.map((track, idx) => {
-              const title = track.name || "Unknown track";
-              const artist = track.artist?.name || "Unknown artist";
-              const thumbnail = track.thumbnails?.find((item) => item?.url)?.url || `https://img.youtube.com/vi/${track.videoId}/hqdefault.jpg`;
+              const title = track.title || track.name || "Unknown track";
+              const artist = typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist");
+              const thumbnail = track.thumbnail || track.thumbnails?.find((item) => item?.url)?.url || '/logo.svg';
               
               return (
                 <article 

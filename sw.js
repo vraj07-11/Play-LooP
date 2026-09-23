@@ -1,4 +1,4 @@
-const CACHE_NAME = 'play-loop-v3';
+const CACHE_NAME = 'play-loop-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -72,7 +72,11 @@ self.addEventListener('fetch', (event) => {
 
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+          if (event.request.url.startsWith('http')) {
+            try {
+              cache.put(event.request, responseToCache).catch(e => console.warn('Cache put error:', e));
+            } catch (e) {}
+          }
         });
 
         return networkResponse;

@@ -27,84 +27,84 @@ export const DEFAULT_PLAYLISTS = [
     playlistId: "QUERY:Arijit Singh",
     title: "Arijit Singh Hits",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/hhuX25Pstms/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 25
   },
   {
     playlistId: "QUERY:Latest Hindi Songs",
     title: "Latest Hindi Hits",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/V7LwfY5U550/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 30
   },
   {
     playlistId: "QUERY:Phonk Beats",
     title: "Phonk Drift & Bass",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/Zf4_cZ3Zq5E/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 20
   },
   {
     playlistId: "QUERY:Global Top Hits",
     title: "Global Top 50",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/kffacxfA7G4/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 40
   },
   {
     playlistId: "QUERY:Chill Lofi Beats",
     title: "Chill Lofi Mix",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/5qap5aO4i9A/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 25
   },
   {
     playlistId: "QUERY:Bollywood Romantic Songs",
     title: "Bollywood Romance",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/8N_1y32z4Yc/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 25
   },
   {
     playlistId: "QUERY:Punjabi Party Hits",
     title: "Punjabi Bangers",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/cl0a3i2wFcc/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 30
   },
   {
     playlistId: "QUERY:EDM Dance Hits",
     title: "EDM Dance Party",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/ALZHF5UqnU4/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 20
   },
   {
     playlistId: "QUERY:90s Hindi Hits",
     title: "90s Bollywood Classics",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/88d8b9d31-0/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 25
   },
   {
     playlistId: "QUERY:Workout Hype Beats",
     title: "Gym & Workout Hype",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/1_47KVJ914c/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 25
   },
   {
     playlistId: "QUERY:Indie India",
     title: "Indie India Discovery",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/0pA7v2e5p8Y/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 20
   },
   {
     playlistId: "QUERY:Sufi Melodies",
     title: "Soulful Sufi & Rock",
     author: "Play LooP",
-    thumbnail: "https://img.youtube.com/vi/8aA2_81z5wA/hqdefault.jpg",
+    thumbnail: "/logo.svg",
     count: 20
   }
 ];

@@ -24,14 +24,18 @@ if (fs.existsSync(path.join(__dirname, "dist"))) {
 
 // --- JioSaavn Helper Functions ---
 
+const CryptoJS = require("crypto-js");
+
 function decryptSaavnUrl(encryptedUrl) {
 	try {
-		const key = Buffer.from('38346591', 'utf8');
-		const decipher = crypto.createDecipheriv('des-ecb', key, null);
-		decipher.setAutoPadding(false);
-		let decrypted = decipher.update(encryptedUrl, 'base64', 'utf8');
-		decrypted += decipher.final('utf8');
-		return decrypted.replace(/\0|[\x01-\x08\x0b-\x0c\x0e-\x1f\x7f]/g, '');
+		const key = CryptoJS.enc.Utf8.parse('38346591');
+		const decrypted = CryptoJS.DES.decrypt({
+			ciphertext: CryptoJS.enc.Base64.parse(encryptedUrl)
+		}, key, {
+			mode: CryptoJS.mode.ECB,
+			padding: CryptoJS.pad.Pkcs7
+		});
+		return decrypted.toString(CryptoJS.enc.Utf8);
 	} catch (e) {
 		console.error("Decryption failed:", e);
 		return null;

@@ -26,7 +26,15 @@ export function PlayerProvider({ children }) {
     try {
       const saved = localStorage.getItem("playloop_recently_played");
       const parsed = saved ? JSON.parse(saved) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      if (Array.isArray(parsed)) {
+        // Drop old YouTube history to prevent playback crashes
+        if (parsed.some(t => t.videoId && t.videoId.length === 11)) {
+           localStorage.removeItem("playloop_recently_played");
+           return [];
+        }
+        return parsed;
+      }
+      return [];
     } catch (e) {
       return [];
     }

@@ -60,8 +60,8 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
         const data = await res.json();
         const mapped = data
           .map((song) => ({
-            title: song.name || "Unknown track",
-            artist: song.artist?.name || "Unknown artist"
+            title: song.title || song.name || "Unknown track",
+            artist: typeof song.artist === 'string' ? song.artist : (song.artist?.name || "Unknown artist")
           }))
           .filter((song, index, allSongs) => allSongs.findIndex((item) => item.title === song.title && item.artist === song.artist) === index)
           .slice(0, 6);
