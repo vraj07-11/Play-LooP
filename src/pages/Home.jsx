@@ -199,18 +199,20 @@ export default function Home() {
 
       {/* Recommended Playlists Section */}
       {loadingPlaylists ? (
-        <div className="mb-8 min-h-[220px] flex flex-col justify-center items-center">
-          <div className="infinity-loader-container py-8" role="status" aria-label="Curating playlists">
-            <div className="infinity-loader-wrapper">
-              <svg className="infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-                <path className="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
-                <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
-              </svg>
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-medium tracking-tight text-white">Recommended Playlists</h3>
+          </div>
+          <div className="carousel-wrapper relative group">
+            <div className="horizontal-scroll-row overflow-hidden">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="square-card animate-pulse pointer-events-none border-transparent bg-zinc-900/40">
+                  <div className="square-card-art-container bg-zinc-800/60"></div>
+                  <div className="h-4 bg-zinc-800/60 rounded w-3/4 mb-2 mt-1"></div>
+                  <div className="h-3 bg-zinc-800/60 rounded w-1/2"></div>
+                </div>
+              ))}
             </div>
-            <p className="infinity-loader-text">
-              <span>Curating playlists for you</span>
-              <span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
-            </p>
           </div>
         </div>
       ) : (

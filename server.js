@@ -7,7 +7,7 @@ const { spawn, execFile } = require("node:child_process");
 const { PassThrough } = require("node:stream");
 const { promisify } = require("node:util");
 
-const app = express();
+const app = express();	
 const port = process.env.PORT || 3000;
 const ytmusic = new YTMusic();
 const execFileAsync = promisify(execFile);
@@ -483,7 +483,16 @@ function shuffleArray(array) {
 	return arr;
 }
 
-app.get("/api/playlists", async (req, res) => {
+let playlistsCache = {
+	data: null,
+	lastFetched: 0,
+	isFetching: false
+};
+const PLAYLIST_CACHE_TTL = 3 * 60 * 60 * 1000; // 3 hours
+
+async function fetchPlaylistsBackground() {
+	if (playlistsCache.isFetching) return;
+	playlistsCache.isFetching = true;
 	try {
 		const categoryPool = [
 			{ query: "Arijit Singh", title: "Arijit Singh Hits", author: "Play LooP" },
@@ -537,7 +546,6 @@ app.get("/api/playlists", async (req, res) => {
 			};
 		};
 
-		// Batch requests in chunks of 3 to prevent memory and API connection spikes
 		const playlists = [];
 		const chunkSize = 3;
 		for (let i = 0; i < selectedCategories.length; i += chunkSize) {
@@ -546,11 +554,35 @@ app.get("/api/playlists", async (req, res) => {
 			playlists.push(...chunkResults);
 		}
 
-		res.json(playlists);
+		playlistsCache.data = playlists;
+		playlistsCache.lastFetched = Date.now();
 	} catch (error) {
-		console.error("Playlists fetch failed:", error);
-		res.status(500).json({ error: "Failed to fetch playlists" });
+		console.error("Background playlists fetch failed:", error);
+	} finally {
+		playlistsCache.isFetching = false;
 	}
+}
+
+app.get("/api/playlists", (req, res) => {
+	const now = Date.now();
+	
+	// If cache is fresh, return it instantly
+	if (playlistsCache.data && (now - playlistsCache.lastFetched < PLAYLIST_CACHE_TTL)) {
+		return res.json(playlistsCache.data);
+	}
+	
+	// Start background fetch if not already fetching
+	if (!playlistsCache.isFetching) {
+		fetchPlaylistsBackground();
+	}
+	
+	// Stale-while-revalidate: return stale data while new data fetches
+	if (playlistsCache.data) {
+		return res.json(playlistsCache.data);
+	}
+	
+	// Cold Start / First load: Return empty array instantly so the frontend falls back to default playlists
+	return res.json([]);
 });
 
 app.get("/api/playlist", async (req, res) => {
