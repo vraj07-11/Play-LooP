@@ -24,88 +24,74 @@ function shuffleArray(array) {
 
 export const DEFAULT_PLAYLISTS = [
   {
-    playlistId: "QUERY:Arijit Singh",
-    title: "Arijit Singh Hits",
+    playlistId: "947987697",
+    title: "Global Pop",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 25
-  },
-  {
-    playlistId: "QUERY:Latest Hindi Songs",
-    title: "Latest Hindi Hits",
-    author: "Play LooP",
-    thumbnail: "/logo.svg",
+    thumbnail: "https://c.saavncdn.com/editorial/GlobalPop_20260608125844_500x500.jpg",
     count: 30
   },
   {
-    playlistId: "QUERY:Phonk Beats",
-    title: "Phonk Drift & Bass",
+    playlistId: "1134543272",
+    title: "India Superhits Top 50",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 20
+    thumbnail: "https://c.saavncdn.com/editorial/Hindi-IndiaSuperhitsTop50_20260911054516_500x500.jpg",
+    count: 50
   },
   {
-    playlistId: "QUERY:Global Top Hits",
-    title: "Global Top 50",
+    playlistId: "47599074",
+    title: "Now Trending",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
+    thumbnail: "https://c.saavncdn.com/editorial/NowTrending_20260423085344_500x500.jpg",
+    count: 30
+  },
+  {
+    playlistId: "1202559627",
+    title: "Viral Desi Dance Hits",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/ViralDesiDanceHits_20260723071136_500x500.jpg",
     count: 40
   },
   {
-    playlistId: "QUERY:Chill Lofi Beats",
-    title: "Chill Lofi Mix",
+    playlistId: "63116930",
+    title: "English 2010s",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 25
+    thumbnail: "https://c.saavncdn.com/editorial/charts_English2010s_178363_20240408065247_500x500.jpg",
+    count: 50
   },
   {
-    playlistId: "QUERY:Bollywood Romantic Songs",
-    title: "Bollywood Romance",
+    playlistId: "48189087",
+    title: "English Viral Hits",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 25
-  },
-  {
-    playlistId: "QUERY:Punjabi Party Hits",
-    title: "Punjabi Bangers",
-    author: "Play LooP",
-    thumbnail: "/logo.svg",
+    thumbnail: "https://c.saavncdn.com/editorial/EnglishViralHits_20260902085244_500x500.jpg",
     count: 30
   },
   {
-    playlistId: "QUERY:EDM Dance Hits",
-    title: "EDM Dance Party",
+    playlistId: "1210453303",
+    title: "Latest Hindi Songs",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 20
+    thumbnail: "https://c.saavncdn.com/editorial/LatestHindiSongs_20260326041941_500x500.jpg",
+    count: 30
   },
   {
-    playlistId: "QUERY:90s Hindi Hits",
-    title: "90s Bollywood Classics",
+    playlistId: "1167751266",
+    title: "Hindi 1990s",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 25
+    thumbnail: "https://c.saavncdn.com/editorial/charts_Hindi1990s_136920_20240408061858_500x500.jpg",
+    count: 50
   },
   {
-    playlistId: "QUERY:Workout Hype Beats",
-    title: "Gym & Workout Hype",
+    playlistId: "4144832",
+    title: "Punjabi Hit Songs",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 25
+    thumbnail: "https://c.saavncdn.com/editorial/PunjabiHitSongs_20260710115246_500x500.jpg",
+    count: 50
   },
   {
-    playlistId: "QUERY:Indie India",
-    title: "Indie India Discovery",
+    playlistId: "1214335916",
+    title: "Lofi India Hits",
     author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 20
-  },
-  {
-    playlistId: "QUERY:Sufi Melodies",
-    title: "Soulful Sufi & Rock",
-    author: "Play LooP",
-    thumbnail: "/logo.svg",
-    count: 20
+    thumbnail: "https://c.saavncdn.com/editorial/LofiIndiaHits_20240307035844_500x500.jpg",
+    count: 40
   }
 ];
 

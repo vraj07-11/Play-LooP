@@ -169,8 +169,16 @@ export function PlayerProvider({ children }) {
     setUpcomingTrack(track);
   };
 
+  const isRepeatEnabledRef = useRef(isRepeatEnabled);
+  useEffect(() => {
+    isRepeatEnabledRef.current = isRepeatEnabled;
+  }, [isRepeatEnabled]);
+
+  const hasRepeatedCurrentTrackRef = useRef(false);
+
   useEffect(() => {
     pendingTrackRef.current = pendingTrack;
+    hasRepeatedCurrentTrackRef.current = false;
   }, [pendingTrack]);
   
   const hasPrevious = trackHistory.length > 1;
@@ -230,7 +238,14 @@ export function PlayerProvider({ children }) {
     };
 
     const handleEnded = () => {
-      playNextTrack();
+      if (isRepeatEnabledRef.current && !hasRepeatedCurrentTrackRef.current) {
+        hasRepeatedCurrentTrackRef.current = true;
+        nativeAudioPlayer.current.currentTime = 0;
+        nativeAudioPlayer.current.play().catch(e => console.error(e));
+        setIsRepeatEnabled(false);
+      } else {
+        playNextTrack();
+      }
     };
 
     const handleError = (e) => {

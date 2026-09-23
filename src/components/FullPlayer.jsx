@@ -63,7 +63,10 @@ export default function FullPlayer({
     const rawThumb = pendingTrack.thumbnail || '';
 
     const candidates = [];
-    if (videoId) {
+    if (rawThumb && rawThumb.includes('saavncdn.com')) {
+      candidates.push(rawThumb.replace('150x150', '500x500'));
+      candidates.push(rawThumb);
+    } else if (videoId && (rawThumb.includes('ytimg.com') || !rawThumb)) {
       candidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
@@ -84,7 +87,10 @@ export default function FullPlayer({
     const rawThumb = pendingTrack.thumbnail || '';
 
     const candidates = [];
-    if (videoId) {
+    if (rawThumb && rawThumb.includes('saavncdn.com')) {
+      candidates.push(rawThumb.replace('150x150', '500x500'));
+      candidates.push(rawThumb);
+    } else if (videoId && (rawThumb.includes('ytimg.com') || !rawThumb)) {
       candidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
@@ -447,14 +453,14 @@ export default function FullPlayer({
 
         {/* Media Control Toolbar */}
         <div className="w-full flex items-center justify-between px-1 relative z-20">
-          {/* Shuffle */}
+          {/* Repeat */}
           <button
             type="button"
-            className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(isShuffleEnabled)}`}
-            onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
-            aria-label="Shuffle"
+            className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(isRepeatEnabled)}`}
+            onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
+            aria-label="Repeat"
           >
-            <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
+            <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
           {/* Previous Track */}
@@ -522,14 +528,14 @@ export default function FullPlayer({
             <SkipForward className="w-6 h-6 sm:w-7 sm:h-7" />
           </button>
 
-          {/* Repeat */}
+          {/* Shuffle */}
           <button
             type="button"
-            className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(isRepeatEnabled)}`}
-            onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
-            aria-label="Repeat"
+            className={`p-2 sm:p-2.5 rounded-full transition-all cursor-pointer ${getSecondaryBtnClass(isShuffleEnabled)}`}
+            onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
+            aria-label="Shuffle"
           >
-            <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6" />
+            <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
       </main>

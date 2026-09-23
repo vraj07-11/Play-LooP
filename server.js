@@ -199,16 +199,16 @@ async function fetchPlaylistsBackground() {
 	try {
 		// JioSaavn Playlist IDs (Top charts and popular mixes)
 		const categoryPool = [
-			{ id: "107604313", title: "Top JioSaavn Hits" }, // Hindi Hit Songs
-			{ id: "82914609", title: "Bollywood Romance" }, 
-			{ id: "153492", title: "Punjabi Hits" },
-			{ id: "153472", title: "Workout Hits" },
-			{ id: "103632947", title: "Lofi Chill" },
-			{ id: "155422452", title: "Trending Now" },
-			{ id: "158284", title: "Arijit Singh Hits" },
-			{ id: "111956041", title: "Desi Hip Hop" },
-			{ id: "153488", title: "90s Bollywood" },
-			{ id: "103233261", title: "Sufi Classics" }
+			{ id: "947987697", title: "Global Pop" },
+			{ id: "1134543272", title: "India Superhits Top 50" },
+			{ id: "47599074", title: "Now Trending" },
+			{ id: "1202559627", title: "Viral Desi Dance Hits" },
+			{ id: "63116930", title: "English 2010s" },
+			{ id: "48189087", title: "English Viral Hits" },
+			{ id: "1210453303", title: "Latest Hindi Songs" },
+			{ id: "1167751266", title: "Hindi 1990s" },
+			{ id: "4144832", title: "Punjabi Hit Songs" },
+			{ id: "1214335916", title: "Lofi India Hits" }
 		];
 
 		const selectedCategories = shuffleArray(categoryPool).slice(0, 10);
@@ -217,13 +217,13 @@ async function fetchPlaylistsBackground() {
 		for (const cat of selectedCategories) {
 			try {
 				const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: cat.id });
-				if (data && data.listid) {
+				if (data && data.id) {
 					playlists.push({
-						playlistId: data.listid,
-						title: cat.title || data.listname,
+						playlistId: data.id,
+						title: cat.title || data.title,
 						author: "Play LooP",
 						thumbnail: (data.image || "").replace("150x150", "500x500") || "/logo.svg",
-						count: parseInt(data.list_count || "20", 10)
+						count: parseInt(data.list_count || data.list?.length || "20", 10)
 					});
 				}
 			} catch (e) {
@@ -273,22 +273,22 @@ app.get("/api/playlist", async (req, res) => {
 		}
 
 		const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: playlistId });
-		if (!data || !data.listid) {
+		if (!data || !data.id) {
 			throw new Error("Playlist not found");
 		}
 		
-		const tracks = (data.songs || []).map(formatSong);
+		const tracks = (data.list || []).map(formatSong);
 		
 		return res.json({
-			playlistId: data.listid,
-			title: data.listname || "Featured Playlist",
-			description: "Curated collection",
+			playlistId: data.id,
+			title: data.title || "Featured Playlist",
+			description: data.subtitle || "Curated collection",
 			thumbnail: (data.image || "").replace("150x150", "500x500") || tracks[0]?.thumbnail || "/logo.svg",
 			tracks
 		});
 	} catch (error) {
-		console.error("Playlist details failed:", error);
-		res.status(502).json({ error: "Failed to fetch playlist details" });
+		console.error("Playlist details failed:", error.stack || error);
+		res.status(502).json({ error: "Failed to fetch playlist details", details: error.message });
 	}
 });
 
