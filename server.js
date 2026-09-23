@@ -3,8 +3,9 @@ const fs = require("node:fs");
 const express = require("express");
 const cors = require("cors");
 const crypto = require("node:crypto");
+const CryptoJS = require("crypto-js");
 
-const app = express();	
+const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
@@ -23,8 +24,6 @@ if (fs.existsSync(path.join(__dirname, "dist"))) {
 }
 
 // --- JioSaavn Helper Functions ---
-
-const CryptoJS = require("crypto-js");
 
 function decryptSaavnUrl(encryptedUrl) {
 	try {
@@ -63,7 +62,6 @@ async function fetchJioSaavn(callParams) {
 	
 	if (!res.ok) throw new Error(`JioSaavn API Error: ${res.status}`);
 	const text = await res.text();
-	// JioSaavn sometimes returns JSON wrapped in HTML comments, though with api_version=4 it should be clean
 	try {
 		return JSON.parse(text);
 	} catch (e) {
@@ -119,7 +117,6 @@ app.get("/api/search", async (req, res) => {
 });
 
 app.get("/api/audio/preload", (req, res) => {
-	// Not needed with direct CDN URLs, just return ok
 	res.json({ ok: true });
 });
 
@@ -147,30 +144,134 @@ app.get("/api/audio", async (req, res) => {
 	}
 });
 
-app.get("/api/recommendations", async (req, res) => {
-	const videoId = String(req.query.id || "").trim();
-	if (!videoId) return res.status(400).json({ error: "Video ID is required" });
+// Load .env variables if present
+if (fs.existsSync(path.join(__dirname, ".env"))) {
+	try {
+		const envContent = fs.readFileSync(path.join(__dirname, ".env"), "utf8");
+		envContent.split("\n").forEach((line) => {
+			const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+			if (match) {
+				const key = match[1];
+				let value = match[2] || "";
+				if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+					value = value.slice(1, -1);
+				}
+				process.env[key] = value.trim();
+			}
+		});
+	} catch (e) {
+		console.warn("Failed to parse .env file:", e.message);
+	}
+}
+
+// In-Memory Recommendation Cache (24-Hour TTL)
+const recoCache = new Map();
+const RECO_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+async function fetchLastFmSimilar(artist, title) {
+	const apiKey = process.env.LASTFM_API_KEY;
+	if (!apiKey || !artist || !title) return [];
 
 	try {
-		const data = await fetchJioSaavn({ __call: "reco.getreco", pid: videoId });
-		if (Array.isArray(data) && data.length > 0) {
-			return res.json(data.map(formatSong));
+		const url = new URL("https://ws.audioscrobbler.com/2.0/");
+		url.searchParams.set("method", "track.getsimilar");
+		url.searchParams.set("artist", artist);
+		url.searchParams.set("track", title);
+		url.searchParams.set("api_key", apiKey);
+		url.searchParams.set("format", "json");
+		url.searchParams.set("limit", "12");
+
+		const res = await fetch(url.toString(), {
+			headers: { "User-Agent": "PlayLooP-MusicApp/1.0" }
+		});
+
+		if (!res.ok) throw new Error(`Last.fm API returned ${res.status}`);
+		const data = await res.json();
+		const tracks = data?.similartracks?.track;
+		if (!Array.isArray(tracks)) return [];
+
+		return tracks.map((t) => ({
+			title: t.name,
+			artist: typeof t.artist === "object" ? t.artist.name : t.artist
+		}));
+	} catch (err) {
+		console.warn("[Last.fm API] Recommendation fetch warning:", err.message);
+		return [];
+	}
+}
+
+async function resolveLastFmTracksToSaavn(similarList) {
+	if (!Array.isArray(similarList) || similarList.length === 0) return [];
+
+	// Limit parallel resolution to top 8 candidates for speed
+	const candidates = similarList.slice(0, 8);
+	const resolvedPromises = candidates.map(async (item) => {
+		try {
+			const query = `${item.title} ${item.artist}`.trim();
+			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "1", p: "1" });
+			if (searchData && searchData.results && searchData.results[0]) {
+				return formatSong(searchData.results[0]);
+			}
+		} catch (e) {
+			// Ignore resolution errors for individual tracks
 		}
-		
-		// Fallback: search artist if reco fails
-		const songDetails = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });
-		const songData = songDetails[videoId] || (songDetails.songs && songDetails.songs[0]);
-		if (songData) {
-			const artist = songData.more_info?.primary_artists || songData.subtitle;
-			if (artist) {
-				const searchData = await fetchJioSaavn({ __call: "search.getResults", q: artist, n: "10", p: "1" });
+		return null;
+	});
+
+	const results = await Promise.all(resolvedPromises);
+	return results.filter(Boolean);
+}
+
+app.get("/api/recommendations", async (req, res) => {
+	const videoId = String(req.query.id || "").trim();
+	const artist = String(req.query.artist || "").trim();
+	const title = String(req.query.title || "").trim();
+
+	if (!videoId && !artist && !title) {
+		return res.status(400).json({ error: "Video ID or song metadata required" });
+	}
+
+	const cacheKey = (videoId || `${artist}_${title}`).toLowerCase();
+	const cachedEntry = recoCache.get(cacheKey);
+	if (cachedEntry && (Date.now() - cachedEntry.timestamp < RECO_CACHE_TTL)) {
+		return res.json(cachedEntry.data);
+	}
+
+	try {
+		let recommendations = [];
+
+		// 1. Try Last.fm Similar Tracks first if API Key is configured and track metadata exists
+		if (process.env.LASTFM_API_KEY && artist && title) {
+			const lastFmTracks = await fetchLastFmSimilar(artist, title);
+			if (lastFmTracks.length > 0) {
+				recommendations = await resolveLastFmTracksToSaavn(lastFmTracks);
+			}
+		}
+
+		// 2. Fallback to JioSaavn reco.getreco if Last.fm yielded no candidates
+		if (recommendations.length === 0 && videoId) {
+			const recoData = await fetchJioSaavn({ __call: "reco.getreco", pid: videoId });
+			if (Array.isArray(recoData) && recoData.length > 0) {
+				recommendations = recoData.map(formatSong);
+			}
+		}
+
+		// 3. Fallback: Search JioSaavn by artist/title if still empty
+		if (recommendations.length === 0) {
+			const cleanArtist = artist ? artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
+			const query = cleanArtist || title;
+			if (query) {
+				const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "30", p: "1" });
 				if (searchData && searchData.results) {
-					return res.json(searchData.results.map(formatSong));
+					recommendations = searchData.results.map(formatSong);
 				}
 			}
 		}
-		
-		res.json([]);
+
+		// Save to 24-Hour Cache
+		recoCache.set(cacheKey, { data: recommendations, timestamp: Date.now() });
+
+		res.json(recommendations);
 	} catch (error) {
 		console.error("Recommendations failed:", error);
 		res.json([]);
