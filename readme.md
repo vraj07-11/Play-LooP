@@ -22,7 +22,7 @@ Check out the live application here: [play-loop.onrender.com](https://play-loop.
 - **Backend:** Node.js, Express.js
 - **Media Processing:** `saavncdn`
 - **Player:** `Play LooP Player`
-- **Recommendation System:** `Hybrid - Play-Loop + Last.fm + Saavn`
+- **Recommendation System:** `Play-LooP`, `Last.fm`, `Saavn`
 - **Containerization:** Docker
 - **Deployment:** Render
 
