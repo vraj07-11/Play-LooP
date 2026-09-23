@@ -79,7 +79,6 @@ export function PlayerProvider({ children }) {
       setTrackHistory(h => h.slice(0, -1));
       return prev;
     }
-    // fallback to next random (will be placed at start)
     return fetchNextRandomTrack();
   }, [trackHistory, fetchNextRandomTrack]);
 
@@ -118,7 +117,6 @@ export function PlayerProvider({ children }) {
         preloadCoverImages(filled);
       } else {
         const initial = [null, null, pendingTrack, null, null];
-        // fill empty slots with random tracks
         const fill = (arr) => {
           const newArr = [...arr];
           for (let i = 0; i < newArr.length; i++) {
@@ -136,7 +134,6 @@ export function PlayerProvider({ children }) {
     }
   }, [pendingTrack, trackWindow.length, fetchNextRandomTrack, preloadCoverImages, isShuffleEnabled, trackQueue, currentTrackIndex]);
 
-  // ----- Existing player button style state -----
   const [playerButtonStyle, setPlayerButtonStyleState] = useState(() => {
     try {
       return localStorage.getItem("playloop_button_style") || "white";
@@ -156,8 +153,6 @@ export function PlayerProvider({ children }) {
 
   const nativeAudioPlayer = useRef(new Audio());
   const upcomingAudioPlayer = useRef(new Audio());
-  const youtubePlayer = useRef(null);
-  const currentActiveEngine = useRef("native");
   const pendingTrackRef = useRef(null);
   const upcomingTrackRef = useRef(null);
 
@@ -170,7 +165,6 @@ export function PlayerProvider({ children }) {
     pendingTrackRef.current = pendingTrack;
   }, [pendingTrack]);
   
-  // Basic states for button disabling
   const hasPrevious = trackHistory.length > 1;
   const hasNext = trackQueue.length > 0 || recommendationQueue.length > 0;
 
@@ -182,19 +176,15 @@ export function PlayerProvider({ children }) {
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.setActionHandler('play', () => {
-          if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+          if (nativeAudioPlayer.current) {
             nativeAudioPlayer.current.play().catch(console.error);
-          } else if (youtubePlayer.current?.playVideo) {
-            youtubePlayer.current.playVideo();
           }
           setIsPlaying(true);
           setPlayerStatus("Playing");
         });
         navigator.mediaSession.setActionHandler('pause', () => {
-          if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+          if (nativeAudioPlayer.current) {
             nativeAudioPlayer.current.pause();
-          } else if (youtubePlayer.current?.pauseVideo) {
-            youtubePlayer.current.pauseVideo();
           }
           setIsPlaying(false);
           setPlayerStatus("Paused");
@@ -213,75 +203,8 @@ export function PlayerProvider({ children }) {
       }
     }
     
-    // Fallback handler when iframe fails (e.g. video embedding disabled)
-    const fallbackToNativeStream = (trackObj, isFromHistory = false) => {
-      console.warn(`[Player Engine] Fallback to backend yt-dlp stream for track: ${trackObj.title}`);
-      currentActiveEngine.current = "native";
-      const targetUrl = getAudioUrl(trackObj.videoId);
-
-      try {
-        if (youtubePlayer.current && typeof youtubePlayer.current.stopVideo === 'function') {
-          youtubePlayer.current.stopVideo();
-        }
-      } catch (e) {}
-
-      nativeAudioPlayer.current.src = targetUrl;
-      nativeAudioPlayer.current.load();
-      nativeAudioPlayer.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-          setPlayerStatus("Playing");
-        })
-        .catch((err) => {
-          console.error("[Audio Engine] Fallback native playback failed:", err);
-          setPlayerStatus("Playback failed");
-          setIsPlaying(false);
-        });
-    };
-
-    // Initialize YouTube Player as Primary Engine
-    window.onYouTubeIframeAPIReady = () => {
-      if (youtubePlayer.current || !document.getElementById("youtubePlayer")) return;
-      try {
-        youtubePlayer.current = new window.YT.Player("youtubePlayer", {
-          height: "1",
-          width: "1",
-          playerVars: { autoplay: 1, controls: 0, disablekb: 1, fs: 0, origin: window.location.origin },
-          events: {
-            onReady: () => console.log("YouTube Player primary engine ready"),
-            onStateChange: (event) => {
-               if (currentActiveEngine.current === "youtube") {
-                  if (event.data === window.YT.PlayerState.ENDED) {
-                     playNextTrack();
-                  } else if (event.data === window.YT.PlayerState.PLAYING) {
-                     setIsPlaying(true);
-                     setPlayerStatus("Playing");
-                  } else if (event.data === window.YT.PlayerState.PAUSED) {
-                     setIsPlaying(false);
-                     setPlayerStatus("Paused");
-                  }
-               }
-            },
-            onError: (event) => {
-              console.warn(`[YouTube Iframe] Error event ${event.data}. Triggering backend yt-dlp stream fallback.`);
-              if (pendingTrackRef.current) {
-                fallbackToNativeStream(pendingTrackRef.current);
-              }
-            }
-          }
-        });
-      } catch (err) {
-        console.warn("YouTube player init error:", err);
-      }
-    };
-    
-    if (window.YT && window.YT.Player) {
-      window.onYouTubeIframeAPIReady();
-    }
-    
     const handleTimeUpdate = () => {
-      if (currentActiveEngine.current === "native" && Number.isFinite(nativeAudioPlayer.current.duration) && nativeAudioPlayer.current.duration > 0) {
+      if (Number.isFinite(nativeAudioPlayer.current.duration) && nativeAudioPlayer.current.duration > 0) {
         setCurrentTime(nativeAudioPlayer.current.currentTime);
         setDuration(nativeAudioPlayer.current.duration);
         setProgress((nativeAudioPlayer.current.currentTime / nativeAudioPlayer.current.duration) * 100);
@@ -303,11 +226,9 @@ export function PlayerProvider({ children }) {
     };
 
     const handleError = (e) => {
-      if (currentActiveEngine.current === "native") {
-        console.error("[Audio Engine] Native audio playback error:", e);
-        setPlayerStatus("Playback failed");
-        setIsPlaying(false);
-      }
+      console.error("[Audio Engine] Native audio playback error:", e);
+      setPlayerStatus("Playback failed");
+      setIsPlaying(false);
     };
     
     const nativeAudio = nativeAudioPlayer.current;
@@ -321,28 +242,6 @@ export function PlayerProvider({ children }) {
     upcomingAudio.addEventListener('ended', handleEnded);
     upcomingAudio.addEventListener('error', handleError);
 
-    const ytInterval = setInterval(() => {
-      if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.getCurrentTime) {
-         const cTime = youtubePlayer.current.getCurrentTime();
-         const dur = youtubePlayer.current.getDuration();
-         if (dur > 0) {
-            setCurrentTime(cTime);
-            setDuration(dur);
-            setProgress((cTime / dur) * 100);
-
-            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
-              try {
-                navigator.mediaSession.setPositionState({
-                  duration: dur,
-                  playbackRate: 1,
-                  position: cTime
-                });
-              } catch (e) {}
-            }
-         }
-      }
-    }, 500);
-
     return () => {
       nativeAudio.removeEventListener('timeupdate', handleTimeUpdate);
       nativeAudio.removeEventListener('ended', handleEnded);
@@ -350,16 +249,13 @@ export function PlayerProvider({ children }) {
       upcomingAudio.removeEventListener('timeupdate', handleTimeUpdate);
       upcomingAudio.removeEventListener('ended', handleEnded);
       upcomingAudio.removeEventListener('error', handleError);
-      clearInterval(ytInterval);
     };
   }, []);
 
   const playPause = useCallback(() => {
     if (isPlaying) {
-      if (currentActiveEngine.current === "native") {
+      if (nativeAudioPlayer.current) {
         nativeAudioPlayer.current.pause();
-      } else if (youtubePlayer.current) {
-        youtubePlayer.current.pauseVideo();
       }
       setIsPlaying(false);
       setPlayerStatus("Paused");
@@ -367,10 +263,8 @@ export function PlayerProvider({ children }) {
         navigator.mediaSession.playbackState = "paused";
       }
     } else {
-      if (currentActiveEngine.current === "native") {
+      if (nativeAudioPlayer.current) {
         nativeAudioPlayer.current.play().catch(e => console.error(e));
-      } else if (youtubePlayer.current) {
-        youtubePlayer.current.playVideo();
       }
       setIsPlaying(true);
       setPlayerStatus("Playing");
@@ -388,12 +282,6 @@ export function PlayerProvider({ children }) {
         nativeAudioPlayer.current.src = "";
       }
     } catch (e) {}
-
-    try {
-      if (youtubePlayer.current && typeof youtubePlayer.current.stopVideo === 'function') {
-        youtubePlayer.current.stopVideo();
-      }
-    } catch (e) {}
   };
 
   const applyMediaSessionMetadata = (title, artist, thumbnail, videoId) => {
@@ -404,7 +292,7 @@ export function PlayerProvider({ children }) {
           artist: artist || "Play LooP",
           album: "Play LooP",
           artwork: [
-            { src: thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`, sizes: "512x512", type: "image/jpeg" }
+            { src: thumbnail || '/logo.svg', sizes: "512x512", type: "image/jpeg" }
           ]
         });
         navigator.mediaSession.playbackState = "playing";
@@ -433,37 +321,15 @@ export function PlayerProvider({ children }) {
 
     applyMediaSessionMetadata(title, artist, thumbnail, videoId);
 
-    // Primary Playback Engine: Hidden YouTube Iframe
-    if (youtubePlayer.current && typeof youtubePlayer.current.loadVideoById === "function") {
-      console.log(`[Audio Engine] Playing track (${title}) via primary Hidden YouTube Iframe...`);
-      currentActiveEngine.current = "youtube";
-      try {
-        youtubePlayer.current.loadVideoById(videoId);
-        setIsPlaying(true);
-        setPlayerStatus("Playing");
-      } catch (err) {
-        console.warn("[Audio Engine] YouTube Iframe load failed, resorting to backend yt-dlp stream:", err);
-        const targetUrl = getAudioUrl(videoId);
-        currentActiveEngine.current = "native";
-        nativeAudioPlayer.current.src = targetUrl;
-        nativeAudioPlayer.current.load();
-        nativeAudioPlayer.current.play().then(() => {
-          setIsPlaying(true);
-          setPlayerStatus("Playing");
-        }).catch(console.error);
-      }
-    } else {
-      // Fallback: Backend yt-dlp Audio Stream
-      console.log(`[Audio Engine] YouTube Iframe player not available yet. Streaming via backend yt-dlp...`);
-      const targetUrl = getAudioUrl(videoId);
-      currentActiveEngine.current = "native";
-      nativeAudioPlayer.current.src = targetUrl;
-      nativeAudioPlayer.current.load();
-      nativeAudioPlayer.current.play().then(() => {
-        setIsPlaying(true);
-        setPlayerStatus("Playing");
-      }).catch(console.error);
-    }
+    // Playback using Native Audio with direct JioSaavn URL
+    console.log(`[Audio Engine] Playing track (${title}) via native audio stream...`);
+    const targetUrl = getAudioUrl(videoId);
+    nativeAudioPlayer.current.src = targetUrl;
+    nativeAudioPlayer.current.load();
+    nativeAudioPlayer.current.play().then(() => {
+      setIsPlaying(true);
+      setPlayerStatus("Playing");
+    }).catch(console.error);
 
     // Recommendations for Queue
     setTimeout(() => {
@@ -478,8 +344,8 @@ export function PlayerProvider({ children }) {
                   .map((t) => ({
                     videoId: t.videoId,
                     title: t.title || "Unknown track",
-                    artist: t.artists || "Unknown artist",
-                    thumbnail: `https://img.youtube.com/vi/${t.videoId}/hqdefault.jpg`
+                    artist: t.artist || "Unknown artist",
+                    thumbnail: t.thumbnail || '/logo.svg'
                   }))
               );
             }
@@ -622,13 +488,8 @@ export function PlayerProvider({ children }) {
     setUpcoming(nextTrackObj);
 
     if (nextTrackObj?.videoId && nextTrackObj.videoId !== pendingTrack.videoId) {
-      console.log(`[Audio Engine] Auto pre-downloading & preloading next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
-      // 1. Server pre-download & direct URL cache trigger
-      fetchApi(`/api/audio/preload?id=${encodeURIComponent(nextTrackObj.videoId)}`).catch((err) => {
-        console.warn("[Audio Engine] Preload trigger warning:", err);
-      });
-
-      // 2. Client browser audio pre-buffer
+      console.log(`[Audio Engine] Auto pre-buffering next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
+      // Client browser audio pre-buffer
       if (upcomingAudioPlayer.current) {
         upcomingAudioPlayer.current.preload = "auto";
         upcomingAudioPlayer.current.src = getAudioUrl(nextTrackObj.videoId);
@@ -639,16 +500,10 @@ export function PlayerProvider({ children }) {
 
   const seekBy = (seconds) => {
     if (!Number.isFinite(duration) || duration <= 0) return;
-    if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+    if (nativeAudioPlayer.current) {
       const cTime = nativeAudioPlayer.current.currentTime || currentTime;
       const newTime = Math.max(0, Math.min(duration, cTime + seconds));
       nativeAudioPlayer.current.currentTime = newTime;
-      setCurrentTime(newTime);
-      setProgress((newTime / duration) * 100);
-    } else if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.seekTo) {
-      const cTime = youtubePlayer.current.getCurrentTime ? youtubePlayer.current.getCurrentTime() : currentTime;
-      const newTime = Math.max(0, Math.min(duration, cTime + seconds));
-      youtubePlayer.current.seekTo(newTime, true);
       setCurrentTime(newTime);
       setProgress((newTime / duration) * 100);
     }
@@ -659,12 +514,8 @@ export function PlayerProvider({ children }) {
     if (isNaN(numericPercent) || !Number.isFinite(duration) || duration <= 0) return;
     const newTime = (numericPercent / 100) * duration;
     
-    if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+    if (nativeAudioPlayer.current) {
       nativeAudioPlayer.current.currentTime = newTime;
-      setCurrentTime(newTime);
-      setProgress(numericPercent);
-    } else if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.seekTo) {
-      youtubePlayer.current.seekTo(newTime, true);
       setCurrentTime(newTime);
       setProgress(numericPercent);
     }
@@ -672,12 +523,8 @@ export function PlayerProvider({ children }) {
 
   const seekToTime = (timeInSeconds) => {
     const targetTime = Math.max(0, Math.min(duration || 3600, timeInSeconds));
-    if (currentActiveEngine.current === "native" && nativeAudioPlayer.current) {
+    if (nativeAudioPlayer.current) {
       nativeAudioPlayer.current.currentTime = targetTime;
-      setCurrentTime(targetTime);
-      if (duration > 0) setProgress((targetTime / duration) * 100);
-    } else if (currentActiveEngine.current === "youtube" && youtubePlayer.current?.seekTo) {
-      youtubePlayer.current.seekTo(targetTime, true);
       setCurrentTime(targetTime);
       if (duration > 0) setProgress((targetTime / duration) * 100);
     }

@@ -109,9 +109,6 @@ function App() {
         </section>
       </main>
       <Player />
-      <div aria-hidden="true" style={{ display: 'none' }}>
-        <div className="youtube-player" id="youtubePlayer"></div>
-      </div>
     </div>
   );
 }
