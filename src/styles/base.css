@@ -38,7 +38,7 @@ footer,
 img {
   -webkit-user-drag: none;
   user-drag: none;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 /* Enable text selection inside input fields and textboxes */
