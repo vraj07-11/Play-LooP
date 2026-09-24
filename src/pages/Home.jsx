@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchRecommendedPlaylists, fetchPlaylistDetails } from '../services/api.js';
+import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists } from '../services/api.js';
 import Carousel from '../components/Carousel';
-import { ArrowLeft, Play } from 'lucide-react';
+import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight } from 'lucide-react';
 
 export default function Home() {
   const [greeting, setGreeting] = useState('');
@@ -10,6 +10,11 @@ export default function Home() {
   const [loadingPlaylists, setLoadingPlaylists] = useState(true);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [loadingPlaylistDetails, setLoadingPlaylistDetails] = useState(false);
+  
+  const [extraMadeForYou, setExtraMadeForYou] = useState([]);
+  const [extraPopularAlbums, setExtraPopularAlbums] = useState([]);
+  const [loadingMoreMadeForYou, setLoadingMoreMadeForYou] = useState(false);
+  const [loadingMorePopularAlbums, setLoadingMorePopularAlbums] = useState(false);
 
   const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [] } = usePlayer();
 
@@ -39,6 +44,32 @@ export default function Home() {
       isMounted = false;
     };
   }, []);
+
+  const loadMoreMadeForYou = async () => {
+    if (loadingMoreMadeForYou) return;
+    setLoadingMoreMadeForYou(true);
+    try {
+      const more = await fetchMoreDynamicPlaylists(4);
+      setExtraMadeForYou(prev => [...prev, ...more]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMoreMadeForYou(false);
+    }
+  };
+
+  const loadMorePopularAlbums = async () => {
+    if (loadingMorePopularAlbums) return;
+    setLoadingMorePopularAlbums(true);
+    try {
+      const more = await fetchMoreDynamicPlaylists(5);
+      setExtraPopularAlbums(prev => [...prev, ...more]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingMorePopularAlbums(false);
+    }
+  };
 
   useEffect(() => {
     const handlePopState = (e) => {
@@ -91,42 +122,42 @@ export default function Home() {
   // If a playlist is selected, render the Playlist Details View
   if (selectedPlaylist) {
     return (
-      <div className="max-w-5xl mx-auto pb-12 select-none">
+      <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-4 select-none">
         <button
           type="button"
           onClick={handleBackToHome}
-          className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 text-white rounded-full text-sm transition cursor-pointer select-none"
+          className="inline-flex items-center gap-2 mb-8 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-sm font-medium transition cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </button>
 
-        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 mb-8 p-6 bg-gradient-to-b from-zinc-800/60 to-zinc-900/60 rounded-2xl border border-zinc-800">
+        <div className="flex flex-col md:flex-row items-start md:items-end gap-8 mb-12">
           <img
             src={selectedPlaylist.thumbnail || '/logo.svg'}
             alt={selectedPlaylist.title}
-            className={`w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-black border border-zinc-900' : 'object-cover'}`}
+            className={`w-56 h-56 md:w-64 md:h-64 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-8 bg-zinc-900 border border-zinc-800' : 'object-cover'}`}
             onError={(e) => {
               e.target.src = '/logo.svg';
-              e.target.className = 'w-44 h-44 sm:w-52 sm:h-52 rounded-xl shadow-2xl shrink-0 object-contain p-6 bg-black border border-zinc-900';
+              e.target.className = 'w-56 h-56 md:w-64 md:h-64 rounded-xl shadow-2xl shrink-0 object-contain p-8 bg-zinc-900 border border-zinc-800';
             }}
           />
-          <div className="flex flex-col items-center sm:items-start text-center sm:text-left min-w-0">
-            <span className="text-xs uppercase font-semibold text-zinc-400 tracking-wider mb-1">Playlist</span>
-            <h2 className="text-2xl sm:text-4xl font-normal text-white mb-2 leading-tight">
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs uppercase font-bold text-zinc-400 tracking-widest mb-2 block">Playlist</span>
+            <h2 className="text-4xl md:text-6xl font-bold text-white mb-4 tracking-tight leading-tight">
               {selectedPlaylist.title}
             </h2>
-            <p className="text-sm text-zinc-400 mb-4 max-w-xl">
+            <p className="text-base text-zinc-400 mb-6 max-w-2xl leading-relaxed">
               {selectedPlaylist.description}
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <button
                 type="button"
                 onClick={handlePlayPlaylistAll}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-full transition shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-2 px-8 py-3.5 bg-white hover:bg-zinc-200 text-black font-bold text-sm rounded-full transition shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play All
               </button>
-              <span className="text-xs text-zinc-400">
+              <span className="text-sm font-medium text-zinc-500">
                 {selectedPlaylist.tracks ? selectedPlaylist.tracks.length : 0} songs
               </span>
             </div>
@@ -141,101 +172,199 @@ export default function Home() {
                 className="track-card cursor-pointer group"
                 onClick={() => handlePlayTrackInPlaylist(idx)}
               >
-                <span className="w-6 text-center text-xs font-mono text-zinc-500 group-hover:hidden">
+                <span className="w-8 text-center text-sm font-medium text-zinc-500 group-hover:hidden">
                   {idx + 1}
                 </span>
-                <span className="w-6 text-center hidden group-hover:inline-block">
-                  <Play className="w-4 h-4 text-white fill-current inline-block" />
+                <span className="w-8 text-center hidden group-hover:inline-flex justify-center items-center">
+                  <Play className="w-4 h-4 text-white fill-current" />
                 </span>
                 <img
                   src={track.thumbnail || selectedPlaylist.thumbnail || '/logo.svg'}
                   alt={track.title}
-                  className={`track-art ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-black border border-zinc-900' : 'object-cover'}`}
+                  className={`track-art ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-zinc-900' : 'object-cover'}`}
                   onError={(e) => {
                     e.target.src = '/logo.svg';
-                    e.target.className = 'track-art object-contain p-1.5 bg-black border border-zinc-900';
+                    e.target.className = 'track-art object-contain p-1.5 bg-zinc-900';
                   }}
                   loading="lazy"
                 />
                 <div className="track-info">
-                  <h3 className="group-hover:text-white transition-colors">{track.title}</h3>
+                  <h3 className="group-hover:text-white transition-colors text-zinc-100">{track.title}</h3>
                   <p>{track.artist}</p>
                 </div>
                 {track.duration > 0 && (
-                  <span className="text-xs text-zinc-400 font-mono hidden sm:block">
+                  <span className="text-sm text-zinc-500 font-medium hidden sm:block pr-4">
                     {formatDuration(track.duration)}
                   </span>
                 )}
               </article>
             ))
           ) : (
-            <p className="text-zinc-500 text-center py-8">No tracks found in this playlist.</p>
+            <p className="text-zinc-500 text-center py-12">No tracks found in this playlist.</p>
           )}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="max-w-6xl mx-auto pb-12">
-      <div className="page-header">
-        <h2>{greeting}</h2>
-        <p>Pick something to start listening.</p>
-      </div>
+  const featuredPlaylist = playlists.length > 0 ? playlists[0] : null;
+  const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : []), ...extraMadeForYou];
+  const popularAlbumsPlaylists = [...(playlists.length > 6 ? playlists.slice(6) : playlists.slice(1)), ...extraPopularAlbums];
 
+  const quickAccessItems = [
+    { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 text-white" />, color: 'bg-[#8938d2]' },
+    { title: 'Liked Songs', subtitle: 'Your favorites', icon: <Heart className="w-5 h-5 text-white fill-current" />, color: 'bg-[#d2384a]' },
+    { title: 'New Releases', subtitle: 'Fresh drops, weekly', icon: <Sparkles className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]' },
+    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 text-white" />, color: 'bg-[#d28238]' }
+  ];
+
+  return (
+    <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-6">
       {loadingPlaylistDetails && (
-        <div className="p-4 mb-6 bg-zinc-900/90 border border-zinc-800 text-white rounded-xl text-sm flex items-center justify-center gap-3 shadow-lg">
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 p-4 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 text-white rounded-xl text-sm flex items-center justify-center gap-4 shadow-2xl">
           <div className="mini-infinity-loader py-0 px-0">
             <svg className="mini-infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
               <path className="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
               <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
             </svg>
           </div>
-          <span className="font-medium">
+          <span className="font-medium tracking-wide">
             Loading playlist details<span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
           </span>
         </div>
       )}
 
-      {/* Recommended Playlists Section */}
+      {/* Greeting Section */}
+      {!loadingPlaylists && (
+        <div className="mb-8 pl-1">
+          <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">{greeting}</h2>
+          <p className="text-zinc-400 font-medium">Discover your next favorite track.</p>
+        </div>
+      )}
+
+      {/* Featured Section */}
       {loadingPlaylists ? (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-medium tracking-tight text-white">Recommended Playlists</h3>
-          </div>
-          <div className="carousel-wrapper relative group">
-            <div className="horizontal-scroll-row overflow-hidden">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="square-card animate-pulse pointer-events-none border-transparent bg-zinc-900/40">
-                  <div className="square-card-art-container bg-zinc-800/60"></div>
-                  <div className="h-4 bg-zinc-800/60 rounded w-3/4 mb-2 mt-1"></div>
-                  <div className="h-3 bg-zinc-800/60 rounded w-1/2"></div>
-                </div>
-              ))}
-            </div>
+        <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
+          <div className="xl:col-span-2 h-[380px] bg-[#121212] rounded-xl animate-pulse"></div>
+          <div className="grid grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-3 xl:gap-4 h-auto xl:h-[380px]">
+             {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-[#121212] rounded-lg animate-pulse min-h-[60px]"></div>
+             ))}
           </div>
         </div>
       ) : (
-        playlists.length > 0 && (
-          <Carousel
-            title="Recommended Playlists"
-            items={playlists}
-            onItemClick={handlePlaylistClick}
-            renderSubtitle={(item) => `${item.count} songs • ${item.author}`}
-            keyExtractor={(item) => item.playlistId}
-          />
-        )
+        <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
+          {/* Hero Featured Playlist */}
+          {featuredPlaylist && (
+            <div 
+              className="xl:col-span-2 relative h-[300px] sm:h-[380px] rounded-xl overflow-hidden group cursor-pointer bg-[#121212] shadow-xl"
+              onClick={() => handlePlaylistClick(featuredPlaylist)}
+            >
+              <img 
+                src={featuredPlaylist.thumbnail} 
+                alt={featuredPlaylist.title}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/50 to-transparent"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+              
+              <div className="absolute bottom-0 left-0 p-6 sm:p-8 md:p-10 w-full md:w-3/4 flex flex-col justify-end h-full">
+                <span className="text-[10px] sm:text-xs font-bold tracking-[0.2em] text-white/70 uppercase mb-3 block drop-shadow-md">
+                  Featured Playlist
+                </span>
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight drop-shadow-lg">
+                  {featuredPlaylist.title}
+                </h1>
+                <p className="text-zinc-300 text-xs sm:text-sm md:text-base mb-6 sm:mb-8 line-clamp-2 max-w-lg font-medium drop-shadow-md">
+                  {featuredPlaylist.description || `A curated collection of ${featuredPlaylist.count || 'great'} songs by ${featuredPlaylist.author}.`}
+                </p>
+                
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <button 
+                    className="bg-white text-black px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition shadow-xl"
+                    onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
+                  >
+                    <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1px]" /> Play
+                  </button>
+                  <button 
+                    className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/10 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 transition"
+                    onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
+                  >
+                    <span className="text-lg leading-none mb-0.5">+</span> Save
+                  </button>
+                  <span className="hidden md:inline-block ml-4 text-zinc-300 text-sm font-medium">
+                    {featuredPlaylist.count} songs
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Quick Access Grid */}
+          <div className="grid grid-cols-2 xl:flex xl:flex-col gap-3 xl:gap-4 xl:justify-between h-auto xl:h-[380px]">
+            {quickAccessItems.map((item, index) => (
+              <div 
+                key={index}
+                className="flex-1 bg-[#121212] hover:bg-[#1a1a1a] rounded-lg p-3 xl:p-4 flex items-center gap-3 xl:gap-4 cursor-pointer transition border border-white/5 hover:border-white/10 shadow-sm group"
+              >
+                <div className={`w-10 h-10 xl:w-14 xl:h-14 rounded-md flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                  {item.icon}
+                </div>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <h3 className="text-white font-bold text-xs xl:text-sm truncate">{item.title}</h3>
+                  <p className="text-zinc-400 text-[10px] xl:text-xs truncate mt-0.5">{item.subtitle}</p>
+                </div>
+                <div className="hidden xl:flex w-8 h-8 rounded-full items-center justify-center text-zinc-500 group-hover:text-white transition-colors mr-1">
+                  <ChevronRight className="w-5 h-5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Recently Played Section (Max 20 tracks) */}
+      {/* Recently Played Row */}
       {recentlyPlayed && recentlyPlayed.length > 0 && (
-        <Carousel
-          title="Recently Played"
-          items={recentlyPlayed}
-          onItemClick={(track) => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail)}
-          renderSubtitle={(track) => track.artist}
-          keyExtractor={(track, index) => `${track.videoId}-${index}`}
-        />
+        <div className="mb-10 sm:mb-12">
+          <Carousel
+            title="Recently Played"
+            items={recentlyPlayed}
+            onItemClick={(track) => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail)}
+            renderSubtitle={(track) => track.artist}
+            keyExtractor={(track, index) => `${track.videoId}-${index}`}
+            cardType="square"
+          />
+        </div>
+      )}
+
+      {/* Made For You Row (Wide Cards) */}
+      {!loadingPlaylists && madeForYouPlaylists.length > 0 && (
+        <div className="mb-10 sm:mb-12">
+          <Carousel
+            title="Made For You"
+            items={madeForYouPlaylists}
+            onItemClick={handlePlaylistClick}
+            renderSubtitle={(item) => item.author}
+            keyExtractor={(item, index) => `${item.playlistId}-${index}`}
+            cardType="wide"
+            onEndReached={loadMoreMadeForYou}
+          />
+        </div>
+      )}
+      
+      {/* Popular Albums Row */}
+      {!loadingPlaylists && popularAlbumsPlaylists.length > 0 && (
+        <div className="mb-10 sm:mb-12">
+          <Carousel
+            title="Popular Albums"
+            items={popularAlbumsPlaylists}
+            onItemClick={handlePlaylistClick}
+            renderSubtitle={(item) => item.author}
+            keyExtractor={(item, index) => `${item.playlistId}-${index}`}
+            cardType="square"
+            onEndReached={loadMorePopularAlbums}
+          />
+        </div>
       )}
     </div>
   );

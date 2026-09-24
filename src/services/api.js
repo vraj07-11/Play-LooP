@@ -22,6 +22,53 @@ function shuffleArray(array) {
   return arr;
 }
 
+const MOODS = ["Chill", "Happy", "Sad", "Late Night", "Workout", "Party", "Romantic", "Focus", "Upbeat", "Melancholy", "Cozy", "Energetic", "Relaxing", "Driving"];
+const GENRES = ["Pop", "Hip Hop", "Lofi", "Bollywood", "K-Pop", "Jazz", "Classical", "Rock", "R&B", "Indie", "Acoustic", "Electronic", "Country"];
+const ARTISTS = ["The Weeknd", "Taylor Swift", "Arijit Singh", "Drake", "Bad Bunny", "Billie Eilish", "BTS", "Ed Sheeran", "Justin Bieber", "Travis Scott", "A.R. Rahman", "Post Malone", "Dua Lipa", "Neha Kakkar", "Shreya Ghoshal", "Imagine Dragons", "Atif Aslam", "Coldplay", "Bruno Mars", "Ariana Grande"];
+
+function getRandomKeywords(count) {
+  const generated = new Set();
+  while(generated.size < count) {
+    const r = Math.random();
+    let keyword = "";
+    if (r < 0.4) {
+       // Mood + Genre (e.g., "Late Night Lofi")
+       keyword = MOODS[Math.floor(Math.random() * MOODS.length)] + " " + GENRES[Math.floor(Math.random() * GENRES.length)];
+    } else if (r < 0.7) {
+       // Just Artist
+       keyword = ARTISTS[Math.floor(Math.random() * ARTISTS.length)];
+    } else {
+       // Artist + Mood (e.g., "The Weeknd Chill")
+       keyword = ARTISTS[Math.floor(Math.random() * ARTISTS.length)] + " " + MOODS[Math.floor(Math.random() * MOODS.length)];
+    }
+    generated.add(keyword);
+  }
+  return Array.from(generated);
+}
+
+export async function fetchMoreDynamicPlaylists(count = 5) {
+  const keywords = getRandomKeywords(count);
+  const promises = keywords.map(async (keyword) => {
+    try {
+      const res = await fetchApi(`/api/search?q=${encodeURIComponent(keyword)}`);
+      const songs = await res.json();
+      const thumbnail = songs && songs.length > 0 ? songs[0].thumbnail : "/logo.svg";
+      return {
+        playlistId: `QUERY:${keyword}`,
+        title: `${keyword} Mix`,
+        author: "Play LooP",
+        thumbnail: thumbnail,
+        count: 30
+      };
+    } catch (e) {
+      return null;
+    }
+  });
+  
+  const results = await Promise.all(promises);
+  return results.filter(Boolean);
+}
+
 export const DEFAULT_PLAYLISTS = [
   {
     playlistId: "947987697",
