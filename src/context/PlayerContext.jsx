@@ -87,9 +87,7 @@ export function PlayerProvider({ children }) {
   // Helper to fetch a random track from queues
   const fetchNextRandomTrack = useCallback(() => {
     if (trackQueue.length) {
-      const next = trackQueue[0];
-      setTrackQueue(q => q.slice(1));
-      return next;
+      return trackQueue[Math.floor(Math.random() * trackQueue.length)];
     }
     if (recommendationQueue.length) {
       const next = recommendationQueue[0];
@@ -182,6 +180,7 @@ export function PlayerProvider({ children }) {
   const upcomingAudioPlayer = useRef(new Audio());
   const pendingTrackRef = useRef(null);
   const upcomingTrackRef = useRef(null);
+  const shuffleCycleStartIndexRef = useRef(0);
 
   const setUpcoming = (track) => {
     upcomingTrackRef.current = track;
@@ -454,6 +453,8 @@ export function PlayerProvider({ children }) {
     currentTrackIndexRef.current = startIndex;
     setCurrentTrackIndex(startIndex);
     
+    shuffleCycleStartIndexRef.current = trackHistoryRef.current.length;
+    
     const startTrack = tracks[startIndex];
     if (startTrack && startTrack.videoId) {
       selectAndPlayTrack(startTrack.videoId, startTrack.title, startTrack.artist, startTrack.thumbnail);
@@ -516,13 +517,17 @@ export function PlayerProvider({ children }) {
     if (!nextTrackObj || (currentTrack && nextTrackObj.videoId === currentTrack.videoId)) {
       if (tQueue.length > 0) {
         if (isShuffle) {
-          const candidates = tQueue.filter((t) => 
+          let currentCycleHistory = tHistory.slice(shuffleCycleStartIndexRef.current);
+          let candidates = tQueue.filter((t) => 
             t.videoId !== currentTrack?.videoId &&
-            !tHistory.some(ht => 
-              ht.videoId === t.videoId || 
-              (ht.title && t.title && cleanTitle(ht.title) === cleanTitle(t.title))
-            )
+            !currentCycleHistory.some(ht => ht.videoId === t.videoId)
           );
+          
+          if (candidates.length === 0 && tQueue.length > 1) {
+            shuffleCycleStartIndexRef.current = tHistory.length;
+            candidates = tQueue.filter((t) => t.videoId !== currentTrack?.videoId);
+          }
+          
           const pool = candidates.length > 0 ? candidates : tQueue.filter(t => t.videoId !== currentTrack?.videoId);
           const finalPool = pool.length > 0 ? pool : tQueue;
           nextTrackObj = finalPool[Math.floor(Math.random() * finalPool.length)];
@@ -657,13 +662,17 @@ export function PlayerProvider({ children }) {
     } else {
       if (trackQueue.length > 0) {
         if (isShuffleEnabled) {
-          const candidates = trackQueue.filter((t) => 
+          let currentCycleHistory = trackHistory.slice(shuffleCycleStartIndexRef.current);
+          let candidates = trackQueue.filter((t) => 
             t.videoId !== pendingTrack.videoId && 
-            !trackHistory.some(ht => 
-              ht.videoId === t.videoId || 
-              (ht.title && t.title && cleanTitle(ht.title) === cleanTitle(t.title))
-            )
+            !currentCycleHistory.some(ht => ht.videoId === t.videoId)
           );
+          
+          if (candidates.length === 0 && trackQueue.length > 1) {
+            shuffleCycleStartIndexRef.current = trackHistory.length;
+            candidates = trackQueue.filter((t) => t.videoId !== pendingTrack.videoId);
+          }
+          
           const pool = candidates.length > 0 ? candidates : trackQueue;
           const randomIndex = Math.floor(Math.random() * pool.length);
           nextTrackObj = pool[randomIndex];
