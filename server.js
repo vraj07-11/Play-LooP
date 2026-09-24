@@ -47,7 +47,7 @@ async function fetchJioSaavn(callParams) {
 	url.searchParams.set("_marker", "0");
 	url.searchParams.set("ctx", "web6dot0");
 	url.searchParams.set("api_version", "4");
-	
+
 	for (const [key, value] of Object.entries(callParams)) {
 		url.searchParams.set(key, value);
 	}
@@ -59,7 +59,7 @@ async function fetchJioSaavn(callParams) {
 			"X-Forwarded-For": "103.15.253.250"
 		}
 	});
-	
+
 	if (!res.ok) throw new Error(`JioSaavn API Error: ${res.status}`);
 	const text = await res.text();
 	try {
@@ -74,7 +74,7 @@ function formatSong(song) {
 	const encUrl = song.encrypted_media_url || song.more_info?.encrypted_media_url;
 	const decUrl = encUrl ? decryptSaavnUrl(encUrl) : null;
 	const highQualityUrl = decUrl ? decUrl.replace("_96", "_320").replace("_160", "_320") : null;
-	
+
 	let artistName = "Various Artists";
 	if (song.more_info?.primary_artists) {
 		artistName = song.more_info.primary_artists;
@@ -107,7 +107,7 @@ app.get("/api/search", async (req, res) => {
 		if (!data || !data.results) {
 			return res.json([]);
 		}
-		
+
 		const songs = data.results.map(formatSong);
 		res.json(songs);
 	} catch (error) {
@@ -127,11 +127,11 @@ app.get("/api/audio", async (req, res) => {
 	try {
 		const data = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });
 		let songData = data[videoId] || (data.songs && data.songs[0]);
-		
+
 		if (!songData) {
 			return res.status(404).send("Song not found");
 		}
-		
+
 		const formatted = formatSong(songData);
 		if (formatted.streamUrl) {
 			return res.redirect(302, formatted.streamUrl);
@@ -168,52 +168,76 @@ if (fs.existsSync(path.join(__dirname, ".env"))) {
 const recoCache = new Map();
 const RECO_CACHE_TTL = 24 * 60 * 60 * 1000;
 
-async function fetchLastFmSimilar(artist, title) {
-	const apiKey = process.env.LASTFM_API_KEY;
-	if (!apiKey || !artist || !title) return [];
+const YTMusic = require("ytmusic-api");
+const ytmusic = new (YTMusic.default || YTMusic)();
+let ytmusicInitialized = false;
 
-	try {
-		const url = new URL("https://ws.audioscrobbler.com/2.0/");
-		url.searchParams.set("method", "track.getsimilar");
-		url.searchParams.set("artist", artist);
-		url.searchParams.set("track", title);
-		url.searchParams.set("api_key", apiKey);
-		url.searchParams.set("format", "json");
-		url.searchParams.set("limit", "12");
-
-		const res = await fetch(url.toString(), {
-			headers: { "User-Agent": "PlayLooP-MusicApp/1.0" }
-		});
-
-		if (!res.ok) throw new Error(`Last.fm API returned ${res.status}`);
-		const data = await res.json();
-		const tracks = data?.similartracks?.track;
-		if (!Array.isArray(tracks)) return [];
-
-		return tracks.map((t) => ({
-			title: t.name,
-			artist: typeof t.artist === "object" ? t.artist.name : t.artist
-		}));
-	} catch (err) {
-		console.warn("[Last.fm API] Recommendation fetch warning:", err.message);
-		return [];
+async function initYTMusic() {
+	if (!ytmusicInitialized) {
+		await ytmusic.initialize();
+		ytmusicInitialized = true;
 	}
 }
 
-async function resolveLastFmTracksToSaavn(similarList) {
-	if (!Array.isArray(similarList) || similarList.length === 0) return [];
+async function fetchYTMusicUpNext(artist, title) {
+	try {
+		await initYTMusic();
+		const query = `${title} ${artist}`.trim();
+		const search = await ytmusic.search(query, "SONG");
+		if (search && search.length > 0 && search[0].videoId) {
+			const upNext = await ytmusic.getUpNexts(search[0].videoId);
+			if (upNext && upNext.length > 0) {
+				return upNext.map(track => ({
+					title: track.title || track.name,
+					artist: typeof track.artists === 'string' ? track.artists : (Array.isArray(track.artists) ? track.artists.map(a => a.name).join(", ") : track.artist || "")
+				})).filter(t => t.title && !(t.title.toLowerCase() === title.toLowerCase() && t.artist.toLowerCase().includes(artist.toLowerCase().split(',')[0])));
+			}
+		}
+	} catch (e) {
+		console.warn("[YTMusic] Recommendation fetch warning:", e.message);
+	}
+	return [];
+}
 
-	// Limit parallel resolution to top 8 candidates for speed
-	const candidates = similarList.slice(0, 8);
+async function resolveExternalTracksToSaavn(trackList, limit = 10) {
+	if (!Array.isArray(trackList) || trackList.length === 0) return [];
+
+	const candidates = trackList.slice(0, limit);
 	const resolvedPromises = candidates.map(async (item) => {
 		try {
-			const query = `${item.title} ${item.artist}`.trim();
-			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "1", p: "1" });
-			if (searchData && searchData.results && searchData.results[0]) {
-				return formatSong(searchData.results[0]);
+			// Clean up titles (e.g. remove "(feat. Artist)") which confuse JioSaavn search
+			const cleanTitle = item.title.replace(/\(feat\..*?\)/i, '').replace(/\[.*?\]/g, '').trim();
+			const query = `${cleanTitle} ${item.artist}`.trim();
+			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "5", p: "1" });
+			
+			if (searchData && searchData.results && searchData.results.length > 0) {
+				const ytArtist = item.artist.toLowerCase();
+				const ytWords = ytArtist.split(/[\s,]+/).filter(w => w.length > 2);
+				
+				// Try to find a result where the artist matches reasonably well
+				for (const res of searchData.results) {
+					const formatted = formatSong(res);
+					const saavnArtist = formatted.artist.toLowerCase();
+					
+					// If YT artist is short, just check if it's included. Otherwise check word by word.
+					let hasMatch = false;
+					if (ytWords.length === 0) {
+						hasMatch = saavnArtist.includes(ytArtist);
+					} else {
+						hasMatch = ytWords.some(w => saavnArtist.includes(w));
+					}
+					
+					// Also accept if the title is an exact match as a fallback
+					const titleMatch = formatted.title.toLowerCase() === item.title.toLowerCase();
+
+					if (hasMatch || titleMatch) {
+						return formatted;
+					}
+				}
+				// If no strict match found among top 5, we skip it to prevent random Hindi songs
 			}
 		} catch (e) {
-			// Ignore resolution errors for individual tracks
+			// Ignore resolution errors
 		}
 		return null;
 	});
@@ -240,15 +264,15 @@ app.get("/api/recommendations", async (req, res) => {
 	try {
 		let recommendations = [];
 
-		// 1. Try Last.fm Similar Tracks first if API Key is configured and track metadata exists
-		if (process.env.LASTFM_API_KEY && artist && title) {
-			const lastFmTracks = await fetchLastFmSimilar(artist, title);
-			if (lastFmTracks.length > 0) {
-				recommendations = await resolveLastFmTracksToSaavn(lastFmTracks);
+		// 1. Try YT Music Up Next for superior, popular recommendations based on current song
+		if (artist && title) {
+			const ytTracks = await fetchYTMusicUpNext(artist, title);
+			if (ytTracks.length > 0) {
+				recommendations = await resolveExternalTracksToSaavn(ytTracks, 20);
 			}
 		}
 
-		// 2. Fallback to JioSaavn reco.getreco if Last.fm yielded no candidates
+		// 2. Fallback to JioSaavn reco.getreco if YT Music yielded no candidates
 		if (recommendations.length === 0 && videoId) {
 			const recoData = await fetchJioSaavn({ __call: "reco.getreco", pid: videoId });
 			if (Array.isArray(recoData) && recoData.length > 0) {
@@ -269,7 +293,9 @@ app.get("/api/recommendations", async (req, res) => {
 		}
 
 		// Save to 24-Hour Cache
-		recoCache.set(cacheKey, { data: recommendations, timestamp: Date.now() });
+		if (recommendations.length > 0) {
+			recoCache.set(cacheKey, { data: recommendations, timestamp: Date.now() });
+		}
 
 		res.json(recommendations);
 	} catch (error) {
@@ -377,9 +403,9 @@ app.get("/api/playlist", async (req, res) => {
 		if (!data || !data.id) {
 			throw new Error("Playlist not found");
 		}
-		
+
 		const tracks = (data.list || []).map(formatSong);
-		
+
 		return res.json({
 			playlistId: data.id,
 			title: data.title || "Featured Playlist",
