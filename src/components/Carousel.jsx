@@ -7,6 +7,14 @@ export default function Carousel({ title, items, onItemClick, onPlayClick, rende
   const scroll = (direction) => {
     if (!rowRef.current) return;
     const scrollAmount = direction === 'left' ? -350 : 350;
+    
+    if (direction === 'right' && onEndReached) {
+      const { scrollLeft, scrollWidth, clientWidth } = rowRef.current;
+      if (scrollWidth - (scrollLeft + scrollAmount) - clientWidth < 150) {
+        onEndReached();
+      }
+    }
+    
     rowRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
   };
 

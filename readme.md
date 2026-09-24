@@ -1,87 +1,57 @@
-# Play LooP 🎵
+# Play LooP
 
 **Play LooP** is a modern, lightweight, and fully-featured web application designed to stream and enjoy music seamlessly. Built with performance and user experience in mind, it acts as a powerful bridge that fetches and streams ad-free audio, paired with a beautiful interface and an intelligent local caching mechanism.
 
 ---
 
-## 🚀 Live Demo
+## Live Demo
+
 Experience the application live here: **[play-loop.onrender.com](https://play-loop.onrender.com)**
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-*   **Direct & Ad-Free Audio Streaming** 🎧
+*   **Direct & Ad-Free Audio Streaming**
     Leverages the custom `Play.LooP Engine` and `Last.fm` under the hood to pull accurate search results, personalized music recommendations, and high-quality audio streams without interruptions.
-*   **Progressive Web Application (PWA)** 📱
+*   **Progressive Web Application (PWA)**
     Engineered as a fully functional PWA. Install it on your mobile device or desktop for a native app-like experience. Features seamless deep-linking, background playback support, and a responsive app shell.
-*   **Offline Downloads** 📥
+*   **Offline Downloads**
     A dedicated download page allows you to safely and quickly save your favorite tracks directly to your device for offline listening anytime, anywhere.
-*   **Smart Local Caching** ⚡
+*   **Smart Local Caching**
     To heavily optimize performance and reduce network latency, extracted audio files are temporarily cached on the server. A built-in storage management system automatically enforces strict cleanup logic to prevent disk overflow.
-*   **Hybrid Recommendation System** 🧠
+*   **Hybrid Recommendation System**
     Curated listening experiences powered by Play.LooP's own recommendation engine, beautifully paired with a robust `Last.fm` fallback to ensure you never run out of great music.
-*   **Responsive & Fluid UI** 🎨
+*   **Responsive & Fluid UI**
     Designed with a sleek, mobile-first approach. Whether you're on a massive desktop monitor or a small smartphone screen, the interface smoothly adapts to give you the best experience.
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
-**Frontend Architecture:**
-*   **Framework:** React.js powered by Vite for lightning-fast HMR and optimized builds.
-*   **Styling & Icons:** Modern Vanilla CSS combined with `Lucide React` for crisp, scalable iconography.
-*   **State Management:** Custom `Play LooP Player` context for global audio state handling.
-
-**Backend Architecture:**
-*   **Server:** Node.js & Express.js handling API routing and proxying.
-*   **Media Processing:** Custom `Play.LooP Engine` for parsing and delivering audio streams.
-*   **Recommendations:** `Play.LooP` & `Last.fm` integration.
-
-**Infrastructure:**
-*   **Containerization:** Docker support for easy isolated deployments.
-*   **Deployment:** Hosted securely on Render.
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Express.js](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white)
+![Render](https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)
 
 ---
 
-## 📦 Installation & Local Setup
+## About the Developer
 
-Want to run Play LooP locally on your machine? Follow these simple steps:
+This project is the independent work of a 19-year-old solo developer. 
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/vraj07-11/Play-LooP.git
-   cd Play-LooP
-   ```
-
-2. **Install Dependencies:**
-   Make sure you have Node.js installed. Then, install the required packages:
-   ```bash
-   npm install
-   ```
-
-3. **Start the Development Servers:**
-   You will need to run both the frontend (Vite) and the backend (Express) concurrently.
-   
-   Start the backend server:
-   ```bash
-   npm start
-   ```
-   
-   Start the frontend React app (in a new terminal):
-   ```bash
-   npm run dev
-   ```
-
-4. **Enjoy the Music!** 🎉
-   Open your browser and navigate to `http://localhost:5173`.
+Driven by a strong passion for music, design, and software engineering, Play LooP was built entirely from scratch. Every aspect of the application—from the responsive frontend architecture and custom audio player to the backend routing and recommendation integrations—was engineered by a single person. The goal was to create a premium, fast, and ad-free music streaming experience that rivals commercial platforms while serving as a testament to the capabilities of modern web technologies.
 
 ---
 
-## 🤝 Contributing
+## Contact
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/vraj07-11/Play-LooP/issues) if you want to contribute.
+Feel free to reach out for any questions, or just to say hi!
 
-## 📝 License
-
-This project is licensed under the **ISC License**.
+- **GitHub:** [@vraj07-11](https://github.com/vraj07-11)
+- **Email:** [Email Address](gajeravraj593@gmail.com)
+- **LinkedIn:** [LinkedIn Profile](https://www.linkedin.com/in/vraj-gajera-260a96377)
