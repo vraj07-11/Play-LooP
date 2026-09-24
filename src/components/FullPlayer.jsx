@@ -312,8 +312,10 @@ export default function FullPlayer({
   };
 
   const handleWheelCover = (e) => {
-    if (e.deltaY > 10 || e.deltaY < -10) {
+    if (e.deltaY > 10) {
       setShowLyrics(true);
+    } else if (e.deltaY < -10) {
+      setShowLyrics(false);
     }
   };
 
@@ -369,24 +371,21 @@ export default function FullPlayer({
       </header>
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col md:flex-row items-center md:items-stretch justify-center px-6 py-4 mx-auto w-full h-full min-h-0 transition-all duration-500 ease-in-out ${
-        showLyrics 
-          ? 'max-w-lg md:max-w-5xl lg:max-w-6xl md:gap-12 lg:gap-20' 
+      <main className={`flex-1 flex flex-col md:flex-row items-center md:items-stretch justify-center px-6 py-4 mx-auto w-full h-full min-h-0 transition-all duration-500 ease-in-out ${showLyrics
+          ? 'max-w-lg md:max-w-5xl lg:max-w-6xl md:gap-12 lg:gap-20'
           : 'max-w-lg md:gap-0'
-      }`}>
+        }`}>
 
         {/* Left Side: Art & Controls */}
-        <div className={`w-full flex flex-col items-center justify-center transition-all duration-500 ease-in-out shrink-0 ${
-          showLyrics
-            ? 'max-w-[300px] sm:max-w-[340px] md:max-w-[340px] lg:max-w-[360px]'
-            : 'max-w-[340px] sm:max-w-[380px] md:max-w-[380px]'
-        }`}>
-          {/* Animated Dual Viewport Container for Artwork & Lyrics */}
-          <div className={`relative w-full aspect-square overflow-hidden rounded-2xl select-none shadow-[0_25px_60px_rgba(0,0,0,0.9)] z-10 shrink-0 transition-all duration-500 ease-in-out ${
-            showLyrics
-              ? 'max-w-[300px] sm:max-w-[340px] md:max-w-[340px] lg:max-w-[360px] mb-4 md:mb-6'
-              : 'max-w-[340px] sm:max-w-[380px] md:max-w-[380px] mb-6'
+        <div className={`w-full flex flex-col items-center justify-center transition-all duration-500 ease-in-out shrink-0 ${showLyrics
+            ? 'md:max-w-[360px] lg:max-w-[400px]'
+            : 'md:max-w-[400px] lg:max-w-[440px]'
           }`}>
+          {/* Animated Dual Viewport Container for Artwork & Lyrics */}
+          <div className={`relative w-full aspect-square overflow-hidden rounded-2xl select-none shadow-[0_25px_60px_rgba(0,0,0,0.9)] z-10 shrink-0 transition-all duration-500 ease-in-out mb-6 max-w-[340px] sm:max-w-[380px] ${showLyrics
+              ? 'md:max-w-[260px] lg:max-w-[280px]'
+              : 'md:max-w-[280px] lg:max-w-[300px]'
+            }`}>
             {/* Album Artwork Container */}
             <div
               onTouchStart={handleTouchStart}
@@ -493,7 +492,7 @@ export default function FullPlayer({
           </div>
 
           {/* Media Control Toolbar */}
-          <div className="w-full flex items-center justify-between px-1 relative z-20">
+          <div className="w-full md:max-w-[340px] flex items-center justify-between px-1 relative z-20 mx-auto">
             {/* Repeat */}
             <button
               type="button"
@@ -524,7 +523,7 @@ export default function FullPlayer({
             {/* Rewind 10s */}
             <button
               type="button"
-              className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer hidden sm:flex ${showLyrics ? 'md:hidden lg:flex' : ''} ${getSecondaryBtnClass(false)}`}
+              className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer md:hidden ${getSecondaryBtnClass(false)}`}
               onClick={() => seekBy(-10)}
               aria-label="Rewind 10 seconds"
               title="Rewind 10 seconds"
@@ -541,7 +540,7 @@ export default function FullPlayer({
             {/* Forward 10s */}
             <button
               type="button"
-              className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer hidden sm:flex ${showLyrics ? 'md:hidden lg:flex' : ''} ${getSecondaryBtnClass(false)}`}
+              className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer md:hidden ${getSecondaryBtnClass(false)}`}
               onClick={() => seekBy(10)}
               aria-label="Forward 10 seconds"
               title="Forward 10 seconds"
@@ -582,11 +581,10 @@ export default function FullPlayer({
         </div>
 
         {/* Right Side: Desktop Lyrics */}
-        <div className={`hidden md:flex flex-col h-full relative mt-8 md:mt-0 min-h-0 transition-all duration-500 ease-in-out overflow-hidden ${
-          showLyrics 
-            ? 'w-[50%] max-w-[500px] opacity-100 translate-x-0' 
+        <div className={`hidden md:flex flex-col h-full relative mt-8 md:mt-0 min-h-0 transition-all duration-500 ease-in-out overflow-hidden ${showLyrics
+            ? 'w-[50%] max-w-[500px] opacity-100 translate-x-0'
             : 'w-0 opacity-0 translate-x-10'
-        }`}>
+          }`}>
           <div
             ref={desktopLyricsScrollRef}
             onScroll={handleUserInteraction}

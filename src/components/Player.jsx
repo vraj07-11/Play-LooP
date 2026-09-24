@@ -82,7 +82,7 @@ export default function Player() {
     const diff = currentX - touchStartX.current;
     
     // Add resistance if they are swiping but can't go that way
-    if ((diff < 0 && !hasPrevious) || (diff > 0 && !hasNext)) {
+    if ((diff < 0 && !hasNext) || (diff > 0 && !hasPrevious)) {
       setSwipeOffset(diff * 0.2);
     } else {
       setSwipeOffset(diff);
