@@ -63,15 +63,101 @@ export default function Player() {
     seekToPercent(e.target.value);
   };
 
+  const touchStartX = useRef(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const minSwipeDistance = 50;
+
   // Hide the player bar if nothing is pending
   if (!pendingTrack) return null;
 
+  const onTouchStart = (e) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+    setIsSwiping(true);
+  };
+
+  const onTouchMove = (e) => {
+    if (!touchStartX.current) return;
+    const currentX = e.targetTouches[0].clientX;
+    const diff = currentX - touchStartX.current;
+    
+    // Add resistance if they are swiping but can't go that way
+    if ((diff < 0 && !hasPrevious) || (diff > 0 && !hasNext)) {
+      setSwipeOffset(diff * 0.2);
+    } else {
+      setSwipeOffset(diff);
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStartX.current) return;
+    const distance = -swipeOffset; // positive = left swipe (finger moved left)
+    
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    // Swipe Left = Next Track
+    if (isLeftSwipe && hasNext) {
+      // Animate out to the left
+      setSwipeOffset(-window.innerWidth);
+      setIsSwiping(false);
+      
+      setTimeout(() => {
+        playNextTrack();
+        // Instantly move to right side
+        setIsSwiping(true); 
+        setSwipeOffset(window.innerWidth);
+        
+        // Animate in to 0
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsSwiping(false);
+            setSwipeOffset(0);
+          });
+        });
+      }, 300);
+      
+    // Swipe Right = Previous Track
+    } else if (isRightSwipe && hasPrevious) {
+      // Animate out to the right
+      setSwipeOffset(window.innerWidth);
+      setIsSwiping(false);
+      
+      setTimeout(() => {
+        playPreviousTrack();
+        // Instantly move to left side
+        setIsSwiping(true); 
+        setSwipeOffset(-window.innerWidth);
+        
+        // Animate in to 0
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsSwiping(false);
+            setSwipeOffset(0);
+          });
+        });
+      }, 300);
+      
+    } else {
+      setIsSwiping(false);
+      setSwipeOffset(0);
+    }
+
+    touchStartX.current = null;
+  };
+
   return (
     <>
-      <footer className="player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer 
+        className="player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4 overflow-hidden"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         {/* Clickable track cover & title section */}
         <div 
-          className="player-track flex items-center gap-4 w-full md:w-1/3 min-w-0 cursor-pointer group hover:opacity-95 transition-all select-none"
+          className={`player-track flex items-center gap-4 w-full md:w-1/3 min-w-0 cursor-pointer group hover:opacity-95 select-none ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
+          style={{ transform: `translateX(${swipeOffset}px)` }}
           onClick={openFullPlayer}
           title="Click to view expanded player"
           role="button"

@@ -149,12 +149,8 @@ export default function DownloadPage() {
           <h4 className="text-sm font-medium text-zinc-200">Mobile Background Playback</h4>
         </div>
         <p className="text-xs text-zinc-400 leading-relaxed">
-          If background playback stops on mobile, we recommend using <span className="text-zinc-200">Brave Browser</span>:
+          for continuos background audio playback, <br></br> Chrome/brave app info-&gt;battery usage, enable allow background usage.
         </p>
-        <ul className="text-xs text-zinc-400 space-y-1 pl-5 list-disc">
-          <li>Ensure <span className="text-zinc-200">Settings &rarr; Media &rarr; Background play</span> is turned on.</li>
-          <li>In <span className="text-zinc-200">Brave App Info &rarr; Battery usage</span>, enable <span className="text-zinc-200">Allow background usage</span> for continuous audio playback.</li>
-        </ul>
       </div>
     </div>
   );
