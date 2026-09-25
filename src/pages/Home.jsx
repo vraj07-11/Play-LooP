@@ -16,7 +16,7 @@ export default function Home() {
   const [loadingMoreMadeForYou, setLoadingMoreMadeForYou] = useState(false);
   const [loadingMorePopularAlbums, setLoadingMorePopularAlbums] = useState(false);
 
-  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [] } = usePlayer();
+  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen } = usePlayer();
 
   useEffect(() => {
     const currentHour = new Date().getHours();
@@ -89,6 +89,7 @@ export default function Home() {
     if (details) {
       window.history.pushState({ view: 'home', playlistId: playlist.playlistId }, '', `#/playlist/${playlist.playlistId}`);
       setSelectedPlaylist(details);
+      setIsRightSidebarOpen(true);
     }
     setLoadingPlaylistDetails(false);
   };
@@ -155,89 +156,153 @@ export default function Home() {
     );
   }
 
-  // If a playlist is selected, render the Playlist Details View
   if (selectedPlaylist) {
+    const filters = ['Chill', 'Lo-fi', 'Indie', 'Acoustic', 'Ambient', 'Relax', 'Study', 'Focus'];
+
     return (
-      <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-4 select-none">
+      <div className="max-w-[1600px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
         <button
           type="button"
           onClick={handleBackToHome}
-          className="inline-flex items-center gap-2 mb-8 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-sm font-medium transition cursor-pointer"
+          className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-sm font-medium transition cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </button>
 
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-8 mb-12">
+        {/* Playlist Header */}
+        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 md:gap-8 mb-8">
           <img
             src={selectedPlaylist.thumbnail || '/logo.svg'}
             alt={selectedPlaylist.title}
-            className={`w-56 h-56 md:w-64 md:h-64 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-8 bg-zinc-900 border border-zinc-800' : 'object-cover'}`}
+            className={`w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.5)] shrink-0 ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-8 bg-zinc-900 border border-zinc-800' : 'object-cover'}`}
             onError={(e) => {
               e.target.src = '/logo.svg';
-              e.target.className = 'w-56 h-56 md:w-64 md:h-64 rounded-xl shadow-2xl shrink-0 object-contain p-8 bg-zinc-900 border border-zinc-800';
+              e.target.className = 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl shadow-2xl shrink-0 object-contain p-8 bg-zinc-900 border border-zinc-800';
             }}
           />
           <div className="flex flex-col min-w-0">
-            <span className="text-xs uppercase font-bold text-zinc-400 tracking-widest mb-2 block">Playlist</span>
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-4 tracking-tight leading-tight">
+            <span className="text-xs uppercase font-bold text-zinc-400 tracking-widest mb-1.5 block">Playlist</span>
+            <h2 className="text-5xl md:text-7xl font-extrabold text-white mb-3 tracking-tight leading-tight">
               {selectedPlaylist.title}
             </h2>
-            <p className="text-base text-zinc-400 mb-6 max-w-2xl leading-relaxed">
-              {selectedPlaylist.description}
+            <p className="text-base text-zinc-300 mb-2 max-w-2xl font-medium">
+              {selectedPlaylist.description || 'Relax • Unwind • Repeat'}
             </p>
-            <div className="flex items-center gap-6">
+            <p className="text-sm text-zinc-400 mb-6 font-medium flex items-center gap-2">
+              <span>{selectedPlaylist.tracks ? selectedPlaylist.tracks.length : 0} songs</span>
+              <span className="w-1 h-1 rounded-full bg-zinc-600"></span>
+              <span>{Math.floor((selectedPlaylist.tracks?.length || 0) * 3.5 / 60)}h {Math.floor(((selectedPlaylist.tracks?.length || 0) * 3.5) % 60)}m</span>
+            </p>
+            <div className="flex items-center gap-4">
               <button
                 type="button"
                 onClick={handlePlayPlaylistAll}
-                className="inline-flex items-center gap-2 px-8 py-3.5 bg-white hover:bg-zinc-200 text-black font-bold text-sm rounded-full transition shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-white hover:bg-zinc-200 text-black font-bold text-sm rounded-full transition hover:scale-105 active:scale-95 cursor-pointer shadow-md"
               >
-                <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play All
+                <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play
               </button>
-              <span className="text-sm font-medium text-zinc-500">
-                {selectedPlaylist.tracks ? selectedPlaylist.tracks.length : 0} songs
-              </span>
+              <button className="inline-flex items-center gap-2 px-6 py-3 bg-transparent border border-zinc-600 hover:border-zinc-400 text-white font-bold text-sm rounded-full transition cursor-pointer">
+                <span className="text-lg leading-none">+</span> Save
+              </button>
+              <button className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer">
+                <span className="flex gap-1">
+                  <span className="w-1 h-1 rounded-full bg-current"></span>
+                  <span className="w-1 h-1 rounded-full bg-current"></span>
+                  <span className="w-1 h-1 rounded-full bg-current"></span>
+                </span>
+              </button>
             </div>
           </div>
         </div>
 
-        <div className="track-list">
-          {selectedPlaylist.tracks && selectedPlaylist.tracks.length > 0 ? (
-            selectedPlaylist.tracks.map((track, idx) => (
-              <article
-                key={track.videoId || idx}
-                className="track-card cursor-pointer group"
-                onClick={() => handlePlayTrackInPlaylist(idx)}
-              >
-                <span className="w-8 text-center text-sm font-medium text-zinc-500 group-hover:hidden">
-                  {idx + 1}
-                </span>
-                <span className="w-8 text-center hidden group-hover:inline-flex justify-center items-center">
-                  <Play className="w-4 h-4 text-white fill-current" />
-                </span>
-                <img
-                  src={track.thumbnail || selectedPlaylist.thumbnail || '/logo.svg'}
-                  alt={track.title}
-                  className={`track-art ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-zinc-900' : 'object-cover'}`}
-                  onError={(e) => {
-                    e.target.src = '/logo.svg';
-                    e.target.className = 'track-art object-contain p-1.5 bg-zinc-900';
-                  }}
-                  loading="lazy"
-                />
-                <div className="track-info">
-                  <h3 className="group-hover:text-white transition-colors text-zinc-100">{track.title}</h3>
-                  <p>{track.artist}</p>
-                </div>
-                {track.duration > 0 && (
-                  <span className="text-sm text-zinc-500 font-medium hidden sm:block pr-4">
-                    {formatDuration(track.duration)}
-                  </span>
-                )}
-              </article>
-            ))
-          ) : (
-            <p className="text-zinc-500 text-center py-12">No tracks found in this playlist.</p>
-          )}
+        {/* Filters */}
+        <div className="flex gap-3 overflow-x-auto mb-10 pb-2 hide-scrollbar">
+          {filters.map((filter) => (
+            <button 
+              key={filter} 
+              className="px-5 py-2 rounded-full border border-zinc-800 bg-zinc-900/40 text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 whitespace-nowrap transition"
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-10">
+          {/* Main Tracklist */}
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white tracking-tight">Tracks</h2>
+              <button className="text-sm font-medium text-zinc-400 hover:text-white flex items-center gap-1.5 transition">
+                Sort by <span className="text-[10px]">▼</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-[30px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_60px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
+              <span className="text-center">#</span>
+              <span>Title</span>
+              <span>Artist</span>
+              <span>Album</span>
+              <span>Duration</span>
+              <span></span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              {selectedPlaylist.tracks && selectedPlaylist.tracks.length > 0 ? (
+                selectedPlaylist.tracks.map((track, idx) => (
+                  <article
+                    key={track.videoId || idx}
+                    className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[30px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_60px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-lg hover:bg-zinc-800/50 transition group cursor-pointer"
+                    onClick={() => handlePlayTrackInPlaylist(idx)}
+                  >
+                    <span className="w-8 text-center text-sm font-medium text-zinc-500 group-hover:hidden">
+                      {idx + 1}
+                    </span>
+                    <span className="w-8 text-center hidden group-hover:flex justify-center items-center">
+                      <Play className="w-4 h-4 text-white fill-current" />
+                    </span>
+                    
+                    <div className="flex items-center gap-4 min-w-0 pr-4">
+                      <img
+                        src={track.thumbnail || selectedPlaylist.thumbnail || '/logo.svg'}
+                        alt={track.title}
+                        className={`w-10 h-10 md:w-12 md:h-12 rounded shrink-0 ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-zinc-900' : 'object-cover'}`}
+                        onError={(e) => {
+                          e.target.src = '/logo.svg';
+                          e.target.className = 'w-10 h-10 md:w-12 md:h-12 rounded shrink-0 object-contain p-1.5 bg-zinc-900';
+                        }}
+                        loading="lazy"
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <h3 className="text-sm md:text-base font-medium text-zinc-100 group-hover:text-white truncate">
+                          {track.title}
+                          {idx === 0 && <span className="inline-flex ml-2 px-1 rounded bg-zinc-200 text-black text-[10px] font-bold">E</span>}
+                        </h3>
+                        <p className="text-xs md:text-sm text-zinc-400 truncate md:hidden">{track.artist}</p>
+                      </div>
+                    </div>
+
+                    <div className="hidden md:flex min-w-0 pr-4">
+                      <p className="text-sm text-zinc-400 truncate hover:underline cursor-pointer">{track.artist}</p>
+                    </div>
+
+                    <div className="hidden md:flex min-w-0 pr-4">
+                      <p className="text-sm text-zinc-400 truncate hover:underline cursor-pointer">{track.album || track.title}</p>
+                    </div>
+
+                    <div className="hidden md:flex text-sm text-zinc-500 font-medium">
+                      {formatDuration(track.duration || (180 + Math.floor(Math.random() * 60)))}
+                    </div>
+
+                    <div className="flex items-center justify-end text-zinc-500 opacity-0 group-hover:opacity-100 transition">
+                      <span className="flex gap-0.5 tracking-widest cursor-pointer hover:text-white px-2">•••</span>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <p className="text-zinc-500 text-center py-12">No tracks found in this playlist.</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );

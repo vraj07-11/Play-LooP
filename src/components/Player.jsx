@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, RotateCcw, RotateCw } from 'lucide-react';
+import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic } from 'lucide-react';
 import FullPlayer from './FullPlayer';
 
 export default function Player() {
@@ -13,10 +13,13 @@ export default function Player() {
     isRepeatEnabled, setIsRepeatEnabled,
     isShuffleEnabled, setIsShuffleEnabled,
     hasPrevious, hasNext,
-    pendingTrack
+    pendingTrack,
+    isRightSidebarOpen, setIsRightSidebarOpen,
+    trackQueue, recommendationQueue, selectAndPlayTrack
   } = usePlayer();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isMobileQueueOpen, setIsMobileQueueOpen] = useState(false);
   const [initialShowLyrics, setInitialShowLyrics] = useState(false);
   const progressRef = useRef(null);
 
@@ -96,40 +99,77 @@ export default function Player() {
   };
 
   const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const minSwipeDistance = 50;
+  
+  const queueTouchStartY = useRef(null);
+  const [queueSwipeOffset, setQueueSwipeOffset] = useState(0);
+
+  const onQueueTouchStart = (e) => {
+    queueTouchStartY.current = e.targetTouches[0].clientY;
+  };
+  
+  const onQueueTouchMove = (e) => {
+    if (!queueTouchStartY.current) return;
+    const currentY = e.targetTouches[0].clientY;
+    const diff = currentY - queueTouchStartY.current;
+    if (diff > 0) {
+      setQueueSwipeOffset(diff);
+    }
+  };
+  
+  const onQueueTouchEnd = () => {
+    if (queueSwipeOffset > 100) {
+      setIsMobileQueueOpen(false);
+    }
+    setQueueSwipeOffset(0);
+    queueTouchStartY.current = null;
+  };
 
   // Hide the player bar if nothing is pending
   if (!pendingTrack) return null;
 
   const onTouchStart = (e) => {
     touchStartX.current = e.targetTouches[0].clientX;
+    touchStartY.current = e.targetTouches[0].clientY;
     setIsSwiping(true);
   };
 
   const onTouchMove = (e) => {
-    if (!touchStartX.current) return;
+    if (!touchStartX.current || !touchStartY.current) return;
     const currentX = e.targetTouches[0].clientX;
-    const diff = currentX - touchStartX.current;
+    const currentY = e.targetTouches[0].clientY;
+    const diffX = currentX - touchStartX.current;
+    const diffY = currentY - touchStartY.current;
+    
+    if (Math.abs(diffY) > Math.abs(diffX)) return;
     
     // Add resistance if they are swiping but can't go that way
-    if ((diff < 0 && !hasNext) || (diff > 0 && !hasPrevious)) {
-      setSwipeOffset(diff * 0.2);
+    if ((diffX < 0 && !hasNext) || (diffX > 0 && !hasPrevious)) {
+      setSwipeOffset(diffX * 0.2);
     } else {
-      setSwipeOffset(diff);
+      setSwipeOffset(diffX);
     }
   };
 
-  const onTouchEnd = () => {
-    if (!touchStartX.current) return;
+  const onTouchEnd = (e) => {
+    if (!touchStartX.current || !touchStartY.current) return;
+    const endY = e.changedTouches ? e.changedTouches[0].clientY : touchStartY.current;
+    const diffY = endY - touchStartY.current;
+    
+    const isUpSwipe = -diffY > minSwipeDistance;
     const distance = -swipeOffset; // positive = left swipe (finger moved left)
     
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
 
-    // Swipe Left = Next Track
-    if (isLeftSwipe && hasNext) {
+    if (isUpSwipe) {
+      setIsMobileQueueOpen(true);
+      setIsSwiping(false);
+      setSwipeOffset(0);
+    } else if (isLeftSwipe && hasNext) {
       // Animate out to the left
       setSwipeOffset(-window.innerWidth);
       setIsSwiping(false);
@@ -176,6 +216,7 @@ export default function Player() {
     }
 
     touchStartX.current = null;
+    touchStartY.current = null;
   };
 
   return (
@@ -322,8 +363,168 @@ export default function Player() {
           </div>
         </div>
         
-        <div className="hidden md:flex w-1/3 justify-end items-center" />
+        <div className="hidden md:flex w-1/3 justify-end items-center pr-2">
+          <button
+            type="button"
+            className={`p-2 rounded-full transition-colors ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}
+            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+            aria-label="Toggle right sidebar"
+            title="Now Playing View"
+          >
+            <ListMusic className="w-5 h-5" />
+          </button>
+        </div>
       </footer>
+
+      {/* Mobile "Up Next" Queue Bottom Sheet */}
+      <div 
+        className="fixed inset-0 z-[60] bg-zinc-950 flex flex-col md:hidden"
+        style={{ 
+          transform: isMobileQueueOpen 
+            ? `translateY(${queueSwipeOffset}px)` 
+            : 'translateY(100%)',
+          transition: queueSwipeOffset > 0 ? 'none' : 'transform 300ms ease-out'
+        }}
+      >
+        {/* Premium Sticky Header Morphing from Miniplayer */}
+        <div 
+          className="relative bg-zinc-950 overflow-hidden shrink-0 border-b border-white/5 shadow-2xl"
+          onTouchStart={onQueueTouchStart}
+          onTouchMove={onQueueTouchMove}
+          onTouchEnd={onQueueTouchEnd}
+        >
+          {/* Subtle blurred background based on cover art */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center blur-[50px] opacity-30 transition-all duration-700"
+            style={{ backgroundImage: `url(${pendingTrack?.thumbnail || '/logo.svg'})` }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-zinc-950/80 to-zinc-950" />
+
+          <div className="relative z-10 pt-2 pb-5 px-5 flex flex-col gap-4">
+            {/* Swipe Handle & Top Bar */}
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-12 h-1.5 bg-white/20 rounded-full mb-4" />
+              <div className="w-full flex items-center justify-between">
+                <button 
+                  onClick={() => setIsMobileQueueOpen(false)}
+                  className="p-2 -ml-2 rounded-full bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all active:scale-95"
+                  aria-label="Close Queue"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+                <span className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase">Now Playing</span>
+                <div className="w-9" /> {/* Spacer for centering */}
+              </div>
+            </div>
+
+            {/* Now Playing Info & Controls */}
+            <div className="flex flex-col items-center gap-4 mt-4 mb-2">
+              {/* Large Artwork */}
+              <div className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-xl shadow-2xl shrink-0 overflow-hidden ring-1 ring-white/10 group">
+                <img 
+                  src={pendingTrack?.thumbnail || '/logo.svg'} 
+                  alt="Current" 
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  onError={(e) => {
+                    e.target.src = '/logo.svg';
+                  }}
+                />
+              </div>
+
+              {/* Details & Main Controls */}
+              <div className="flex flex-col items-center w-full min-w-0 justify-center text-center">
+                <span className="text-xl sm:text-2xl font-bold text-white truncate drop-shadow-sm mb-1 w-full px-4">{currentTitle}</span>
+                <span className="text-sm sm:text-base text-white/60 truncate mb-6 font-medium w-full px-4">{pendingTrack?.artist || 'Unknown Artist'}</span>
+
+                <div className="flex items-center justify-center gap-8 w-full">
+                  <button 
+                    type="button" 
+                    className="text-zinc-400 hover:text-white transition-colors disabled:opacity-40 p-2"
+                    onClick={playPreviousTrack}
+                    disabled={!hasPrevious}
+                    aria-label="Previous track"
+                  >
+                    <SkipBack className="w-8 h-8" />
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="text-white hover:scale-105 active:scale-95 transition-all flex items-center justify-center p-2"
+                    onClick={playPause}
+                    aria-label="Play/Pause"
+                  >
+                    {isPlaying ? (
+                      <svg className="w-12 h-12 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                        <rect x="6.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
+                        <rect x="14.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
+                      </svg>
+                    ) : (
+                      <svg className="w-12 h-12 text-white translate-x-[2px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                        <path d="M7 4.5v15l12-7.5z" />
+                      </svg>
+                    )}
+                  </button>
+
+                  <button 
+                    type="button" 
+                    className="text-zinc-400 hover:text-white transition-colors disabled:opacity-40 p-2"
+                    onClick={playNextTrack}
+                    disabled={!hasNext}
+                    aria-label="Next track"
+                  >
+                    <SkipForward className="w-8 h-8" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-[10px] text-white/40 font-mono w-8 text-right">{formatTime(currentTime)}</span>
+              <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden relative cursor-pointer" onClick={(e) => {
+                // Optional: basic tap to seek support for mobile queue header
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pos = (e.clientX - rect.left) / rect.width;
+                seekToPercent(pos * 100);
+              }}>
+                <div className="absolute top-0 left-0 h-full bg-white rounded-full" style={{ width: `${progress || 0}%` }} />
+              </div>
+              <span className="text-[10px] text-white/40 font-mono w-8">{formatTime(duration)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Scrollable Queue */}
+        <div className="flex-1 overflow-y-auto p-4 pb-20">
+          <h3 className="text-white font-semibold mb-4 text-lg">Up Next</h3>
+          <div className="flex flex-col gap-1">
+            {(trackQueue.length > 0 ? trackQueue : recommendationQueue)
+              .filter(t => t.videoId !== pendingTrack?.videoId)
+              .map((track, idx) => (
+              <div 
+                key={`${track.videoId}-${idx}`}
+                className="flex items-center gap-3 cursor-pointer group hover:bg-zinc-800/50 p-2 rounded-lg transition-colors"
+                onClick={() => {
+                  selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail);
+                  setIsMobileQueueOpen(false);
+                }}
+              >
+                <img 
+                  src={track.thumbnail || '/logo.svg'} 
+                  className="w-12 h-12 rounded-md object-cover shrink-0" 
+                  onError={(e) => {
+                    e.target.src = '/logo.svg';
+                  }}
+                />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-sm text-white font-medium truncate group-hover:text-green-400 transition-colors">{track.title}</span>
+                  <span className="text-xs text-zinc-400 truncate mt-0.5">{track.artist}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
       {/* Fullscreen Expanded Player Modal */}
       <FullPlayer 

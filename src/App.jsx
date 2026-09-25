@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { usePlayer } from './context/PlayerContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
+import RightSidebar from './components/RightSidebar';
 import Player from './components/Player';
 import Home from './pages/Home';
 import SearchPage from './pages/SearchPage';
@@ -107,6 +108,7 @@ function App() {
             <PlaceholderPage view={currentView} />
           )}
         </section>
+        <RightSidebar />
       </main>
       <Player />
     </div>

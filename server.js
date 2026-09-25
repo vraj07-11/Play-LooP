@@ -268,29 +268,41 @@ app.get("/api/recommendations", async (req, res) => {
 		if (artist && title) {
 			const ytTracks = await fetchYTMusicUpNext(artist, title);
 			if (ytTracks.length > 0) {
-				recommendations = await resolveExternalTracksToSaavn(ytTracks, 20);
+				const ytRecos = await resolveExternalTracksToSaavn(ytTracks, 20);
+				recommendations.push(...ytRecos);
 			}
 		}
 
-		// 2. Fallback to JioSaavn reco.getreco if YT Music yielded no candidates
-		if (recommendations.length === 0 && videoId) {
+		// 2. Fallback to JioSaavn reco.getreco (Append if we need more)
+		if (recommendations.length < 30 && videoId) {
 			const recoData = await fetchJioSaavn({ __call: "reco.getreco", pid: videoId });
 			if (Array.isArray(recoData) && recoData.length > 0) {
-				recommendations = recoData.map(formatSong);
+				recommendations.push(...recoData.map(formatSong));
 			}
 		}
 
-		// 3. Fallback: Search JioSaavn by artist/title if still empty
-		if (recommendations.length === 0) {
+		// 3. Fallback: Search JioSaavn by artist/title if still low on tracks
+		if (recommendations.length < 20) {
 			const cleanArtist = artist ? artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
-			const query = cleanArtist || title;
+			const query = cleanArtist;
 			if (query) {
 				const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "30", p: "1" });
 				if (searchData && searchData.results) {
-					recommendations = searchData.results.map(formatSong);
+					recommendations.push(...searchData.results.map(formatSong));
 				}
 			}
 		}
+
+		// Deduplicate the combined recommendations
+		const uniqueRecos = [];
+		const seenIds = new Set();
+		for (const track of recommendations) {
+			if (track && track.videoId && !seenIds.has(track.videoId)) {
+				seenIds.add(track.videoId);
+				uniqueRecos.push(track);
+			}
+		}
+		recommendations = uniqueRecos;
 
 		// Save to 24-Hour Cache
 		if (recommendations.length > 0) {

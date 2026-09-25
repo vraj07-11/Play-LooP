@@ -79,6 +79,21 @@ export function PlayerProvider({ children }) {
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
   const [upcomingTrack, setUpcomingTrack] = useState(null);
+  
+  const [stableShuffledQueue, setStableShuffledQueue] = useState([]);
+  const stableShuffledQueueRef = useRef([]);
+
+  useEffect(() => {
+    const activeQueue = trackQueue.length > 0 ? trackQueue : recommendationQueue;
+    if (isShuffleEnabled && activeQueue.length > 0) {
+      const shuffled = [...activeQueue].sort(() => 0.5 - Math.random());
+      setStableShuffledQueue(shuffled);
+      stableShuffledQueueRef.current = shuffled;
+    } else {
+      setStableShuffledQueue([]);
+      stableShuffledQueueRef.current = [];
+    }
+  }, [trackQueue, recommendationQueue, isShuffleEnabled]);
 
   // ----- Deterministic 5‑track window -----
   const WINDOW_SIZE = 5;
@@ -520,19 +535,21 @@ export function PlayerProvider({ children }) {
       if (tQueue.length > 0) {
         if (isShuffle) {
           let currentCycleHistory = tHistory.slice(shuffleCycleStartIndexRef.current);
-          let candidates = tQueue.filter((t) => 
+          let candidates = stableShuffledQueueRef.current.filter((t) => 
             t.videoId !== currentTrack?.videoId &&
             !currentCycleHistory.some(ht => ht.videoId === t.videoId)
           );
           
-          if (candidates.length === 0 && tQueue.length > 1) {
+          if (candidates.length === 0 && stableShuffledQueueRef.current.length > 0) {
             shuffleCycleStartIndexRef.current = tHistory.length;
-            candidates = tQueue.filter((t) => t.videoId !== currentTrack?.videoId);
+            candidates = stableShuffledQueueRef.current.filter((t) => t.videoId !== currentTrack?.videoId);
           }
           
-          const pool = candidates.length > 0 ? candidates : tQueue.filter(t => t.videoId !== currentTrack?.videoId);
-          const finalPool = pool.length > 0 ? pool : tQueue;
-          nextTrackObj = finalPool[Math.floor(Math.random() * finalPool.length)];
+          if (candidates.length > 0) {
+            nextTrackObj = candidates[0];
+          } else {
+            nextTrackObj = tQueue[Math.floor(Math.random() * tQueue.length)];
+          }
         } else {
           const nextIndex = (cTrackIndex + 1) % tQueue.length;
           nextTrackObj = tQueue[nextIndex];
@@ -665,19 +682,21 @@ export function PlayerProvider({ children }) {
       if (trackQueue.length > 0) {
         if (isShuffleEnabled) {
           let currentCycleHistory = trackHistory.slice(shuffleCycleStartIndexRef.current);
-          let candidates = trackQueue.filter((t) => 
+          let candidates = stableShuffledQueueRef.current.filter((t) => 
             t.videoId !== pendingTrack.videoId && 
             !currentCycleHistory.some(ht => ht.videoId === t.videoId)
           );
           
-          if (candidates.length === 0 && trackQueue.length > 1) {
+          if (candidates.length === 0 && stableShuffledQueueRef.current.length > 0) {
             shuffleCycleStartIndexRef.current = trackHistory.length;
-            candidates = trackQueue.filter((t) => t.videoId !== pendingTrack.videoId);
+            candidates = stableShuffledQueueRef.current.filter((t) => t.videoId !== pendingTrack.videoId);
           }
           
-          const pool = candidates.length > 0 ? candidates : trackQueue;
-          const randomIndex = Math.floor(Math.random() * pool.length);
-          nextTrackObj = pool[randomIndex];
+          if (candidates.length > 0) {
+            nextTrackObj = candidates[0];
+          } else {
+            nextTrackObj = trackQueue[Math.floor(Math.random() * trackQueue.length)];
+          }
         } else {
           const nextIndex = (currentTrackIndex + 1) % trackQueue.length;
           nextTrackObj = trackQueue[nextIndex];
@@ -692,8 +711,11 @@ export function PlayerProvider({ children }) {
         );
         const pool = candidates.length > 0 ? candidates : recommendationQueue.filter((t) => t.videoId !== pendingTrack.videoId);
         const finalPool = pool.length > 0 ? pool : recommendationQueue;
-        nextTrackObj = isShuffleEnabled
-          ? finalPool[Math.floor(Math.random() * finalPool.length)]
+        nextTrackObj = isShuffleEnabled && stableShuffledQueueRef.current.length > 0
+          ? stableShuffledQueueRef.current.find(t => 
+              t.videoId !== pendingTrack.videoId && 
+              !trackHistory.some(ht => ht.videoId === t.videoId || (ht.title && t.title && cleanTitle(ht.title) === cleanTitle(t.title)))
+            ) || finalPool[0]
           : finalPool[0];
       }
     }
@@ -898,6 +920,8 @@ export function PlayerProvider({ children }) {
       });
   }, [pendingTrack?.videoId, pendingTrack?.title, roundedDuration]);
 
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+
   const value = {
     isPlaying,
     playPause,
@@ -930,7 +954,14 @@ export function PlayerProvider({ children }) {
     isMuted,
     toggleMute,
     playerButtonStyle,
-    setPlayerButtonStyle
+    setPlayerButtonStyle,
+    isRightSidebarOpen,
+    setIsRightSidebarOpen,
+    upcomingTrack,
+    recommendationQueue,
+    stableShuffledQueue,
+    trackHistory,
+    shuffleCycleStartIndex: shuffleCycleStartIndexRef.current
   };
 
   return (
