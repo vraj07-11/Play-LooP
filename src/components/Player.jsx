@@ -190,7 +190,7 @@ export default function Player() {
         <div 
           className={`player-track flex items-center gap-4 w-full md:w-1/3 min-w-0 cursor-pointer group hover:opacity-95 select-none ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
           style={{ transform: `translateX(${swipeOffset}px)` }}
-          onClick={openFullPlayer}
+          onClick={() => openFullPlayer(false)}
           title="Click to view expanded player"
           role="button"
           tabIndex={0}

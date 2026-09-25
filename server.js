@@ -388,14 +388,118 @@ app.get("/api/playlist", async (req, res) => {
 	try {
 		if (playlistId.startsWith("QUERY:")) {
 			const query = playlistId.replace("QUERY:", "");
-			const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "30", p: "1" });
-			const tracks = (data.results || []).map(formatSong);
+			
+			const cleanTitle = (str) => {
+				return String(str || "")
+					.toLowerCase()
+					.replace(/[\(\[\{].*?[\)\]\}]/g, "")
+					.replace(/[^a-z0-9]/g, "")
+					.trim();
+			};
+
+			const calculateSimilarity = (str1, str2) => {
+				if (!str1 || !str2) return 0;
+				if (str1 === str2) return 1;
+				
+				const getBigrams = (str) => {
+					const bigrams = [];
+					for (let i = 0; i < str.length - 1; i++) {
+						bigrams.push(str.slice(i, i + 2));
+					}
+					return bigrams;
+				};
+
+				const bg1 = getBigrams(str1);
+				const bg2 = getBigrams(str2);
+				
+				if (bg1.length === 0 || bg2.length === 0) return 0;
+
+				let intersection = 0;
+				const bg2Copy = [...bg2];
+				for (const bg of bg1) {
+					const index = bg2Copy.indexOf(bg);
+					if (index !== -1) {
+						intersection++;
+						bg2Copy.splice(index, 1);
+					}
+				}
+
+				return (2.0 * intersection) / (bg1.length + bg2.length);
+			};
+
+			let rawTracks = [];
+			for (let page = 1; page <= 4; page++) {
+				try {
+					const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "30", p: String(page) });
+					if (data && Array.isArray(data.results)) {
+						rawTracks.push(...data.results.map(formatSong));
+					}
+				} catch (e) {
+					console.warn(`QUERY: search page ${page} failed:`, e.message);
+				}
+			}
+
+			// Deduplicate by normalized song title and fuzzy similarity
+			const seenTitles = [];
+			const uniqueTracks = [];
+
+			const isDuplicate = (normTitle) => {
+				for (const seen of seenTitles) {
+					if (calculateSimilarity(normTitle, seen) >= 0.4) { // 40% similarity threshold
+						return true;
+					}
+				}
+				return false;
+			};
+
+			for (const track of rawTracks) {
+				const normTitle = cleanTitle(track.title);
+				if (normTitle && !isDuplicate(normTitle)) {
+					seenTitles.push(normTitle);
+					uniqueTracks.push(track);
+				}
+				if (uniqueTracks.length >= 30) break;
+			}
+
+			// If unique tracks count is low, supplement with top tracks from artists
+			if (uniqueTracks.length > 0 && uniqueTracks.length < 20) {
+				try {
+					const seedTrack = uniqueTracks[0];
+					const artists = (seedTrack.artist || "").split("-")[0].split(",");
+					for (const rawArtist of artists) {
+						const cleanArt = rawArtist.split("ft.")[0].split("feat.")[0].trim();
+						if (!cleanArt) continue;
+						
+						for (let page = 1; page <= 3; page++) {
+							const extraData = await fetchJioSaavn({ __call: "search.getResults", q: cleanArt, n: "30", p: String(page) });
+							if (extraData && Array.isArray(extraData.results)) {
+								for (const track of extraData.results.map(formatSong)) {
+									const normTitle = cleanTitle(track.title);
+									if (normTitle && !isDuplicate(normTitle)) {
+										seenTitles.push(normTitle);
+										uniqueTracks.push(track);
+									}
+									if (uniqueTracks.length >= 30) break;
+								}
+							}
+							if (uniqueTracks.length >= 30) break;
+						}
+						if (uniqueTracks.length >= 30) break;
+					}
+				} catch (err) {
+					console.warn("Dynamic mix artist supplement error:", err.message);
+				}
+			}
+
+			// If we found at least 3 unique tracks, return them! Otherwise, fall back to raw tracks so the playlist isn't completely empty.
+			const finalTracks = uniqueTracks.length > 2 ? uniqueTracks.slice(0, 30) : rawTracks.slice(0, 30);
+
 			return res.json({
 				playlistId,
 				title: `${query} Mix`,
 				description: `Curated collection for ${query}`,
-				thumbnail: tracks[0]?.thumbnail || "/logo.svg",
-				tracks
+				thumbnail: finalTracks[0]?.thumbnail || "/logo.svg",
+				tracks: finalTracks
 			});
 		}
 
