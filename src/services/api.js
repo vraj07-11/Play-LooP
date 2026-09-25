@@ -139,6 +139,48 @@ export const DEFAULT_PLAYLISTS = [
     author: "Play LooP",
     thumbnail: "https://c.saavncdn.com/editorial/LofiIndiaHits_20240307035844_500x500.jpg",
     count: 40
+  },
+  {
+    playlistId: "107584484",
+    title: "Romantic Hindi Hits",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/HindiRomanticHits_20260715091230_500x500.jpg",
+    count: 45
+  },
+  {
+    playlistId: "8042456",
+    title: "EDM Party Anthems",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/EDMPartyAnthems_20260810101530_500x500.jpg",
+    count: 50
+  },
+  {
+    playlistId: "115784920",
+    title: "Workout Motivation",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/WorkoutMotivation_20260512061200_500x500.jpg",
+    count: 40
+  },
+  {
+    playlistId: "98273641",
+    title: "Chillhop Beats",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/ChillhopBeats_20260405081000_500x500.jpg",
+    count: 35
+  },
+  {
+    playlistId: "88471029",
+    title: "Best of 2000s Pop",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/charts_English2000s_178363_20240408065247_500x500.jpg",
+    count: 50
+  },
+  {
+    playlistId: "77492018",
+    title: "Acoustic Sunset",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/editorial/AcousticSunset_20260310052000_500x500.jpg",
+    count: 30
   }
 ];
 

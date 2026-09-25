@@ -1,7 +1,17 @@
 import React, { useRef } from 'react';
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
-export default function Carousel({ title, items, onItemClick, onPlayClick, renderSubtitle, keyExtractor, cardType = 'square', onEndReached }) {
+export default function Carousel({ 
+  title, 
+  items, 
+  onItemClick, 
+  onPlayClick, 
+  renderSubtitle, 
+  keyExtractor, 
+  cardType = 'square', 
+  onEndReached,
+  isLoadingMore = false 
+}) {
   const rowRef = useRef(null);
 
   const scroll = (direction) => {
@@ -10,7 +20,7 @@ export default function Carousel({ title, items, onItemClick, onPlayClick, rende
     
     if (direction === 'right' && onEndReached) {
       const { scrollLeft, scrollWidth, clientWidth } = rowRef.current;
-      if (scrollWidth - (scrollLeft + scrollAmount) - clientWidth < 150) {
+      if (scrollWidth - (scrollLeft + scrollAmount) - clientWidth < 300) {
         onEndReached();
       }
     }
@@ -21,7 +31,7 @@ export default function Carousel({ title, items, onItemClick, onPlayClick, rende
   const handleScroll = (e) => {
     if (!onEndReached) return;
     const { scrollLeft, scrollWidth, clientWidth } = e.currentTarget;
-    if (scrollWidth - scrollLeft - clientWidth < 150) {
+    if (scrollWidth - scrollLeft - clientWidth < 300) {
       onEndReached();
     }
   };
@@ -123,6 +133,40 @@ export default function Carousel({ title, items, onItemClick, onPlayClick, rende
               </div>
             );
           })}
+
+          {isLoadingMore && (
+            <>
+              {[...Array(2)].map((_, idx) => (
+                cardType === 'wide' ? (
+                  <div 
+                    key={`loading-wide-${idx}`} 
+                    className="skeleton-shimmer-card shrink-0 w-[240px] sm:w-[320px] h-[120px] sm:h-[150px] rounded-lg bg-[#121212] border border-zinc-800/80 p-3 sm:p-4 flex flex-col justify-between relative overflow-hidden shadow-lg animate-pulse"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-md bg-zinc-800/80 shrink-0" />
+                      <div className="flex flex-col gap-2 flex-1 min-w-0">
+                        <div className="h-3.5 sm:h-4 bg-zinc-800/90 rounded-md w-3/4" />
+                        <div className="h-2.5 sm:h-3 bg-zinc-800/50 rounded-md w-1/2" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-zinc-800/50">
+                      <div className="h-3 bg-zinc-800/60 rounded-md w-1/3" />
+                      <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-zinc-800/80" />
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    key={`loading-square-${idx}`} 
+                    className="skeleton-shimmer-card shrink-0 w-[135px] sm:w-[170px] bg-[#121212] border border-zinc-800/80 rounded-lg p-2.5 sm:p-3 flex flex-col relative overflow-hidden shadow-md animate-pulse"
+                  >
+                    <div className="w-full aspect-square bg-zinc-800/90 rounded-md mb-2.5 sm:mb-3" />
+                    <div className="h-3.5 sm:h-4 bg-zinc-800/90 rounded-md w-5/6 mb-2" />
+                    <div className="h-2.5 sm:h-3 bg-zinc-800/50 rounded-md w-3/5" />
+                  </div>
+                )
+              ))}
+            </>
+          )}
         </div>
 
         <button 

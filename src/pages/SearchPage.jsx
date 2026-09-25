@@ -5,6 +5,7 @@ export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const { selectAndPlayTrack } = usePlayer();
 
   useEffect(() => {
@@ -27,6 +28,51 @@ export default function SearchPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [results]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const active = document.activeElement;
+      if (
+        active && (
+          active.tagName === 'INPUT' || 
+          active.tagName === 'TEXTAREA' || 
+          active.isContentEditable ||
+          active.getAttribute('role') === 'textbox' ||
+          active.getAttribute('role') === 'searchbox'
+        )
+      ) {
+        return;
+      }
+
+      if (!results || results.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev + 1) % results.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => (prev <= 0 ? results.length - 1 : prev - 1));
+      } else if (e.key === 'Enter') {
+        if (selectedIndex >= 0 && selectedIndex < results.length) {
+          e.preventDefault();
+          const track = results[selectedIndex];
+          if (track) {
+            const title = track.title || track.name || "Unknown track";
+            const artist = typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist");
+            const thumbnail = track.thumbnail || track.thumbnails?.find((item) => item?.url)?.url || '/logo.svg';
+            selectAndPlayTrack(track.videoId, title, artist, thumbnail);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [results, selectedIndex, selectAndPlayTrack]);
+
   const performSearch = async (searchTerm) => {
     setLoading(true);
     try {
@@ -45,15 +91,6 @@ export default function SearchPage() {
     }
   };
 
-  const handleTrackClick = (track) => {
-    selectAndPlayTrack(
-      track.videoId,
-      track.title || track.name || "Unknown track",
-      typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist"),
-      track.thumbnail || '/logo.svg'
-    );
-  };
-
   return (
     <>
       <div className="page-header search-page-header">
@@ -63,18 +100,15 @@ export default function SearchPage() {
       
       {loading ? (
         <div className="track-list" data-track-list>
-          <div className="infinity-loader-container" role="status" aria-label="Searching for music">
-            <div className="infinity-loader-wrapper">
-              <svg className="infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-                <path className="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
-                <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
-              </svg>
+          {[...Array(6)].map((_, idx) => (
+            <div key={idx} className="track-card bg-[#121212] border border-zinc-800/60 rounded-lg p-3 flex items-center gap-4 animate-pulse skeleton-shimmer-card">
+              <div className="w-12 h-12 rounded bg-zinc-800/90 shrink-0" />
+              <div className="flex-1 flex flex-col gap-2 min-w-0">
+                <div className="w-1/2 h-4 bg-zinc-800/90 rounded" />
+                <div className="w-1/3 h-3 bg-zinc-800/50 rounded" />
+              </div>
             </div>
-            <p className="infinity-loader-text">
-              <span>Searching for "{query}"</span>
-              <span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
-            </p>
-          </div>
+          ))}
         </div>
       ) : (
         <div className="track-list" data-track-list>
@@ -87,12 +121,14 @@ export default function SearchPage() {
               const title = track.title || track.name || "Unknown track";
               const artist = typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist");
               const thumbnail = track.thumbnail || track.thumbnails?.find((item) => item?.url)?.url || '/logo.svg';
+              const isSelected = idx === selectedIndex;
               
               return (
                 <article 
                   key={idx} 
-                  className="track-card cursor-pointer select-none group"
+                  className={`track-card cursor-pointer select-none group ${isSelected ? 'is-selected' : ''}`}
                   onClick={() => selectAndPlayTrack(track.videoId, title, artist, thumbnail)}
+                  onMouseEnter={() => setSelectedIndex(idx)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {

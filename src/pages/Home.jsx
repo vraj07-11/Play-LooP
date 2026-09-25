@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists } from '../services/api.js';
+import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api.js';
 import Carousel from '../components/Carousel';
 import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight } from 'lucide-react';
 
@@ -119,6 +119,42 @@ export default function Home() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
+  // If loading playlist details, render Playlist Skeleton View
+  if (loadingPlaylistDetails) {
+    return (
+      <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-4 select-none">
+        <div className="w-28 h-9 bg-zinc-900 rounded-full mb-8 animate-pulse" />
+
+        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 sm:gap-8 mb-12">
+          <div className="w-44 h-44 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl bg-zinc-900 border border-zinc-800/80 shrink-0 skeleton-shimmer-card animate-pulse" />
+          <div className="flex flex-col min-w-0 w-full gap-3">
+            <div className="w-16 h-3.5 bg-zinc-800/60 rounded-md animate-pulse" />
+            <div className="w-3/4 max-w-lg h-9 sm:h-12 bg-zinc-800 rounded-lg animate-pulse" />
+            <div className="w-full max-w-md h-4 bg-zinc-800/50 rounded-md animate-pulse" />
+            <div className="flex items-center gap-4 mt-2">
+              <div className="w-28 sm:w-32 h-11 sm:h-12 rounded-full bg-zinc-800 animate-pulse" />
+              <div className="w-16 h-4 bg-zinc-800/50 rounded-md animate-pulse" />
+            </div>
+          </div>
+        </div>
+
+        <div className="track-list">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="track-card bg-[#121212] border border-zinc-800/60 rounded-lg p-3 flex items-center gap-4 animate-pulse skeleton-shimmer-card">
+              <div className="w-6 h-4 bg-zinc-800/60 rounded" />
+              <div className="w-12 h-12 rounded bg-zinc-800/90 shrink-0" />
+              <div className="flex-1 flex flex-col gap-2 min-w-0">
+                <div className="w-1/2 h-4 bg-zinc-800/90 rounded" />
+                <div className="w-1/3 h-3 bg-zinc-800/50 rounded" />
+              </div>
+              <div className="w-12 h-4 bg-zinc-800/40 rounded hidden sm:block" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // If a playlist is selected, render the Playlist Details View
   if (selectedPlaylist) {
     return (
@@ -207,9 +243,13 @@ export default function Home() {
     );
   }
 
-  const featuredPlaylist = playlists.length > 0 ? playlists[0] : null;
-  const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : []), ...extraMadeForYou];
-  const popularAlbumsPlaylists = [...(playlists.length > 6 ? playlists.slice(6) : playlists.slice(1)), ...extraPopularAlbums];
+  const featuredPlaylist = playlists.length > 0 ? playlists[0] : (DEFAULT_PLAYLISTS[0] || null);
+  const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : DEFAULT_PLAYLISTS.slice(1, 6)), ...extraMadeForYou];
+  
+  const initialPopular = playlists.length >= 16 
+    ? playlists.slice(6, 16) 
+    : [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx).slice(0, 10);
+  const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
   const quickAccessItems = [
     { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 text-white" />, color: 'bg-[#8938d2]' },
@@ -220,19 +260,6 @@ export default function Home() {
 
   return (
     <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-6">
-      {loadingPlaylistDetails && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 p-4 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 text-white rounded-xl text-sm flex items-center justify-center gap-4 shadow-2xl">
-          <div className="mini-infinity-loader py-0 px-0">
-            <svg className="mini-infinity-svg" viewBox="0 0 200 100" xmlns="http://www.w3.org/2000/svg">
-              <path className="infinity-path-bg" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
-              <path className="infinity-path-stroke" d="M 40,50 C 40,15 85,15 100,50 C 115,85 160,85 160,50 C 160,15 115,15 100,50 C 85,85 40,85 40,50 Z" />
-            </svg>
-          </div>
-          <span className="font-medium tracking-wide">
-            Loading playlist details<span className="infinity-dots"><span>.</span><span>.</span><span>.</span></span>
-          </span>
-        </div>
-      )}
 
       {/* Greeting Section */}
       {!loadingPlaylists && (
@@ -348,6 +375,7 @@ export default function Home() {
             keyExtractor={(item, index) => `${item.playlistId}-${index}`}
             cardType="wide"
             onEndReached={loadMoreMadeForYou}
+            isLoadingMore={loadingMoreMadeForYou}
           />
         </div>
       )}
@@ -363,6 +391,7 @@ export default function Home() {
             keyExtractor={(item, index) => `${item.playlistId}-${index}`}
             cardType="square"
             onEndReached={loadMorePopularAlbums}
+            isLoadingMore={loadingMorePopularAlbums}
           />
         </div>
       )}

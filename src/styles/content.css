@@ -82,10 +82,13 @@
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 
-.track-card:hover {
-  border-color: rgba(113, 113, 122, 0.7);
-  background: linear-gradient(145deg, rgba(28, 28, 34, 0.95), rgba(18, 18, 22, 0.98));
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+.track-card:hover,
+.track-card.is-selected,
+.track-card:focus-visible {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: linear-gradient(145deg, rgba(32, 32, 40, 0.95), rgba(22, 22, 28, 0.98));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  transform: translateX(4px);
 }
 
 .track-card:active {

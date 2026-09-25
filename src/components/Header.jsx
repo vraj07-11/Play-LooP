@@ -10,9 +10,15 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
   const [hasSearched, setHasSearched] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
   const searchTimeout = useRef(null);
   const searchFormRef = useRef(null);
   const abortControllerRef = useRef(null);
+
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [suggestions]);
 
   useEffect(() => {
     const handlePointerDown = (e) => {
@@ -96,6 +102,34 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
     searchTimeout.current = setTimeout(() => {
       fetchSuggestions(trimmed);
     }, 60);
+  };
+
+  const handleKeyDown = (e) => {
+    if (!showSuggestions || suggestions.length === 0) {
+      if (e.key === 'Escape') {
+        setShowSuggestions(false);
+        const input = searchFormRef.current?.querySelector('input');
+        if (input) input.blur();
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev <= 0 ? suggestions.length - 1 : prev - 1));
+    } else if (e.key === 'Enter') {
+      if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+        e.preventDefault();
+        handleSuggestionClick(suggestions[selectedIndex].title);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      const input = searchFormRef.current?.querySelector('input');
+      if (input) input.blur();
+    }
   };
 
   const handleSearchSubmit = (e) => {
@@ -191,6 +225,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
               aria-label="Search music"
               value={query}
               onChange={onSearchInput}
+              onKeyDown={handleKeyDown}
               onFocus={() => {
                 if (query.trim().length >= 2) setShowSuggestions(true);
               }}
@@ -213,10 +248,11 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
                     <button 
                       key={i} 
                       type="button" 
-                      className="search-suggestion"
+                      className={`search-suggestion ${i === selectedIndex ? 'is-selected' : ''}`}
                       onClick={() => handleSuggestionClick(s.title)}
+                      onMouseEnter={() => setSelectedIndex(i)}
                     >
-                      <Search className="w-4 h-4 shrink-0 text-zinc-400" />
+                      <Search className="w-4 h-4 shrink-0 text-zinc-400 search-icon-svg" />
                       <span>
                         <strong>{s.title}</strong>
                         <small>{s.artist}</small>

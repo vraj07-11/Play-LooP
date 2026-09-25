@@ -17,7 +17,38 @@ export default function Player() {
   } = usePlayer();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [initialShowLyrics, setInitialShowLyrics] = useState(false);
   const progressRef = useRef(null);
+
+  useEffect(() => {
+    const handleToggleLyrics = () => {
+      if (!pendingTrack) return;
+      if (!isExpanded) {
+        setInitialShowLyrics(true);
+        const currentState = window.history.state || {};
+        window.history.pushState({ ...currentState, fullPlayer: true }, '', '#/player');
+        setIsExpanded(true);
+      } else {
+        window.dispatchEvent(new CustomEvent('playloop-toggle-lyrics-internal'));
+      }
+    };
+
+    const handleToggleFullPlayer = () => {
+      if (!pendingTrack) return;
+      if (!isExpanded) {
+        openFullPlayer(false);
+      } else {
+        closeFullPlayer();
+      }
+    };
+
+    window.addEventListener('playloop-toggle-lyrics', handleToggleLyrics);
+    window.addEventListener('playloop-toggle-full-player', handleToggleFullPlayer);
+    return () => {
+      window.removeEventListener('playloop-toggle-lyrics', handleToggleLyrics);
+      window.removeEventListener('playloop-toggle-full-player', handleToggleFullPlayer);
+    };
+  }, [pendingTrack, isExpanded]);
 
   useEffect(() => {
     const handlePopState = (e) => {
@@ -37,8 +68,9 @@ export default function Player() {
     }
   }, [isExpanded, pendingTrack]);
 
-  const openFullPlayer = () => {
+  const openFullPlayer = (showLyricsMode = false) => {
     if (!isExpanded) {
+      setInitialShowLyrics(showLyricsMode);
       const currentState = window.history.state || {};
       window.history.pushState({ ...currentState, fullPlayer: true }, '', '#/player');
       setIsExpanded(true);
@@ -297,6 +329,7 @@ export default function Player() {
       <FullPlayer 
         isOpen={isExpanded}
         onClose={closeFullPlayer}
+        initialShowLyrics={initialShowLyrics}
         pendingTrack={pendingTrack}
         isPlaying={isPlaying}
         playPause={playPause}

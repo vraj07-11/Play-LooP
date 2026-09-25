@@ -50,6 +50,14 @@ export default function FullPlayer({
     }
   }, [isOpen, initialShowLyrics]);
 
+  useEffect(() => {
+    const handleInternalToggle = () => {
+      setShowLyrics(prev => !prev);
+    };
+    window.addEventListener('playloop-toggle-lyrics-internal', handleInternalToggle);
+    return () => window.removeEventListener('playloop-toggle-lyrics-internal', handleInternalToggle);
+  }, []);
+
   // HD Thumbnail resolution handling with fallback
   const [imgSrc, setImgSrc] = useState('/logo.svg');
   const [fallbackIndex, setFallbackIndex] = useState(0);

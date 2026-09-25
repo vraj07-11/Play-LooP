@@ -30,6 +30,8 @@ export function usePlayer() {
 
 export function PlayerProvider({ children }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolumeState] = useState(1.0);
+  const [isMuted, setIsMuted] = useState(false);
   const [pendingTrack, setPendingTrack] = useState(null);
   const [currentTitle, setCurrentTitle] = useState("Select a song to start listening");
   const [playerStatus, setPlayerStatus] = useState("Nothing playing");
@@ -741,6 +743,113 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const setVolume = useCallback((val) => {
+    setVolumeState(prevVol => {
+      const newVol = typeof val === 'function' ? val(prevVol) : val;
+      const clamped = Math.max(0, Math.min(1, newVol));
+      if (nativeAudioPlayer.current) {
+        nativeAudioPlayer.current.volume = isMuted ? 0 : clamped;
+      }
+      return clamped;
+    });
+  }, [isMuted]);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted(prevMuted => {
+      const nextMuted = !prevMuted;
+      if (nativeAudioPlayer.current) {
+        nativeAudioPlayer.current.volume = nextMuted ? 0 : volume;
+      }
+      return nextMuted;
+    });
+  }, [volume]);
+
+  // Global Keyboard Controls for Player
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const active = document.activeElement;
+      if (
+        active && (
+          active.tagName === 'INPUT' || 
+          active.tagName === 'TEXTAREA' || 
+          active.isContentEditable ||
+          active.getAttribute('role') === 'textbox' ||
+          active.getAttribute('role') === 'searchbox'
+        )
+      ) {
+        return;
+      }
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          playPause();
+          break;
+
+        case 'ArrowLeft':
+          e.preventDefault();
+          playPreviousTrack();
+          break;
+
+        case 'ArrowRight':
+          e.preventDefault();
+          playNextTrack();
+          break;
+
+        case 'ArrowUp':
+          e.preventDefault();
+          setVolume(v => Math.min(1, Math.round((v + 0.05) * 100) / 100));
+          break;
+
+        case 'ArrowDown':
+          e.preventDefault();
+          setVolume(v => Math.max(0, Math.round((v - 0.05) * 100) / 100));
+          break;
+
+        case 'KeyF':
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('playloop-toggle-full-player'));
+          break;
+
+        case 'KeyL':
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('playloop-toggle-lyrics'));
+          break;
+
+        case 'KeyM':
+          e.preventDefault();
+          toggleMute();
+          break;
+
+        case 'KeyN':
+          e.preventDefault();
+          playNextTrack();
+          break;
+
+        case 'KeyP':
+          e.preventDefault();
+          playPreviousTrack();
+          break;
+
+        case 'KeyR':
+          e.preventDefault();
+          setIsRepeatEnabled(prev => !prev);
+          break;
+
+        case 'KeyS':
+          e.preventDefault();
+          setIsShuffleEnabled(prev => !prev);
+          break;
+
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [playPause, playNextTrack, playPreviousTrack, seekBy, setVolume, toggleMute]);
+
   const [lyricsData, setLyricsData] = useState(null);
   const [isLyricsLoading, setIsLyricsLoading] = useState(false);
   const lastFetchedLyricsRef = useRef({ videoId: null, duration: 0 });
@@ -816,6 +925,10 @@ export function PlayerProvider({ children }) {
     setIsShuffleEnabled,
     hasPrevious,
     hasNext,
+    volume,
+    setVolume,
+    isMuted,
+    toggleMute,
     playerButtonStyle,
     setPlayerButtonStyle
   };
