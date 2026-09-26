@@ -70,6 +70,25 @@ async function fetchJioSaavn(callParams) {
 	}
 }
 
+function getValidImage(imgUrl) {
+	if (!imgUrl) return "/logo.svg";
+	const url = String(imgUrl).replace("150x150", "500x500");
+	if (
+		url.includes("default_images") || 
+		url.includes("artist-default") || 
+		url.includes("default-artist") || 
+		url.includes("default") ||
+		url.includes("saavn_logo") ||
+		url.includes("jiosaavn_logo") ||
+		url.includes("editorial/logo/") ||
+		url.includes("placeholder") ||
+		url.includes("share-image")
+	) {
+		return "/logo.svg";
+	}
+	return url;
+}
+
 function formatSong(song) {
 	const encUrl = song.encrypted_media_url || song.more_info?.encrypted_media_url;
 	const decUrl = encUrl ? decryptSaavnUrl(encUrl) : null;
@@ -86,7 +105,7 @@ function formatSong(song) {
 		videoId: song.id,
 		title: (song.title || "").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
 		artist: artistName.replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
-		thumbnail: (song.image || "").replace("150x150", "500x500"),
+		thumbnail: getValidImage(song.image),
 		duration: parseInt(song.more_info?.duration || song.duration || 0, 10),
 		streamUrl: highQualityUrl
 	};
@@ -250,6 +269,13 @@ app.get("/api/recommendations", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
 	const artist = String(req.query.artist || "").trim();
 	const title = String(req.query.title || "").trim();
+	const isRefresh = req.query.refresh === "true";
+
+	const excludeIdsRaw = String(req.query.excludeIds || "").trim();
+	const excludeSet = new Set(excludeIdsRaw ? excludeIdsRaw.split(",").map(id => id.trim()).filter(Boolean) : []);
+
+	const excludeTitlesRaw = String(req.query.excludeTitles || "").trim();
+	const excludeTitlesSet = new Set(excludeTitlesRaw ? excludeTitlesRaw.split("|").map(t => t.toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean) : []);
 
 	if (!videoId && !artist && !title) {
 		return res.status(400).json({ error: "Video ID or song metadata required" });
@@ -257,55 +283,94 @@ app.get("/api/recommendations", async (req, res) => {
 
 	const cacheKey = (videoId || `${artist}_${title}`).toLowerCase();
 	const cachedEntry = recoCache.get(cacheKey);
-	if (cachedEntry && (Date.now() - cachedEntry.timestamp < RECO_CACHE_TTL)) {
-		return res.json(cachedEntry.data);
+	if (!isRefresh && cachedEntry && (Date.now() - cachedEntry.timestamp < RECO_CACHE_TTL)) {
+		const filteredCache = cachedEntry.data.filter(t => 
+			t && t.videoId && 
+			!excludeSet.has(t.videoId) && 
+			!excludeTitlesSet.has((t.title || "").toLowerCase().replace(/[^a-z0-9]/g, ""))
+		);
+		if (filteredCache.length >= 8) {
+			return res.json(filteredCache);
+		}
 	}
 
 	try {
 		let recommendations = [];
 
-		// 1. Try YT Music Up Next for superior, popular recommendations based on current song
+		// 1. Try YT Music Up Next for superior recommendations based on current song
 		if (artist && title) {
-			const ytTracks = await fetchYTMusicUpNext(artist, title);
+			let ytTracks = await fetchYTMusicUpNext(artist, title);
 			if (ytTracks.length > 0) {
-				const ytRecos = await resolveExternalTracksToSaavn(ytTracks, 20);
+				if (isRefresh) {
+					ytTracks.sort(() => 0.5 - Math.random());
+				}
+				const ytRecos = await resolveExternalTracksToSaavn(ytTracks, 30);
 				recommendations.push(...ytRecos);
 			}
 		}
 
-		// 2. Fallback to JioSaavn reco.getreco (Append if we need more)
-		if (recommendations.length < 30 && videoId) {
+		// 2. Fallback / Append JioSaavn reco.getreco
+		if (videoId) {
 			const recoData = await fetchJioSaavn({ __call: "reco.getreco", pid: videoId });
 			if (Array.isArray(recoData) && recoData.length > 0) {
-				recommendations.push(...recoData.map(formatSong));
+				const formatted = recoData.map(formatSong);
+				if (isRefresh) formatted.sort(() => 0.5 - Math.random());
+				recommendations.push(...formatted);
 			}
 		}
 
-		// 3. Fallback: Search JioSaavn by artist/title if still low on tracks
-		if (recommendations.length < 20) {
-			const cleanArtist = artist ? artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
-			const query = cleanArtist;
-			if (query) {
-				const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "30", p: "1" });
-				if (searchData && searchData.results) {
-					recommendations.push(...searchData.results.map(formatSong));
-				}
+		// 3. Multi-page artist catalogue search for deeper non-top-1 songs
+		const cleanArtist = artist ? artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
+		if (cleanArtist) {
+			const pageToFetch = isRefresh ? Math.floor(Math.random() * 3) + 1 : 1;
+			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: cleanArtist, n: "40", p: String(pageToFetch) });
+			if (searchData && searchData.results) {
+				const artistTracks = searchData.results.map(formatSong);
+				if (isRefresh) artistTracks.sort(() => 0.5 - Math.random());
+				recommendations.push(...artistTracks);
 			}
 		}
 
-		// Deduplicate the combined recommendations
+		// 4. Broad Fallback from top playlists (Pop, 2010s, Viral, Hindi) to guarantee fresh candidates
+		if (isRefresh || recommendations.length < 25) {
+			const playlistIds = ["947987697", "63116930", "48189087", "1134543272"];
+			const randomPid = playlistIds[Math.floor(Math.random() * playlistIds.length)];
+			const chartData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: randomPid, n: "50" });
+			if (chartData && Array.isArray(chartData.songs)) {
+				const chartSongs = chartData.songs.map(formatSong).sort(() => 0.5 - Math.random()).slice(0, 20);
+				recommendations.push(...chartSongs);
+			}
+		}
+
+		// Deduplicate and filter against excludeSet & excludeTitlesSet
 		const uniqueRecos = [];
 		const seenIds = new Set();
+		const currentTitleClean = (title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
 		for (const track of recommendations) {
-			if (track && track.videoId && !seenIds.has(track.videoId)) {
+			if (!track || !track.videoId) continue;
+			
+			const trackTitleClean = (track.title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+			
+			if (track.videoId === videoId || (currentTitleClean && trackTitleClean === currentTitleClean)) {
+				continue;
+			}
+
+			if (excludeSet.has(track.videoId) || (trackTitleClean && excludeTitlesSet.has(trackTitleClean))) {
+				continue;
+			}
+
+			if (!seenIds.has(track.videoId)) {
 				seenIds.add(track.videoId);
 				uniqueRecos.push(track);
 			}
 		}
+
 		recommendations = uniqueRecos;
 
-		// Save to 24-Hour Cache
-		if (recommendations.length > 0) {
+		if (isRefresh) {
+			recommendations.sort(() => 0.5 - Math.random());
+		} else if (recommendations.length > 0) {
 			recoCache.set(cacheKey, { data: recommendations, timestamp: Date.now() });
 		}
 
@@ -314,6 +379,222 @@ app.get("/api/recommendations", async (req, res) => {
 		console.error("Recommendations failed:", error);
 		res.json([]);
 	}
+});
+
+let trendingArtistsCache = { data: {}, lastFetched: {} };
+const TRENDING_ARTISTS_TTL = 6 * 60 * 60 * 1000;
+
+app.get("/api/trending-artists", async (req, res) => {
+	const now = Date.now();
+	const languagesQuery = req.query.languages || "english,hindi";
+	const cacheKey = languagesQuery.toLowerCase().trim();
+
+	if (trendingArtistsCache.data[cacheKey] && (now - trendingArtistsCache.lastFetched[cacheKey] < TRENDING_ARTISTS_TTL)) {
+		return res.json(trendingArtistsCache.data[cacheKey]);
+	}
+
+	try {
+		const languages = cacheKey.split(",").map(s => s.trim()).filter(Boolean);
+		const artistCounts = {};
+		const artistMeta = {};
+		
+		// For each language, find top artists
+		let topArtistIdsByLang = [];
+		
+		for (const lang of languages) {
+			try {
+				// 1. Search for top playlist for this language
+				const searchPlaylists = await fetchJioSaavn({ __call: "search.getPlaylistResults", q: `top ${lang} hits`, n: "2", p: "1" });
+				let pid = null;
+				if (searchPlaylists && searchPlaylists.results && searchPlaylists.results.length > 0) {
+					pid = searchPlaylists.results[0].id;
+				} else {
+					// Fallbacks
+					if (lang === 'hindi') pid = '1134543272';
+					else if (lang === 'english') pid = '947987697';
+					else continue;
+				}
+
+				// 2. Fetch playlist details
+				const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid });
+				const langCounts = {};
+				
+				if (playlistData && playlistData.list) {
+					playlistData.list.forEach(song => {
+						const artists = song.more_info?.artistMap?.primary_artists || [];
+						artists.forEach(a => {
+							if (a.id && a.name && !a.name.toLowerCase().includes("various")) {
+								langCounts[a.id] = (langCounts[a.id] || 0) + 1;
+								if (!artistMeta[a.id]) artistMeta[a.id] = { id: a.id, name: a.name, image: a.image };
+							}
+						});
+					});
+				}
+				
+				// 3. Take top N for this language to ensure equal representation
+				// if 2 langs, take 3 per lang (total 6, we'll slice to 5 later). if 1 lang, take 5.
+				const numToTake = Math.max(1, Math.ceil(5 / languages.length));
+				const topIds = Object.keys(langCounts).sort((a, b) => langCounts[b] - langCounts[a]).slice(0, numToTake);
+				topArtistIdsByLang.push(...topIds);
+
+			} catch(e) {
+				console.warn(`Failed to process language ${lang}:`, e.message);
+			}
+		}
+
+		// Deduplicate and limit to 5
+		const finalIds = [...new Set(topArtistIdsByLang)].slice(0, 5);
+
+		// Fetch high-res details and follower counts
+		const finalArtists = await Promise.all(finalIds.map(async (id) => {
+			try {
+				const detail = await fetchJioSaavn({ __call: "artist.getArtistPageDetails", artistId: id, p: "1", n_song: "1", n_album: "0" });
+				const followers = parseInt(detail.follower_count || "0", 10);
+				let formattedFollowers = "";
+				if (followers > 0) {
+					formattedFollowers = followers > 1000000 
+						? (followers / 1000000).toFixed(1) + "M Listeners"
+						: (followers / 1000).toFixed(1) + "K Listeners";
+				} else {
+					formattedFollowers = "Trending Artist"; // fallback
+				}
+
+				return {
+					playlistId: `ARTIST:${id}`,
+					title: detail.name || artistMeta[id].name,
+					thumbnail: getValidImage(detail.image || artistMeta[id].image),
+					followers: formattedFollowers,
+					followerCountRaw: followers,
+					author: "Artist"
+				};
+			} catch (e) {
+				return {
+					playlistId: `ARTIST:${id}`,
+					title: artistMeta[id].name,
+					thumbnail: getValidImage(artistMeta[id].image),
+					followers: "Trending Artist",
+					followerCountRaw: 0,
+					author: "Artist"
+				};
+			}
+		}));
+
+		// Sort final array by absolute follower count
+		finalArtists.sort((a, b) => b.followerCountRaw - a.followerCountRaw);
+
+		trendingArtistsCache.data[cacheKey] = finalArtists;
+		trendingArtistsCache.lastFetched[cacheKey] = now;
+		res.json(finalArtists);
+	} catch (error) {
+		console.error("Trending artists failed:", error);
+		res.status(500).json([]);
+	}
+});
+
+let popularSongsCache = { data: {}, lastFetched: {} };
+const POPULAR_SONGS_TTL = 3 * 60 * 60 * 1000;
+
+app.get("/api/popular-songs", async (req, res) => {
+	const languagesQuery = req.query.languages || "english,hindi";
+	const cacheKey = languagesQuery.toLowerCase().trim();
+
+	let songsByLangRaw = popularSongsCache.data[cacheKey];
+
+	if (!songsByLangRaw || (Date.now() - popularSongsCache.lastFetched[cacheKey] > POPULAR_SONGS_TTL)) {
+		try {
+			const languages = cacheKey.split(",").map(s => s.trim()).filter(Boolean);
+			songsByLangRaw = [];
+
+			for (const lang of languages) {
+				try {
+					let songs = [];
+					if (lang === 'english') {
+						// Randomly pool top English hits from both Global Pop (947987697) AND English 2010s (63116930) + English Viral Hits (48189087)
+						const englishPids = ['947987697', '63116930', '48189087'];
+						const selectedPids = shuffleArray(englishPids);
+						for (const id of selectedPids) {
+							try {
+								const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: id });
+								if (playlistData && playlistData.list) {
+									songs.push(...playlistData.list.map(formatSong));
+								}
+							} catch (e) {}
+						}
+					} else {
+						let pid = null;
+						if (lang === 'hindi') pid = '1134543272'; // India Superhits Top 50
+						else if (lang === 'punjabi') pid = '4144832'; // Punjabi Hit Songs
+						
+						if (pid) {
+							const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid });
+							if (playlistData && playlistData.list) {
+								songs = playlistData.list.map(formatSong);
+							}
+						}
+					}
+					
+					if (songs.length === 0) {
+						// Fallback to searching top hits playlist for this language
+						const searchPlaylists = await fetchJioSaavn({ __call: "search.getPlaylistResults", q: `top ${lang} hits`, n: "1", p: "1" });
+						if (searchPlaylists && searchPlaylists.results && searchPlaylists.results.length > 0) {
+							const plData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: searchPlaylists.results[0].id });
+							if (plData && plData.list) {
+								songs = plData.list.map(formatSong);
+							}
+						}
+					}
+
+					if (songs.length === 0) {
+						// Search top songs for language
+						const searchSongs = await fetchJioSaavn({ __call: "search.getResults", q: `${lang} superhits`, n: "30", p: "1" });
+						if (searchSongs && Array.isArray(searchSongs.results)) {
+							songs = searchSongs.results.map(formatSong);
+						}
+					}
+
+					if (songs.length > 0) {
+						songsByLangRaw.push(songs);
+					}
+				} catch (err) {
+					console.warn(`[Popular Songs] Failed for lang ${lang}:`, err.message);
+				}
+			}
+
+			if (songsByLangRaw.length > 0) {
+				popularSongsCache.data[cacheKey] = songsByLangRaw;
+				popularSongsCache.lastFetched[cacheKey] = Date.now();
+			}
+		} catch (e) {
+			console.error("Popular songs endpoint error:", e);
+		}
+	}
+
+	if (songsByLangRaw && songsByLangRaw.length > 0) {
+		// Shuffle each language's top songs pool so every open gets fresh random popular songs
+		const shuffledByLang = songsByLangRaw.map(pool => shuffleArray(pool));
+		const maxLen = Math.max(0, ...shuffledByLang.map(l => l.length));
+		const combinedSongs = [];
+		const seenIds = new Set();
+
+		for (let i = 0; i < maxLen; i++) {
+			for (let l = 0; l < shuffledByLang.length; l++) {
+				if (shuffledByLang[l][i]) {
+					const song = shuffledByLang[l][i];
+					if (song.videoId && !seenIds.has(song.videoId)) {
+						seenIds.add(song.videoId);
+						combinedSongs.push(song);
+					}
+				}
+			}
+		}
+
+		return res.json(combinedSongs);
+	}
+
+	// General superhits fallback
+	const fallbackSearch = await fetchJioSaavn({ __call: "search.getResults", q: "superhits", n: "30", p: "1" });
+	const fallbackSongs = shuffleArray((fallbackSearch?.results || []).map(formatSong));
+	res.json(fallbackSongs);
 });
 
 let playlistsCache = {
@@ -361,7 +642,7 @@ async function fetchPlaylistsBackground() {
 						playlistId: data.id,
 						title: cat.title || data.title,
 						author: "Play LooP",
-						thumbnail: (data.image || "").replace("150x150", "500x500") || "/logo.svg",
+						thumbnail: getValidImage(data.image),
 						count: parseInt(data.list_count || data.list?.length || "20", 10)
 					});
 				}
@@ -398,6 +679,46 @@ app.get("/api/playlist", async (req, res) => {
 	if (!playlistId) return res.status(400).json({ error: "Playlist ID is required" });
 
 	try {
+		if (playlistId.startsWith("ARTIST:")) {
+			const artistId = playlistId.replace("ARTIST:", "");
+			const pageStr = String(req.query.page || "1");
+			const limitStr = String(req.query.limit || "30");
+
+			const data = await fetchJioSaavn({ __call: "artist.getArtistPageDetails", artistId: artistId, p: pageStr, n_song: limitStr, n_album: "0" });
+			if (!data || (!data.artistId && !data.name)) {
+				throw new Error("Artist not found");
+			}
+
+			let tracks = [];
+			if (Array.isArray(data.topSongs)) {
+				tracks = data.topSongs.map(formatSong);
+			} else if (data.topSongs && Array.isArray(data.topSongs.songs)) {
+				tracks = data.topSongs.songs.map(formatSong);
+			} else if (pageStr !== "1") {
+				// If it fails on page > 1, we just return empty tracks.
+			}
+
+			let parsedBio = [];
+			try {
+				if (data.bio) {
+					const b = typeof data.bio === 'string' ? JSON.parse(data.bio) : data.bio;
+					if (Array.isArray(b)) parsedBio = b;
+				}
+			} catch(e) {}
+
+			return res.json({
+				playlistId,
+				title: data.name,
+				description: data.subtitle || "Artist",
+				thumbnail: getValidImage(data.image),
+				isArtist: true,
+				followerCount: data.follower_count,
+				isVerified: data.isVerified,
+				bio: parsedBio,
+				tracks: tracks
+			});
+		}
+
 		if (playlistId.startsWith("QUERY:")) {
 			const query = playlistId.replace("QUERY:", "");
 			
@@ -439,16 +760,18 @@ app.get("/api/playlist", async (req, res) => {
 				return (2.0 * intersection) / (bg1.length + bg2.length);
 			};
 
+			const pageStr = String(req.query.page || "1");
+			const limitStr = String(req.query.limit || "30");
+			const targetLimit = parseInt(limitStr, 10);
 			let rawTracks = [];
-			for (let page = 1; page <= 4; page++) {
-				try {
-					const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "30", p: String(page) });
-					if (data && Array.isArray(data.results)) {
-						rawTracks.push(...data.results.map(formatSong));
-					}
-				} catch (e) {
-					console.warn(`QUERY: search page ${page} failed:`, e.message);
+			
+			try {
+				const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: limitStr, p: pageStr });
+				if (data && Array.isArray(data.results)) {
+					rawTracks = data.results.map(formatSong);
 				}
+			} catch (e) {
+				console.warn(`QUERY: search page ${pageStr} failed:`, e.message);
 			}
 
 			// Deduplicate by normalized song title and fuzzy similarity
@@ -457,7 +780,7 @@ app.get("/api/playlist", async (req, res) => {
 
 			const isDuplicate = (normTitle) => {
 				for (const seen of seenTitles) {
-					if (calculateSimilarity(normTitle, seen) >= 0.4) { // 40% similarity threshold
+					if (calculateSimilarity(normTitle, seen) >= 0.4) {
 						return true;
 					}
 				}
@@ -470,11 +793,10 @@ app.get("/api/playlist", async (req, res) => {
 					seenTitles.push(normTitle);
 					uniqueTracks.push(track);
 				}
-				if (uniqueTracks.length >= 30) break;
 			}
 
-			// If unique tracks count is low, supplement with top tracks from artists
-			if (uniqueTracks.length > 0 && uniqueTracks.length < 20) {
+			// If it's page 1 and unique tracks count is low, supplement with top tracks from artists
+			if (pageStr === "1" && uniqueTracks.length > 0 && uniqueTracks.length < 10) {
 				try {
 					const seedTrack = uniqueTracks[0];
 					const artists = (seedTrack.artist || "").split("-")[0].split(",");
@@ -482,8 +804,8 @@ app.get("/api/playlist", async (req, res) => {
 						const cleanArt = rawArtist.split("ft.")[0].split("feat.")[0].trim();
 						if (!cleanArt) continue;
 						
-						for (let page = 1; page <= 3; page++) {
-							const extraData = await fetchJioSaavn({ __call: "search.getResults", q: cleanArt, n: "30", p: String(page) });
+						for (let p = 1; p <= 2; p++) {
+							const extraData = await fetchJioSaavn({ __call: "search.getResults", q: cleanArt, n: "30", p: String(p) });
 							if (extraData && Array.isArray(extraData.results)) {
 								for (const track of extraData.results.map(formatSong)) {
 									const normTitle = cleanTitle(track.title);
@@ -491,12 +813,12 @@ app.get("/api/playlist", async (req, res) => {
 										seenTitles.push(normTitle);
 										uniqueTracks.push(track);
 									}
-									if (uniqueTracks.length >= 30) break;
+									if (uniqueTracks.length >= targetLimit) break;
 								}
 							}
-							if (uniqueTracks.length >= 30) break;
+							if (uniqueTracks.length >= targetLimit) break;
 						}
-						if (uniqueTracks.length >= 30) break;
+						if (uniqueTracks.length >= targetLimit) break;
 					}
 				} catch (err) {
 					console.warn("Dynamic mix artist supplement error:", err.message);
@@ -504,7 +826,7 @@ app.get("/api/playlist", async (req, res) => {
 			}
 
 			// If we found at least 3 unique tracks, return them! Otherwise, fall back to raw tracks so the playlist isn't completely empty.
-			const finalTracks = uniqueTracks.length > 2 ? uniqueTracks.slice(0, 30) : rawTracks.slice(0, 30);
+			const finalTracks = uniqueTracks.length > 2 ? uniqueTracks.slice(0, targetLimit) : rawTracks.slice(0, targetLimit);
 
 			return res.json({
 				playlistId,
@@ -526,7 +848,7 @@ app.get("/api/playlist", async (req, res) => {
 			playlistId: data.id,
 			title: data.title || "Featured Playlist",
 			description: data.subtitle || "Curated collection",
-			thumbnail: (data.image || "").replace("150x150", "500x500") || tracks[0]?.thumbnail || "/logo.svg",
+			thumbnail: getValidImage(data.image) || tracks[0]?.thumbnail || "/logo.svg",
 			tracks
 		});
 	} catch (error) {

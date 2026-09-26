@@ -40,6 +40,7 @@ export function PlayerProvider({ children }) {
   const [duration, setDuration] = useState(0);
   const [trackQueue, setTrackQueue] = useState([]);
   const [recommendationQueue, setRecommendationQueue] = useState([]);
+  const [isRefreshingUpNext, setIsRefreshingUpNext] = useState(false);
   const [trackHistory, setTrackHistory] = useState([]);
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
@@ -94,6 +95,18 @@ export function PlayerProvider({ children }) {
       stableShuffledQueueRef.current = [];
     }
   }, [trackQueue, recommendationQueue, isShuffleEnabled]);
+
+  const sessionSeenIdsRef = useRef(new Set());
+  const sessionSeenTitlesRef = useRef(new Set());
+
+  const markTrackSeen = (track) => {
+    if (!track) return;
+    if (track.videoId) sessionSeenIdsRef.current.add(track.videoId);
+    if (track.title) {
+      const cleanT = cleanTitle(track.title).replace(/[^a-z0-9]/g, "");
+      if (cleanT) sessionSeenTitlesRef.current.add(cleanT);
+    }
+  };
 
   // ----- Deterministic 5‑track window -----
   const WINDOW_SIZE = 5;
@@ -415,13 +428,20 @@ export function PlayerProvider({ children }) {
       setPlayerStatus("Playing");
     }).catch(console.error);
 
+    markTrackSeen(trackObj);
+
     // Hybrid Recommendations Engine for Queue
     setTimeout(() => {
       try {
+        const excludeIds = Array.from(sessionSeenIdsRef.current).slice(-40).join(",");
+        const excludeTitles = Array.from(sessionSeenTitlesRef.current).slice(-40).map(t => encodeURIComponent(t)).join("|");
+
         const queryParams = new URLSearchParams({
           id: videoId || "",
           artist: artist || "",
-          title: title || ""
+          title: title || "",
+          excludeIds,
+          excludeTitles
         }).toString();
 
         fetchApi(`/api/recommendations?${queryParams}`)
@@ -434,10 +454,13 @@ export function PlayerProvider({ children }) {
                 candidatePool: data,
                 history: trackHistoryRef.current || [],
                 likedSongs: [],
+                seenIds: sessionSeenIdsRef.current,
+                seenTitles: sessionSeenTitlesRef.current,
                 limit: 10
               });
 
               if (scoredRecs.length > 0) {
+                scoredRecs.forEach(markTrackSeen);
                 recommendationQueueRef.current = scoredRecs;
                 setRecommendationQueue(scoredRecs);
 
@@ -460,6 +483,76 @@ export function PlayerProvider({ children }) {
       }
     }, 300);
   };
+
+  const refreshUpNext = useCallback(async () => {
+    const currentTrack = pendingTrackRef.current;
+    if (!currentTrack || !currentTrack.videoId) return;
+
+    setIsRefreshingUpNext(true);
+
+    try {
+      const excludeIds = Array.from(sessionSeenIdsRef.current).slice(-40).join(",");
+      const excludeTitles = Array.from(sessionSeenTitlesRef.current).slice(-40).map(t => encodeURIComponent(t)).join("|");
+
+      const queryParams = new URLSearchParams({
+        id: currentTrack.videoId || "",
+        artist: currentTrack.artist || "",
+        title: currentTrack.title || "",
+        refresh: "true",
+        t: Date.now().toString(),
+        excludeIds,
+        excludeTitles
+      }).toString();
+
+      const res = await fetchApi(`/api/recommendations?${queryParams}`);
+      let data = res.ok ? await res.json() : [];
+
+      if (!Array.isArray(data) || data.length === 0) {
+        const cleanArtist = currentTrack.artist ? currentTrack.artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
+        const query = cleanArtist || "Top Hits";
+        const searchRes = await fetchApi(`/api/search?q=${encodeURIComponent(query)}`);
+        data = searchRes.ok ? await searchRes.json() : [];
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        const shuffledCandidates = [...data].sort(() => 0.5 - Math.random());
+        
+        const scoredRecs = generateRecommendations({
+          currentTrack: currentTrack,
+          candidatePool: shuffledCandidates,
+          history: trackHistoryRef.current || [],
+          likedSongs: [],
+          seenIds: sessionSeenIdsRef.current,
+          seenTitles: sessionSeenTitlesRef.current,
+          limit: 15
+        });
+
+        const freshQueue = scoredRecs.length > 2
+          ? [scoredRecs[0], ...scoredRecs.slice(1).sort(() => 0.5 - Math.random())]
+          : scoredRecs;
+
+        if (freshQueue.length > 0) {
+          freshQueue.forEach(markTrackSeen);
+          recommendationQueueRef.current = freshQueue;
+          setRecommendationQueue(freshQueue);
+
+          const topNext = freshQueue[0];
+          if (topNext && topNext.videoId !== currentTrack.videoId) {
+            setUpcoming(topNext);
+            if (upcomingAudioPlayer.current) {
+              upcomingAudioPlayer.current.preload = "auto";
+              upcomingAudioPlayer.current.src = getAudioUrl(topNext.videoId);
+              upcomingAudioPlayer.current.load();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[PlayerContext] refreshUpNext error:", e);
+    } finally {
+      setIsRefreshingUpNext(false);
+    }
+  }, []);
 
   const playPlaylist = (tracks, startIndex = 0) => {
     if (!Array.isArray(tracks) || tracks.length === 0) return;
@@ -959,6 +1052,8 @@ export function PlayerProvider({ children }) {
     setIsRightSidebarOpen,
     upcomingTrack,
     recommendationQueue,
+    isRefreshingUpNext,
+    refreshUpNext,
     stableShuffledQueue,
     trackHistory,
     shuffleCycleStartIndex: shuffleCycleStartIndexRef.current

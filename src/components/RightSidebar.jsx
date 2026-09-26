@@ -1,12 +1,13 @@
 import React, { useMemo } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play } from 'lucide-react';
+import { Play, RotateCw } from 'lucide-react';
 
 export default function RightSidebar() {
   const { 
     isRightSidebarOpen, pendingTrack, trackQueue, selectAndPlayTrack, 
     isShuffleEnabled, upcomingTrack, recommendationQueue,
-    stableShuffledQueue, trackHistory, shuffleCycleStartIndex
+    stableShuffledQueue, trackHistory, shuffleCycleStartIndex,
+    isRefreshingUpNext, refreshUpNext
   } = usePlayer();
 
   // We need the selectedPlaylist information if we are inside a playlist, 
@@ -103,7 +104,19 @@ export default function RightSidebar() {
 
       {/* Next Up */}
       <div>
-        <h3 className="text-xl font-bold text-white mb-6">Next Up</h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-white">Next Up</h3>
+          <button
+            type="button"
+            onClick={refreshUpNext}
+            disabled={isRefreshingUpNext}
+            title="Refresh recommendations"
+            aria-label="Refresh recommendations"
+            className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-full transition-colors flex items-center justify-center disabled:opacity-50 group"
+          >
+            <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-green-500' : 'group-hover:rotate-180 duration-500'}`} />
+          </button>
+        </div>
         <div className="flex flex-col gap-1">
           {nextUpTracks.length > 0 ? (
             nextUpTracks.map((track, i) => (

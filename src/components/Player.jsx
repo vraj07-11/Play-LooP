@@ -15,7 +15,8 @@ export default function Player() {
     hasPrevious, hasNext,
     pendingTrack,
     isRightSidebarOpen, setIsRightSidebarOpen,
-    trackQueue, recommendationQueue, selectAndPlayTrack
+    trackQueue, recommendationQueue, selectAndPlayTrack,
+    isRefreshingUpNext, refreshUpNext
   } = usePlayer();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -496,7 +497,19 @@ export default function Player() {
 
         {/* Scrollable Queue */}
         <div className="flex-1 overflow-y-auto p-4 pb-20">
-          <h3 className="text-white font-semibold mb-4 text-lg">Up Next</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold text-lg">Up Next</h3>
+            <button
+              type="button"
+              onClick={refreshUpNext}
+              disabled={isRefreshingUpNext}
+              title="Refresh recommendations"
+              aria-label="Refresh recommendations"
+              className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-full transition-colors flex items-center justify-center disabled:opacity-50 active:scale-95 group"
+            >
+              <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-green-500' : 'group-hover:rotate-180 duration-500'}`} />
+            </button>
+          </div>
           <div className="flex flex-col gap-1">
             {(trackQueue.length > 0 ? trackQueue : recommendationQueue)
               .filter(t => t.videoId !== pendingTrack?.videoId)

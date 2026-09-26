@@ -197,13 +197,107 @@ export async function fetchRecommendedPlaylists() {
   }
 }
 
-export async function fetchPlaylistDetails(playlistId) {
+export async function fetchPlaylistDetails(playlistId, page = 1) {
   try {
-    const res = await fetchApi(`/api/playlist?id=${encodeURIComponent(playlistId)}`);
+    const res = await fetchApi(`/api/playlist?id=${encodeURIComponent(playlistId)}&page=${page}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
     console.error("fetchPlaylistDetails error:", err);
     return null;
   }
+}
+
+export async function fetchPopularSongs(languages = []) {
+  try {
+    const langQuery = languages.length > 0 ? `?languages=${languages.join(',')}` : '';
+    const res = await fetchApi(`/api/popular-songs${langQuery}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch popular songs by language:", err);
+  }
+  return [];
+}
+
+export async function fetchPopularArtists(languages = []) {
+  try {
+    const langQuery = languages.length > 0 ? `?languages=${languages.join(',')}` : '';
+    const res = await fetchApi(`/api/trending-artists${langQuery}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch real-time trending artists:", err);
+  }
+  
+  return [
+    {
+      "playlistId": "ARTIST:459320",
+      "title": "Arijit Singh",
+      "thumbnail": "https://c.saavncdn.com/artists/Arijit_Singh_004_20241118063717_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:615155",
+      "title": "The Weeknd",
+      "thumbnail": "https://c.saavncdn.com/artists/The_Weeknd_002_20241003071400_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:565990",
+      "title": "Taylor Swift",
+      "thumbnail": "https://c.saavncdn.com/artists/Taylor_Swift_003_20200226074119_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:2029479",
+      "title": "Bad Bunny",
+      "thumbnail": "https://c.saavncdn.com/artists/Bad_Bunny_001_20250207055513_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:512453",
+      "title": "Drake",
+      "thumbnail": "https://c.saavncdn.com/artists/Drake_006_20260520062317_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:456323",
+      "title": "Pritam",
+      "thumbnail": "https://c.saavncdn.com/artists/Pritam_Chakraborty-20170711073326_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:456269",
+      "title": "A.R. Rahman",
+      "thumbnail": "https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:1274170",
+      "title": "Dua Lipa",
+      "thumbnail": "https://c.saavncdn.com/artists/Dua_Lipa_004_20231120090922_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:1918741",
+      "title": "Billie Eilish",
+      "thumbnail": "https://c.saavncdn.com/artists/Billie_Eilish_20190211151539_500x500.jpg",
+      "author": "Artist"
+    },
+    {
+      "playlistId": "ARTIST:568565",
+      "title": "Justin Bieber",
+      "thumbnail": "https://c.saavncdn.com/artists/Justin_Bieber_005_20201127112218_500x500.jpg",
+      "author": "Artist"
+    }
+  ];
 }
