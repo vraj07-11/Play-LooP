@@ -46,13 +46,22 @@ export default function Player() {
       }
     };
 
+    const handleOpenQueue = () => {
+      setIsMobileQueueOpen(true);
+      if (typeof setIsRightSidebarOpen === 'function') {
+        setIsRightSidebarOpen(true);
+      }
+    };
+
     window.addEventListener('playloop-toggle-lyrics', handleToggleLyrics);
     window.addEventListener('playloop-toggle-full-player', handleToggleFullPlayer);
+    window.addEventListener('playloop-open-queue', handleOpenQueue);
     return () => {
       window.removeEventListener('playloop-toggle-lyrics', handleToggleLyrics);
       window.removeEventListener('playloop-toggle-full-player', handleToggleFullPlayer);
+      window.removeEventListener('playloop-open-queue', handleOpenQueue);
     };
-  }, [pendingTrack, isExpanded]);
+  }, [pendingTrack, isExpanded, setIsRightSidebarOpen]);
 
   useEffect(() => {
     const handlePopState = (e) => {
@@ -167,7 +176,7 @@ export default function Player() {
     const isRightSwipe = distance < -minSwipeDistance;
 
     if (isUpSwipe) {
-      setIsMobileQueueOpen(true);
+      openFullPlayer(false);
       setIsSwiping(false);
       setSwipeOffset(0);
     } else if (isLeftSwipe && hasNext) {
@@ -227,6 +236,11 @@ export default function Player() {
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onWheel={(e) => {
+          if (e.deltaY < -10) {
+            openFullPlayer(false);
+          }
+        }}
       >
         {/* Clickable track cover & title section */}
         <div 

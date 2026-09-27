@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS } from '../services/api.js';
 import Carousel from '../components/Carousel';
-import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download } from 'lucide-react';
 
 export default function Home({ setCurrentView }) {
   const [greeting, setGreeting] = useState('');
@@ -89,26 +89,61 @@ export default function Home({ setCurrentView }) {
 
   const observer = useRef();
   const lastTrackElementRef = useCallback(node => {
-    if (loadingMorePlaylist) return;
+    if (loadingMorePlaylist || selectedPlaylist?.isLikedPlaylist) return;
     if (observer.current) observer.current.disconnect();
     observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMorePlaylist && selectedPlaylist) {
+      if (entries[0].isIntersecting && hasMorePlaylist && selectedPlaylist && !selectedPlaylist.isLikedPlaylist) {
         loadMorePlaylistTracks(selectedPlaylist.playlistId, playlistPage + 1);
       }
     });
     if (node) observer.current.observe(node);
   }, [loadingMorePlaylist, hasMorePlaylist, selectedPlaylist, playlistPage]);
 
+  const handleOpenLikedSongs = useCallback(() => {
+    try {
+      const savedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+      const playlistDetails = {
+        playlistId: 'liked_songs',
+        title: 'Liked Songs',
+        author: 'Your Favorites',
+        thumbnail: '/liked_songs_cover.png',
+        description: 'Collection of all your favorite liked songs.',
+        count: savedList.length,
+        tracks: savedList,
+        isLikedPlaylist: true
+      };
+      window.history.pushState({ view: 'home', playlistId: 'liked_songs' }, '', '#/playlist/liked_songs');
+      setSelectedPlaylist(playlistDetails);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   useEffect(() => {
     const handlePopState = (e) => {
       const state = e.state;
       if (!state || !state.playlistId) {
         setSelectedPlaylist(null);
+      } else if (state.playlistId === 'liked_songs') {
+        handleOpenLikedSongs();
       }
     };
+
+    const handleOpenLikedEvent = () => {
+      handleOpenLikedSongs();
+    };
+
+    if (window.history.state?.playlistId === 'liked_songs') {
+      handleOpenLikedSongs();
+    }
+
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+    window.addEventListener('playloop-open-liked-songs', handleOpenLikedEvent);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('playloop-open-liked-songs', handleOpenLikedEvent);
+    };
+  }, [handleOpenLikedSongs]);
 
   const loadMorePlaylistTracks = async (id, page) => {
     setLoadingMorePlaylist(true);
@@ -159,8 +194,13 @@ export default function Home({ setCurrentView }) {
 
   const handleBackToHome = () => {
     setSelectedPlaylist(null);
+    if (setCurrentView) {
+      setCurrentView('home');
+    }
     if (window.history.state && window.history.state.playlistId) {
       window.history.back();
+    } else {
+      window.history.pushState({ view: 'home' }, '', '#/home');
     }
   };
 
@@ -220,8 +260,6 @@ export default function Home({ setCurrentView }) {
   }
 
   if (selectedPlaylist) {
-    const filters = ['Chill', 'Lo-fi', 'Indie', 'Acoustic', 'Ambient', 'Relax', 'Study', 'Focus'];
-
     return (
       <div className="max-w-[1600px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
         <button
@@ -233,17 +271,28 @@ export default function Home({ setCurrentView }) {
         </button>
 
         {/* Playlist Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 md:gap-8 mb-8">
-          <img
-            src={selectedPlaylist.thumbnail || '/logo.svg'}
-            alt={selectedPlaylist.title}
-            className={`shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full object-cover' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl'} ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-8 bg-zinc-900 border border-zinc-800' : 'object-cover'}`}
-            onError={(e) => {
-              e.target.src = '/logo.svg';
-              e.target.className = `shrink-0 object-contain p-8 bg-zinc-900 border border-zinc-800 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl'}`;
-            }}
-          />
-          <div className="flex flex-col min-w-0">
+        <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-6 md:gap-8 mb-8">
+          {selectedPlaylist.isLikedPlaylist ? (
+            <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-[#141414] border border-zinc-800 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(0,0,0,0.7)] relative overflow-hidden group select-none mx-auto md:mx-0">
+              <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/30 via-transparent to-black pointer-events-none" />
+              <img
+                src="/logo.svg"
+                alt="Play LooP Logo"
+                className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.35)] group-hover:scale-105 transition-transform duration-500"
+              />
+            </div>
+          ) : (
+            <img
+              src={selectedPlaylist.thumbnail || '/logo.svg'}
+              alt={selectedPlaylist.title}
+              className={`shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] mx-auto md:mx-0 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full object-cover' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl'} ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-8 bg-zinc-900 border border-zinc-800' : 'object-cover'}`}
+              onError={(e) => {
+                e.target.src = '/logo.svg';
+                e.target.className = `shrink-0 mx-auto md:mx-0 object-contain p-8 bg-zinc-900 border border-zinc-800 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl'}`;
+              }}
+            />
+          )}
+          <div className="flex flex-col min-w-0 items-center md:items-start">
             <span className="flex items-center gap-2 text-xs uppercase font-bold text-zinc-400 tracking-widest mb-1.5">
               {selectedPlaylist.isArtist && selectedPlaylist.isVerified && (
                 <svg viewBox="0 0 24 24" className="w-5 h-5 text-blue-500 fill-current" xmlns="http://www.w3.org/2000/svg">
@@ -295,17 +344,6 @@ export default function Home({ setCurrentView }) {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 overflow-x-auto mb-10 pb-2 hide-scrollbar">
-          {filters.map((filter) => (
-            <button 
-              key={filter} 
-              className="px-5 py-2 rounded-full border border-zinc-800 bg-zinc-900/40 text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 whitespace-nowrap transition"
-            >
-              {filter}
-            </button>
-          ))}
-        </div>
 
         <div className="flex flex-col lg:flex-row gap-10">
           {/* Main Tracklist */}
@@ -420,11 +458,15 @@ export default function Home({ setCurrentView }) {
     : [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx).slice(0, 10);
   const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
+  const isAppDownloaded = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
   const quickAccessItems = [
     { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 text-white" />, color: 'bg-[#8938d2]', path: '#/search' },
-    { title: 'Liked Songs', subtitle: 'Your favorites', icon: <Heart className="w-5 h-5 text-white fill-current" />, color: 'bg-[#d2384a]' },
-    { title: 'New Releases', subtitle: 'Fresh drops, weekly', icon: <Sparkles className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]' },
-    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 text-white" />, color: 'bg-[#d28238]' }
+    { title: 'Liked Songs', subtitle: 'Your favorites', icon: <Heart className="w-5 h-5 text-white fill-current" />, color: 'bg-[#d2384a]', action: handleOpenLikedSongs },
+    isAppDownloaded
+      ? { title: 'Settings', subtitle: 'App preferences', icon: <Settings className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]', path: '#/settings' }
+      : { title: 'Download App', subtitle: 'Install for offline', icon: <Download className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]', path: '#/download' },
+    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 text-white" />, color: 'bg-[#d28238]', action: handleOpenLikedSongs }
   ];
 
   return (
@@ -441,10 +483,10 @@ export default function Home({ setCurrentView }) {
       {/* Featured Section */}
       {loadingPlaylists ? (
         <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
-          <div className="xl:col-span-2 h-[450px] bg-[#121212] rounded-[2px] animate-pulse"></div>
+          <div className="xl:col-span-2 h-[450px] bg-[#121212] rounded-2xl animate-pulse"></div>
           <div className="grid grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-3 xl:gap-4 h-auto xl:h-[380px]">
              {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-[#121212] rounded-lg animate-pulse min-h-[60px]"></div>
+                <div key={i} className="bg-[#121212] rounded-xl animate-pulse min-h-[60px]"></div>
              ))}
           </div>
         </div>
@@ -453,7 +495,7 @@ export default function Home({ setCurrentView }) {
           {/* Hero Featured Playlist */}
           {featuredPlaylist && (
             <div 
-              className="xl:col-span-2 relative h-[340px] sm:h-[450px] rounded-[2px] overflow-hidden group cursor-pointer bg-[#121212] shadow-xl"
+              className="xl:col-span-2 relative h-[340px] sm:h-[450px] rounded-2xl overflow-hidden group cursor-pointer bg-[#121212] shadow-xl"
               onClick={() => handlePlaylistClick(featuredPlaylist)}
             >
               <img 
@@ -502,14 +544,16 @@ export default function Home({ setCurrentView }) {
               <div 
                 key={index}
                 onClick={() => { 
-                  if (item.path) {
-                    if (setCurrentView) setCurrentView('search');
-                    else window.location.hash = item.path;
+                  if (item.action) {
+                    item.action();
+                  } else if (item.path) {
+                    if (setCurrentView) setCurrentView(item.path.replace('#/', ''));
+                    window.location.hash = item.path;
                   }
                 }}
-                className="flex-1 bg-[#121212] hover:bg-[#1a1a1a] rounded-[2px] p-3 xl:p-4 flex items-center gap-3 xl:gap-4 cursor-pointer transition border border-white/5 hover:border-white/10 shadow-sm group"
+                className="flex-1 bg-[#121212] hover:bg-[#1a1a1a] rounded-xl p-3 xl:p-4 flex items-center gap-3 xl:gap-4 cursor-pointer transition border border-white/5 hover:border-white/10 shadow-sm group"
               >
-                <div className={`w-10 h-10 xl:w-14 xl:h-14 rounded-md flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                <div className={`w-10 h-10 xl:w-14 xl:h-14 rounded-lg xl:rounded-xl flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
                   {item.icon}
                 </div>
                 <div className="flex flex-col min-w-0 flex-1">

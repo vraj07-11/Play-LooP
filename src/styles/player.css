@@ -417,6 +417,6 @@
 }
 
 .animate-slide-down {
-  animation: full-player-slide-down 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: full-player-slide-down 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 

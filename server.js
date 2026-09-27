@@ -163,6 +163,43 @@ app.get("/api/audio", async (req, res) => {
 	}
 });
 
+app.get("/api/download", async (req, res) => {
+	const videoId = String(req.query.id || "").trim();
+	if (!videoId) return res.status(400).send("Video ID is required");
+
+	try {
+		const data = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });
+		let songData = data[videoId] || (data.songs && data.songs[0]);
+
+		if (!songData) {
+			return res.status(404).send("Song not found");
+		}
+
+		const formatted = formatSong(songData);
+		if (formatted.streamUrl) {
+			const https = require("node:https");
+			const http = require("node:http");
+			const client = formatted.streamUrl.startsWith("https") ? https : http;
+			
+			const filename = `${formatted.title.replace(/[^a-z0-9 ]/gi, '')} - ${formatted.artist.replace(/[^a-z0-9 ]/gi, '')}.m4a`;
+			
+			client.get(formatted.streamUrl, (proxyRes) => {
+				res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+				res.setHeader("Content-Type", proxyRes.headers["content-type"] || "audio/mp4");
+				proxyRes.pipe(res);
+			}).on("error", (e) => {
+				console.error("Download proxy error:", e);
+				res.status(502).send("Download failed");
+			});
+		} else {
+			return res.status(404).send("Stream URL not found");
+		}
+	} catch (error) {
+		console.error("Download endpoint failed:", error);
+		res.status(502).send("Download failed");
+	}
+});
+
 // Load .env variables if present
 if (fs.existsSync(path.join(__dirname, ".env"))) {
 	try {
@@ -277,6 +314,9 @@ app.get("/api/recommendations", async (req, res) => {
 	const excludeTitlesRaw = String(req.query.excludeTitles || "").trim();
 	const excludeTitlesSet = new Set(excludeTitlesRaw ? excludeTitlesRaw.split("|").map(t => t.toLowerCase().replace(/[^a-z0-9]/g, "")).filter(Boolean) : []);
 
+	const userLanguagesRaw = String(req.query.languages || "").trim();
+	const userLanguages = userLanguagesRaw ? userLanguagesRaw.split(",").map(l => l.trim().toLowerCase()) : ["english", "hindi"];
+
 	if (!videoId && !artist && !title) {
 		return res.status(400).json({ error: "Video ID or song metadata required" });
 	}
@@ -296,51 +336,60 @@ app.get("/api/recommendations", async (req, res) => {
 
 	try {
 		let recommendations = [];
+		let lang = 'english'; // default fallback
 
-		// 1. Try YT Music Up Next for superior recommendations based on current song
-		if (artist && title) {
-			let ytTracks = await fetchYTMusicUpNext(artist, title);
-			if (ytTracks.length > 0) {
-				if (isRefresh) {
-					ytTracks.sort(() => 0.5 - Math.random());
-				}
-				const ytRecos = await resolveExternalTracksToSaavn(ytTracks, 30);
-				recommendations.push(...ytRecos);
-			}
-		}
-
-		// 2. Fallback / Append JioSaavn reco.getreco
 		if (videoId) {
-			const recoData = await fetchJioSaavn({ __call: "reco.getreco", pid: videoId });
-			if (Array.isArray(recoData) && recoData.length > 0) {
-				const formatted = recoData.map(formatSong);
-				if (isRefresh) formatted.sort(() => 0.5 - Math.random());
-				recommendations.push(...formatted);
+			try {
+				const songData = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });
+				const details = songData[videoId] || (songData.songs && songData.songs[0]);
+				if (details && details.language) {
+					lang = details.language.toLowerCase().trim();
+				}
+			} catch (e) {
+				console.warn("Could not fetch language for videoId", videoId);
 			}
 		}
 
-		// 3. Multi-page artist catalogue search for deeper non-top-1 songs
-		const cleanArtist = artist ? artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
-		if (cleanArtist) {
-			const pageToFetch = isRefresh ? Math.floor(Math.random() * 3) + 1 : 1;
-			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: cleanArtist, n: "40", p: String(pageToFetch) });
-			if (searchData && searchData.results) {
-				const artistTracks = searchData.results.map(formatSong);
-				if (isRefresh) artistTracks.sort(() => 0.5 - Math.random());
-				recommendations.push(...artistTracks);
-			}
+		// Restrict recommendations strictly to user's preferred languages
+		if (!userLanguages.includes(lang) && userLanguages.length > 0) {
+			lang = userLanguages.includes('english') ? 'english' : userLanguages[0];
 		}
 
-		// 4. Broad Fallback from top playlists (Pop, 2010s, Viral, Hindi) to guarantee fresh candidates
-		if (isRefresh || recommendations.length < 25) {
-			const playlistIds = ["947987697", "63116930", "48189087", "1134543272"];
-			const randomPid = playlistIds[Math.floor(Math.random() * playlistIds.length)];
-			const chartData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: randomPid, n: "50" });
-			if (chartData && Array.isArray(chartData.songs)) {
-				const chartSongs = chartData.songs.map(formatSong).sort(() => 0.5 - Math.random()).slice(0, 20);
-				recommendations.push(...chartSongs);
-			}
+		const languagePlaylists = {
+			'english': ["63116930", "48189087", "88471029", "110858205", "77492018", "8042456", "947987697"],
+			'hindi': ["1134543272", "1210453303", "1167751266", "107584484", "1214335916", "1202559627"],
+			'punjabi': ["4144832", "1543265", "1023456", "38029986", "107584484"],
+			'tamil': ["1142512", "4234567", "5729104", "1193021", "1543265"],
+			'telugu': ["1543285", "3791000", "28374902", "3829012", "1134543272"]
+		};
+
+		let candidatePids = languagePlaylists[lang];
+		if (!candidatePids || candidatePids.length === 0) {
+			// fallback to global popular mix
+			candidatePids = ["947987697", "1134543272", "47599074", "1202559627", "63116930"];
 		}
+
+		// Shuffle candidate playlists and pick at least 3
+		candidatePids.sort(() => 0.5 - Math.random());
+		const selectedPids = candidatePids.slice(0, 3);
+
+		const fetchPromises = selectedPids.map(async (pid) => {
+			try {
+				const chartData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid, n: "50" });
+				if (chartData && Array.isArray(chartData.list)) {
+					return chartData.list.map(formatSong);
+				}
+			} catch(e) {}
+			return [];
+		});
+
+		const nestedSongs = await Promise.all(fetchPromises);
+		for (const songs of nestedSongs) {
+			recommendations.push(...songs);
+		}
+
+		// Randomize the collected songs
+		recommendations.sort(() => 0.5 - Math.random());
 
 		// Deduplicate and filter against excludeSet & excludeTitlesSet
 		const uniqueRecos = [];
@@ -366,7 +415,19 @@ app.get("/api/recommendations", async (req, res) => {
 			}
 		}
 
-		recommendations = uniqueRecos;
+		// If we run out of new songs, allow reusing previous ones (excluding current song)
+		let finalRecos = uniqueRecos;
+		if (finalRecos.length === 0 && recommendations.length > 0) {
+			const fallbackSet = new Set();
+			for (const track of recommendations) {
+				if (track && track.videoId && !fallbackSet.has(track.videoId) && track.videoId !== videoId) {
+					fallbackSet.add(track.videoId);
+					finalRecos.push(track);
+				}
+			}
+		}
+
+		recommendations = finalRecos;
 
 		if (isRefresh) {
 			recommendations.sort(() => 0.5 - Math.random());

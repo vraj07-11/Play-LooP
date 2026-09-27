@@ -107,10 +107,12 @@ function App() {
           <main className="relative flex min-h-0 flex-1 select-none">
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} />
             <section className="app-content select-none" aria-live="polite">
-              {currentView === 'home' && <Home key={homeKey} setCurrentView={handleSetCurrentView} />}
+              {(currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked' || currentView === 'library') && (
+                <Home key={homeKey} setCurrentView={handleSetCurrentView} />
+              )}
               {currentView === 'search' && <SearchPage />}
               {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
-              {currentView !== 'home' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+              {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
                 <PlaceholderPage view={currentView} />
               )}
             </section>

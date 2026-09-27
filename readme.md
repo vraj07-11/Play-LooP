@@ -14,17 +14,17 @@ Experience the application live here:
 ## Key Features
 
 *   **Direct & Ad-Free Audio Streaming**
-    Leverages the custom `Play.LooP Engine` and `Last.fm` under the hood to pull accurate search results, personalized music recommendations, and high-quality audio streams without interruptions.
+    Leverages a lightning-fast custom backend that interfaces with high-performance audio APIs to pull high-quality audio streams without interruptions, completely bypassing heavy extractors like youtube-dl.
 *   **Progressive Web Application (PWA)**
     Engineered as a fully functional PWA. Install it on your mobile device or desktop for a native app-like experience. Features seamless deep-linking, background playback support, and a responsive app shell.
-*   **Offline Downloads**
-    A dedicated download page allows you to safely and quickly save your favorite tracks directly to your device for offline listening anytime, anywhere.
-*   **Smart Local Caching**
-    To heavily optimize performance and reduce network latency, extracted audio files are temporarily cached on the server. A built-in storage management system automatically enforces strict cleanup logic to prevent disk overflow.
-*   **Hybrid Recommendation System**
-    Curated listening experiences powered by Play.LooP's own recommendation engine, beautifully paired with a robust `Last.fm` fallback to ensure you never run out of great music.
-*   **Responsive & Fluid UI**
-    Designed with a sleek, mobile-first approach. Whether you're on a massive desktop monitor or a small smartphone screen, the interface smoothly adapts to give you the best experience.
+*   **Secure Offline Downloads**
+    Download your favorite tracks directly to your device for offline listening. Downloads are routed through a secure backend proxy to ensure fast delivery and protect stream origin privacy.
+*   **Instant Streaming Proxy**
+    To heavily optimize performance and reduce latency, audio streams are proxied and piped directly to the client on-the-fly. No heavy disk-caching or cleanup required—just instant music.
+*   **Intelligent "Up Next" Queue**
+    A hybrid recommendation system that dynamically analyzes your currently playing song and preferred languages (English, Hindi, Punjabi, etc.) to generate a highly varied, infinite-scrolling queue that feels magical and non-repetitive.
+*   **Premium & Fluid UI**
+    Designed with a sleek, mobile-first approach. Whether you're on a massive desktop monitor or a small smartphone screen, the interface features glassmorphism, fluid micro-animations, and dynamic player states that rival top-tier commercial apps.
 
 ---
 

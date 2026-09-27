@@ -389,7 +389,7 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false) => {
+  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false) => {
     const trackObj = { videoId, title, artist, thumbnail };
 
     stopAllPlayback();
@@ -430,18 +430,51 @@ export function PlayerProvider({ children }) {
 
     markTrackSeen(trackObj);
 
+    let clickedFromQueueIndex = recommendationQueueRef.current.findIndex(t => t.videoId === videoId);
+    if (!isAutoPlay && !isHistoryNavigation && clickedFromQueueIndex !== -1 && trackQueueRef.current.length === 0) {
+      isAutoPlay = true; 
+    }
+
+    if (isAutoPlay || isHistoryNavigation) {
+      if (trackQueueRef.current.length === 0 && recommendationQueueRef.current.length > 0) {
+        let sliceIdx = recommendationQueueRef.current.findIndex(t => t.videoId === videoId);
+        if (sliceIdx !== -1) {
+          const newQ = recommendationQueueRef.current.slice(sliceIdx + 1);
+          recommendationQueueRef.current = newQ;
+          setRecommendationQueue(newQ);
+        }
+      }
+
+      if (recommendationQueueRef.current.length < 5) {
+        setTimeout(() => refreshUpNext(true), 500);
+      }
+      return;
+    }
+
     // Hybrid Recommendations Engine for Queue
     setTimeout(() => {
       try {
         const excludeIds = Array.from(sessionSeenIdsRef.current).slice(-40).join(",");
         const excludeTitles = Array.from(sessionSeenTitlesRef.current).slice(-40).map(t => encodeURIComponent(t)).join("|");
 
+        let userLanguages = "english,hindi";
+        try {
+          const stored = localStorage.getItem('preferred_languages');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              userLanguages = parsed.join(',');
+            }
+          }
+        } catch(e) {}
+
         const queryParams = new URLSearchParams({
           id: videoId || "",
           artist: artist || "",
           title: title || "",
           excludeIds,
-          excludeTitles
+          excludeTitles,
+          languages: userLanguages
         }).toString();
 
         fetchApi(`/api/recommendations?${queryParams}`)
@@ -484,7 +517,7 @@ export function PlayerProvider({ children }) {
     }, 300);
   };
 
-  const refreshUpNext = useCallback(async () => {
+  const refreshUpNext = useCallback(async (append = false) => {
     const currentTrack = pendingTrackRef.current;
     if (!currentTrack || !currentTrack.videoId) return;
 
@@ -494,6 +527,17 @@ export function PlayerProvider({ children }) {
       const excludeIds = Array.from(sessionSeenIdsRef.current).slice(-40).join(",");
       const excludeTitles = Array.from(sessionSeenTitlesRef.current).slice(-40).map(t => encodeURIComponent(t)).join("|");
 
+      let userLanguages = "english,hindi";
+      try {
+        const stored = localStorage.getItem('preferred_languages');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            userLanguages = parsed.join(',');
+          }
+        }
+      } catch(e) {}
+
       const queryParams = new URLSearchParams({
         id: currentTrack.videoId || "",
         artist: currentTrack.artist || "",
@@ -501,7 +545,8 @@ export function PlayerProvider({ children }) {
         refresh: "true",
         t: Date.now().toString(),
         excludeIds,
-        excludeTitles
+        excludeTitles,
+        languages: userLanguages
       }).toString();
 
       const res = await fetchApi(`/api/recommendations?${queryParams}`);
@@ -533,16 +578,23 @@ export function PlayerProvider({ children }) {
 
         if (freshQueue.length > 0) {
           freshQueue.forEach(markTrackSeen);
-          recommendationQueueRef.current = freshQueue;
-          setRecommendationQueue(freshQueue);
+          
+          const combinedQueue = append === true 
+            ? [...recommendationQueueRef.current, ...freshQueue]
+            : freshQueue;
+            
+          recommendationQueueRef.current = combinedQueue;
+          setRecommendationQueue(combinedQueue);
 
-          const topNext = freshQueue[0];
-          if (topNext && topNext.videoId !== currentTrack.videoId) {
-            setUpcoming(topNext);
-            if (upcomingAudioPlayer.current) {
-              upcomingAudioPlayer.current.preload = "auto";
-              upcomingAudioPlayer.current.src = getAudioUrl(topNext.videoId);
-              upcomingAudioPlayer.current.load();
+          if (!append || recommendationQueueRef.current.length === freshQueue.length) {
+            const topNext = freshQueue[0];
+            if (topNext && topNext.videoId !== currentTrack.videoId) {
+              setUpcoming(topNext);
+              if (upcomingAudioPlayer.current) {
+                upcomingAudioPlayer.current.preload = "auto";
+                upcomingAudioPlayer.current.src = getAudioUrl(topNext.videoId);
+                upcomingAudioPlayer.current.load();
+              }
             }
           }
         }
@@ -603,7 +655,7 @@ export function PlayerProvider({ children }) {
       setTrackWindow(newWindow);
       const newCurrent = newWindow[CENTER_INDEX];
       if (newCurrent) {
-        selectAndPlayTrack(newCurrent.videoId, newCurrent.title, newCurrent.artist, newCurrent.thumbnail);
+        selectAndPlayTrack(newCurrent.videoId, newCurrent.title, newCurrent.artist, newCurrent.thumbnail, false, true);
       }
       preloadCoverImages(newWindow);
       return;
@@ -711,7 +763,7 @@ export function PlayerProvider({ children }) {
     }
 
     if (nextTrackObj && nextTrackObj.videoId) {
-      selectAndPlayTrack(nextTrackObj.videoId, nextTrackObj.title, nextTrackObj.artist, nextTrackObj.thumbnail);
+      selectAndPlayTrack(nextTrackObj.videoId, nextTrackObj.title, nextTrackObj.artist, nextTrackObj.thumbnail, false, true);
     }
   }, [fetchNextRandomTrack, preloadCoverImages, setPendingTrack, setTrackWindow, trackWindow]);
 
