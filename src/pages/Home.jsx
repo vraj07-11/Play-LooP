@@ -20,6 +20,24 @@ export default function Home({ setCurrentView }) {
   const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen } = usePlayer();
 
   const [popularArtists, setPopularArtists] = useState([]);
+  const [loadingMoreArtists, setLoadingMoreArtists] = useState(false);
+
+  const loadMoreArtists = async () => {
+    if (loadingMoreArtists) return;
+    setLoadingMoreArtists(true);
+    try {
+      const prefStr = localStorage.getItem('preferred_languages');
+      const langs = prefStr ? JSON.parse(prefStr) : [];
+      const more = await fetchPopularArtists(langs, popularArtists.length + 5);
+      if (more && more.length > popularArtists.length) {
+        setPopularArtists(more);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMoreArtists(false);
+    }
+  };
 
   useEffect(() => {
     const currentHour = new Date().getHours();
@@ -43,7 +61,10 @@ export default function Home({ setCurrentView }) {
         }
       });
       
-    fetchPopularArtists().then(artists => {
+    const prefStr = localStorage.getItem('preferred_languages');
+    const langs = prefStr ? JSON.parse(prefStr) : [];
+
+    fetchPopularArtists(langs, 10).then(artists => {
       if (isMounted) setPopularArtists(artists);
     });
 
@@ -51,6 +72,41 @@ export default function Home({ setCurrentView }) {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const handleHashChange = async () => {
+      const hash = window.location.hash;
+      const match = hash.match(/^#\/?playlist\/(.+)$/);
+      
+      if (match) {
+        const id = match[1];
+        if (!selectedPlaylist || selectedPlaylist.playlistId !== id) {
+          setLoadingPlaylistDetails(true);
+          setPlaylistPage(1);
+          setHasMorePlaylist(true);
+          try {
+            const details = await fetchPlaylistDetails(id, 1);
+            if (details) {
+              setSelectedPlaylist(details);
+              if (details.tracks && details.tracks.length < 30) {
+                setHasMorePlaylist(false);
+              }
+            }
+          } catch (err) {
+            console.error(err);
+          } finally {
+            setLoadingPlaylistDetails(false);
+          }
+        }
+      } else if (hash === '#/home' || hash === '' || hash === '#') {
+        setSelectedPlaylist(null);
+      }
+    };
+
+    handleHashChange();
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [selectedPlaylist]);
 
   const loadMoreMadeForYou = async () => {
     if (loadingMoreMadeForYou) return;
@@ -193,14 +249,10 @@ export default function Home({ setCurrentView }) {
   };
 
   const handleBackToHome = () => {
-    setSelectedPlaylist(null);
-    if (setCurrentView) {
-      setCurrentView('home');
-    }
-    if (window.history.state && window.history.state.playlistId) {
+    if (window.history.length > 1 && window.location.hash !== '') {
       window.history.back();
     } else {
-      window.history.pushState({ view: 'home' }, '', '#/home');
+      window.location.hash = '#/home';
     }
   };
 
@@ -671,6 +723,8 @@ export default function Home({ setCurrentView }) {
             renderSubtitle={() => "Artist"}
             keyExtractor={(item, index) => `${item.playlistId}-${index}`}
             cardType="circle"
+            onEndReached={loadMoreArtists}
+            isLoadingMore={loadingMoreArtists}
           />
         </div>
       )}

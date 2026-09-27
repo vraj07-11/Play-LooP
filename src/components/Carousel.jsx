@@ -204,6 +204,17 @@ export default function Carousel({
                       <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-zinc-800/80" />
                     </div>
                   </div>
+                ) : cardType === 'circle' ? (
+                  <div 
+                    key={`loading-circle-${idx}`} 
+                    className="skeleton-shimmer-card shrink-0 w-[150px] md:w-[170px] flex flex-col items-center gap-3 p-2 relative animate-pulse"
+                  >
+                    <div className="w-full aspect-square bg-zinc-800/90 rounded-full shadow-md" />
+                    <div className="w-full px-1 flex flex-col items-center">
+                      <div className="h-4 bg-zinc-800/90 rounded-sm w-3/4 mb-1.5" />
+                      <div className="h-3 bg-zinc-800/50 rounded-sm w-1/2" />
+                    </div>
+                  </div>
                 ) : (
                   <div 
                     key={`loading-square-${idx}`} 

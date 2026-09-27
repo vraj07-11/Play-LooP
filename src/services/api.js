@@ -224,10 +224,12 @@ export async function fetchPopularSongs(languages = []) {
   return [];
 }
 
-export async function fetchPopularArtists(languages = []) {
+export async function fetchPopularArtists(languages = [], limit = 5) {
   try {
-    const langQuery = languages.length > 0 ? `?languages=${languages.join(',')}` : '';
-    const res = await fetchApi(`/api/trending-artists${langQuery}`);
+    const langQuery = languages.length > 0 ? `languages=${languages.join(',')}` : '';
+    const limitQuery = `limit=${limit}`;
+    const query = [langQuery, limitQuery].filter(Boolean).join('&');
+    const res = await fetchApi(`/api/trending-artists?${query}`);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {

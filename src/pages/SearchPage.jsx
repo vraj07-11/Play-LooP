@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchApi, fetchPopularArtists, fetchPopularSongs, DEFAULT_PLAYLISTS } from '../services/api';
+import { fetchApi, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
 import { Search, Play, Music, Mic2, Disc3, Radio } from 'lucide-react';
 
 const DEFAULT_POPULAR_SONGS = [
@@ -50,8 +50,36 @@ export default function SearchPage() {
   const [loadingMoreSongs, setLoadingMoreSongs] = useState(false);
   
   // Use static data for instantaneous load to build the sections
-  const featuredAlbums = [...DEFAULT_PLAYLISTS].slice(0, 5);
-  const topPlaylists = [...DEFAULT_PLAYLISTS].slice(5, 10);
+  const [featuredAlbums, setFeaturedAlbums] = useState([...DEFAULT_PLAYLISTS].slice(0, 5));
+  const [loadingMoreAlbums, setLoadingMoreAlbums] = useState(false);
+  const [topPlaylists, setTopPlaylists] = useState([...DEFAULT_PLAYLISTS].slice(5, 10));
+  const [loadingMorePlaylists, setLoadingMorePlaylists] = useState(false);
+
+  const handleLoadMoreAlbums = async () => {
+    if (loadingMoreAlbums) return;
+    setLoadingMoreAlbums(true);
+    try {
+      const more = await fetchMoreDynamicPlaylists(5);
+      setFeaturedAlbums(prev => [...prev, ...more]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMoreAlbums(false);
+    }
+  };
+
+  const handleLoadMorePlaylists = async () => {
+    if (loadingMorePlaylists) return;
+    setLoadingMorePlaylists(true);
+    try {
+      const more = await fetchMoreDynamicPlaylists(5);
+      setTopPlaylists(prev => [...prev, ...more]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMorePlaylists(false);
+    }
+  };
 
   useEffect(() => {
     if (mainScrollRef.current) {
@@ -195,7 +223,7 @@ export default function SearchPage() {
     } else if (item.playlistId?.startsWith('QUERY:')) {
       window.location.hash = `#/search?q=${encodeURIComponent(item.title.replace(' Mix', ''))}`;
     } else if (item.playlistId) {
-      playPlaylist(item.playlistId);
+      window.location.hash = `#/playlist/${item.playlistId}`;
     } else {
       window.location.hash = `#/search?q=${encodeURIComponent(item.title)}`;
     }
@@ -387,6 +415,18 @@ export default function SearchPage() {
                   </div>
                 ))}
               </div>
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMoreAlbums}
+                  disabled={loadingMoreAlbums}
+                  className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {loadingMoreAlbums ? (
+                    <><div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />Loading...</>
+                  ) : (<>Show More</>)}
+                </button>
+              </div>
             </section>
 
             {/* 4. Curated Playlists */}
@@ -424,6 +464,18 @@ export default function SearchPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleLoadMorePlaylists}
+                  disabled={loadingMorePlaylists}
+                  className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {loadingMorePlaylists ? (
+                    <><div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />Loading...</>
+                  ) : (<>Show More</>)}
+                </button>
               </div>
             </section>
 

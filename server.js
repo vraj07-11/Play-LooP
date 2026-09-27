@@ -365,6 +365,17 @@ app.get("/api/recommendations", async (req, res) => {
 
 		let candidatePids = languagePlaylists[lang];
 		if (!candidatePids || candidatePids.length === 0) {
+			try {
+				const searchPlaylists = await fetchJioSaavn({ __call: "search.getPlaylistResults", q: `top ${lang} hits`, n: "5", p: "1" });
+				if (searchPlaylists && searchPlaylists.results && searchPlaylists.results.length > 0) {
+					candidatePids = searchPlaylists.results.map(p => p.id);
+				}
+			} catch (e) {
+				console.warn(`Could not fetch dynamic playlists for language ${lang}`);
+			}
+		}
+		
+		if (!candidatePids || candidatePids.length === 0) {
 			// fallback to global popular mix
 			candidatePids = ["947987697", "1134543272", "47599074", "1202559627", "63116930"];
 		}
@@ -448,14 +459,15 @@ const TRENDING_ARTISTS_TTL = 6 * 60 * 60 * 1000;
 app.get("/api/trending-artists", async (req, res) => {
 	const now = Date.now();
 	const languagesQuery = req.query.languages || "english,hindi";
-	const cacheKey = languagesQuery.toLowerCase().trim();
+	const limit = parseInt(req.query.limit, 10) || 5;
+	const cacheKey = languagesQuery.toLowerCase().trim() + '-' + limit;
 
 	if (trendingArtistsCache.data[cacheKey] && (now - trendingArtistsCache.lastFetched[cacheKey] < TRENDING_ARTISTS_TTL)) {
 		return res.json(trendingArtistsCache.data[cacheKey]);
 	}
 
 	try {
-		const languages = cacheKey.split(",").map(s => s.trim()).filter(Boolean);
+		const languages = cacheKey.split("-")[0].split(",").map(s => s.trim()).filter(Boolean);
 		const artistCounts = {};
 		const artistMeta = {};
 		
@@ -493,8 +505,7 @@ app.get("/api/trending-artists", async (req, res) => {
 				}
 				
 				// 3. Take top N for this language to ensure equal representation
-				// if 2 langs, take 3 per lang (total 6, we'll slice to 5 later). if 1 lang, take 5.
-				const numToTake = Math.max(1, Math.ceil(5 / languages.length));
+				const numToTake = Math.max(1, Math.ceil(limit / languages.length));
 				const topIds = Object.keys(langCounts).sort((a, b) => langCounts[b] - langCounts[a]).slice(0, numToTake);
 				topArtistIdsByLang.push(...topIds);
 
@@ -503,8 +514,8 @@ app.get("/api/trending-artists", async (req, res) => {
 			}
 		}
 
-		// Deduplicate and limit to 5
-		const finalIds = [...new Set(topArtistIdsByLang)].slice(0, 5);
+		// Deduplicate and limit
+		const finalIds = [...new Set(topArtistIdsByLang)].slice(0, limit);
 
 		// Fetch high-res details and follower counts
 		const finalArtists = await Promise.all(finalIds.map(async (id) => {
