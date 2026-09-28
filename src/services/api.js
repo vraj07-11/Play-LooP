@@ -10,7 +10,8 @@ export async function fetchApi(endpoint, options = {}) {
 }
 
 export function getAudioUrl(videoId) {
-  return `/api/audio?id=${encodeURIComponent(videoId)}`;
+  const quality = localStorage.getItem('playloop_audio_quality') || '320';
+  return `/api/audio?id=${encodeURIComponent(videoId)}&quality=${encodeURIComponent(quality)}`;
 }
 
 function shuffleArray(array) {
@@ -198,6 +199,25 @@ export async function fetchRecommendedPlaylists() {
 }
 
 export async function fetchPlaylistDetails(playlistId, page = 1) {
+  // Check if it's an imported or locally saved playlist with tracks stored in localStorage
+  try {
+    const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+    const localMatch = saved.find(p => String(p.playlistId) === String(playlistId));
+    if (localMatch && Array.isArray(localMatch.tracks) && localMatch.tracks.length > 0) {
+      return {
+        playlistId: localMatch.playlistId,
+        title: localMatch.title,
+        author: localMatch.author || 'Imported Playlist',
+        thumbnail: localMatch.thumbnail || '/logo.svg',
+        description: localMatch.description || `Collection containing ${localMatch.tracks.length} tracks.`,
+        count: localMatch.tracks.length,
+        tracks: localMatch.tracks
+      };
+    }
+  } catch (err) {
+    console.error("Error checking local saved playlists:", err);
+  }
+
   try {
     const res = await fetchApi(`/api/playlist?id=${encodeURIComponent(playlistId)}&page=${page}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

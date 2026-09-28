@@ -89,10 +89,20 @@ function getValidImage(imgUrl) {
 	return url;
 }
 
-function formatSong(song) {
+function formatSong(song, quality = "320") {
 	const encUrl = song.encrypted_media_url || song.more_info?.encrypted_media_url;
 	const decUrl = encUrl ? decryptSaavnUrl(encUrl) : null;
-	const highQualityUrl = decUrl ? decUrl.replace("_96", "_320").replace("_160", "_320") : null;
+	
+	let qualityUrl = decUrl;
+	if (decUrl) {
+		if (quality === "320") {
+			qualityUrl = decUrl.replace("_96", "_320").replace("_160", "_320");
+		} else if (quality === "160") {
+			qualityUrl = decUrl.replace("_320", "_160").replace("_96", "_160");
+		} else if (quality === "96") {
+			qualityUrl = decUrl.replace("_320", "_96").replace("_160", "_96");
+		}
+	}
 
 	let artistName = "Various Artists";
 	if (song.more_info?.primary_artists) {
@@ -107,7 +117,7 @@ function formatSong(song) {
 		artist: artistName.replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
 		thumbnail: getValidImage(song.image),
 		duration: parseInt(song.more_info?.duration || song.duration || 0, 10),
-		streamUrl: highQualityUrl
+		streamUrl: qualityUrl
 	};
 }
 
@@ -127,7 +137,7 @@ app.get("/api/search", async (req, res) => {
 			return res.json([]);
 		}
 
-		const songs = data.results.map(formatSong);
+		const songs = data.results.map(s => formatSong(s));
 		res.json(songs);
 	} catch (error) {
 		console.error("Search endpoint error:", error);
@@ -141,6 +151,7 @@ app.get("/api/audio/preload", (req, res) => {
 
 app.get("/api/audio", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
+	const quality = String(req.query.quality || "320").trim();
 	if (!videoId) return res.status(400).send("Video ID is required");
 
 	try {
@@ -151,7 +162,7 @@ app.get("/api/audio", async (req, res) => {
 			return res.status(404).send("Song not found");
 		}
 
-		const formatted = formatSong(songData);
+		const formatted = formatSong(songData, quality);
 		if (formatted.streamUrl) {
 			return res.redirect(302, formatted.streamUrl);
 		} else {
@@ -926,6 +937,283 @@ app.get("/api/playlist", async (req, res) => {
 	} catch (error) {
 		console.error("Playlist details failed:", error.stack || error);
 		res.status(502).json({ error: "Failed to fetch playlist details", details: error.message });
+	}
+});
+
+async function getSpotifyPlaylistDetails(spotifyUrl) {
+	try {
+		const match = spotifyUrl.match(/(playlist|album)\/([a-zA-Z0-9]+)/);
+		if (!match) return null;
+		const type = match[1];
+		const id = match[2];
+
+		let accessToken = null;
+		try {
+			const tokRes = await fetch("https://open.spotify.com/get_access_token", {
+				headers: {
+					"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+					"App-Platform": "WebPlayer"
+				}
+			});
+			if (tokRes.ok) {
+				const tokData = await tokRes.json();
+				accessToken = tokData.accessToken;
+			}
+		} catch (e) {
+			console.error("Spotify token fetch failed:", e.message);
+		}
+
+		if (accessToken) {
+			const apiRes = await fetch(
+				type === "album" 
+					? `https://api.spotify.com/v1/albums/${id}`
+					: `https://api.spotify.com/v1/playlists/${id}?fields=name,images,tracks.items(track(name,artists(name)))`,
+				{
+					headers: {
+						"Authorization": `Bearer ${accessToken}`,
+						"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+					}
+				}
+			);
+
+			if (apiRes.ok) {
+				const apiData = await apiRes.json();
+				const title = apiData.name || "Spotify Playlist";
+				const thumbnail = apiData.images?.[0]?.url || "/logo.svg";
+				const rawItems = type === "album" ? (apiData.tracks?.items || []) : (apiData.tracks?.items || []).map(i => i.track).filter(Boolean);
+
+				const songsToSearch = [];
+				for (const t of rawItems) {
+					const trackName = t.name;
+					const artistNames = (t.artists || []).map(a => a.name).join(" ");
+					if (trackName) {
+						songsToSearch.push(`${trackName} ${artistNames}`.trim());
+					}
+				}
+
+				if (songsToSearch.length > 0) {
+					return { title, thumbnail, songsToSearch };
+				}
+			}
+		}
+
+		const embedRes = await fetch(`https://open.spotify.com/embed/${type}/${id}`, {
+			headers: {
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+			}
+		});
+		if (embedRes.ok) {
+			const html = await embedRes.text();
+			let title = "Spotify Playlist";
+			let thumbnail = "/logo.svg";
+			const songsToSearch = [];
+
+			const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+			if (titleMatch) title = titleMatch[1].replace("- Spotify", "").replace("Spotify –", "").trim();
+
+			const nextMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+			if (nextMatch) {
+				try {
+					const json = JSON.parse(nextMatch[1]);
+					const entity = json?.props?.pageProps?.entity || json?.props?.pageProps?.state?.data?.entity;
+					if (entity) {
+						if (entity.name) title = entity.name;
+						if (entity.coverArt?.sources?.[0]?.url) thumbnail = entity.coverArt.sources[0].url;
+
+						const trackList = entity.trackList || entity.tracks?.items || [];
+						for (const item of trackList) {
+							const t = item.track || item;
+							const name = t.title || t.name;
+							const artist = (t.subtitle || t.artists?.[0]?.name || "").replace(/\u00a0/g, " ");
+							if (name) songsToSearch.push(`${name} ${artist}`.trim());
+						}
+					}
+				} catch (err) {}
+			}
+
+			if (songsToSearch.length > 0) {
+				return { title, thumbnail, songsToSearch };
+			}
+		}
+	} catch (e) {
+		console.error("getSpotifyPlaylistDetails error:", e);
+	}
+	return null;
+}
+
+async function getYouTubePlaylistDetails(ytUrl) {
+	try {
+		const listMatch = ytUrl.match(/list=([a-zA-Z0-9_-]+)/);
+		const listId = listMatch ? listMatch[1] : null;
+		if (!listId) return null;
+
+		const res = await fetch(`https://www.youtube.com/playlist?list=${listId}`, {
+			headers: {
+				"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+				"Accept-Language": "en-US,en;q=0.9"
+			}
+		});
+
+		if (!res.ok) return null;
+		const html = await res.text();
+
+		const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) || html.match(/<title>([^<]+)<\/title>/i);
+		let title = titleMatch ? titleMatch[1].replace("- YouTube Music", "").replace("- YouTube", "").trim() : "YouTube Playlist";
+		if (title.includes("http") || title.length > 80) title = "YouTube Playlist";
+
+		const thumbMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
+		const thumbnail = thumbMatch ? thumbMatch[1] : "/logo.svg";
+
+		const songsToSearch = [];
+
+		const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s) || html.match(/window\["ytInitialData"\] = ({.*?});/s);
+		if (jsonMatch) {
+			try {
+				const ytData = JSON.parse(jsonMatch[1]);
+				
+				function extractItems(obj) {
+					if (!obj || typeof obj !== 'object') return;
+
+					// 1. New YouTube lockupViewModel format (2025/2026)
+					if (obj.lockupViewModel) {
+						const l = obj.lockupViewModel;
+						const trackTitle = l.metadata?.lockupMetadataViewModel?.title?.content;
+						const artistName = l.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text?.content || "";
+						if (trackTitle && !trackTitle.includes("[Deleted video]") && !trackTitle.includes("[Private video]")) {
+							songsToSearch.push(`${trackTitle} ${artistName}`.trim());
+						}
+					}
+
+					// 2. Classic playlistVideoRenderer format
+					if (obj.playlistVideoRenderer) {
+						const v = obj.playlistVideoRenderer;
+						const t = v.title?.runs?.[0]?.text || v.title?.simpleText;
+						const artist = v.shortBylineText?.runs?.[0]?.text || v.longBylineText?.runs?.[0]?.text || "";
+						if (t && !t.includes("[Deleted video]") && !t.includes("[Private video]") && !t.includes("Play all")) {
+							songsToSearch.push(`${t} ${artist}`.trim());
+						}
+					}
+
+					// 3. YouTube Music responsive list item format
+					if (obj.musicResponsiveListItemRenderer) {
+						const item = obj.musicResponsiveListItemRenderer;
+						const flexColumns = item.flexColumns || [];
+						const t = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+						const artist = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text || "";
+						if (t && !t.includes("Play all")) {
+							songsToSearch.push(`${t} ${artist}`.trim());
+						}
+					}
+
+					for (const k of Object.keys(obj)) {
+						if (typeof obj[k] === 'object') {
+							extractItems(obj[k]);
+						}
+					}
+				}
+
+				extractItems(ytData);
+			} catch (err) {
+				console.error("ytInitialData error:", err);
+			}
+		}
+
+		const cleaned = [...new Set(songsToSearch)].filter(s => 
+			s.length > 2 && 
+			!s.includes("Keyboard shortcuts") && 
+			!s.includes("Playback") &&
+			!s.includes("General") &&
+			!s.includes("Subtitles")
+		);
+
+		if (cleaned.length > 0) {
+			return { title, thumbnail, songsToSearch: cleaned };
+		}
+	} catch (e) {
+		console.error("getYouTubePlaylistDetails error:", e);
+	}
+	return null;
+}
+
+app.get("/api/import-playlist", async (req, res) => {
+	let link = String(req.query.url || "").trim();
+	if (!link) return res.status(400).json({ error: 'URL parameter "url" is required' });
+
+	try {
+		if (!link.startsWith("http://") && !link.startsWith("https://")) {
+			link = "https://" + link;
+		}
+
+		// 1. JioSaavn / Saavn Playlist
+		if (link.includes("saavn.com") || link.includes("jiosaavn.com")) {
+			let listid = null;
+			let token = null;
+
+			const listidMatch = link.match(/listid=([^&]+)/);
+			if (listidMatch) listid = listidMatch[1];
+
+			const tokenMatch = link.match(/featured\/[^/]+\/([^/?#]+)/) || link.match(/s\/playlist\/[^/]+\/([^/?#]+)/);
+			if (tokenMatch) token = tokenMatch[1];
+
+			let data = null;
+			if (listid) {
+				data = await fetchJioSaavn({ __call: "playlist.getDetails", listid });
+			} else if (token) {
+				data = await fetchJioSaavn({ __call: "webapi.get", type: "playlist", token, n: "50", p: "1" });
+			} else {
+				const response = await fetch(link, {
+					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+				});
+				const html = await response.text();
+				const matchId = html.match(/"listid":"([^"]+)"/) || html.match(/"type":"playlist","id":"([^"]+)"/) || html.match(/"playlist_id":"([^"]+)"/);
+				if (matchId) {
+					data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: matchId[1] });
+				}
+			}
+
+			if (data && (data.list || data.songs)) {
+				const list = data.list || data.songs;
+				const tracks = list.map(s => formatSong(s));
+				return res.json({
+					source: 'jiosaavn',
+					title: data.title || data.name || "JioSaavn Playlist",
+					author: data.subtitle || data.header_desc || "JioSaavn",
+					thumbnail: getValidImage(data.image) || tracks[0]?.thumbnail || "/logo.svg",
+					tracks
+				});
+			}
+		}
+
+		// 2. Spotify Playlist Link
+		if (link.includes("spotify.com")) {
+			const details = await getSpotifyPlaylistDetails(link);
+			if (details && details.songsToSearch.length > 0) {
+				return res.json({
+					source: 'spotify',
+					title: details.title,
+					thumbnail: details.thumbnail,
+					songsToSearch: details.songsToSearch
+				});
+			}
+		}
+
+		// 3. YouTube / YT Music Playlist Link
+		if (link.includes("youtube.com") || link.includes("youtu.be")) {
+			const details = await getYouTubePlaylistDetails(link);
+			if (details && details.songsToSearch.length > 0) {
+				return res.json({
+					source: 'youtube',
+					title: details.title,
+					thumbnail: details.thumbnail,
+					songsToSearch: details.songsToSearch
+				});
+			}
+		}
+
+		return res.status(400).json({ error: "Could not extract tracks from this playlist link. Ensure the playlist is Public." });
+	} catch (error) {
+		console.error("Import playlist endpoint failed:", error);
+		res.status(500).json({ error: "Failed to process playlist URL" });
 	}
 });
 

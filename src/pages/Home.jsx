@@ -117,7 +117,7 @@ export default function Home({ setCurrentView }) {
             if (details) {
               setSelectedPlaylist(details);
               checkIfSaved(details.playlistId);
-              if (details.tracks && details.tracks.length < 30) {
+              if (details.tracks && (details.tracks.length < 30 || String(details.playlistId).startsWith('imported_'))) {
                 setHasMorePlaylist(false);
               }
             }

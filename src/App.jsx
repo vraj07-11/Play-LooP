@@ -9,6 +9,7 @@ import SearchPage from './pages/SearchPage';
 import DownloadPage from './pages/DownloadPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LibraryPage from './pages/LibraryPage';
+import SettingsPage from './pages/SettingsPage';
 import LanguageSelector from './components/LanguageSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -117,9 +118,10 @@ function App() {
                   <Home key={homeKey} setCurrentView={handleSetCurrentView} />
                 )}
                 {currentView === 'library' && <LibraryPage setCurrentView={handleSetCurrentView} />}
+                {currentView === 'settings' && <SettingsPage setCurrentView={handleSetCurrentView} />}
                 {currentView === 'search' && <SearchPage />}
                 {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
-                {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
                   <PlaceholderPage view={currentView} />
                 )}
               </ErrorBoundary>
