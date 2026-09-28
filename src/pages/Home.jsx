@@ -10,6 +10,7 @@ export default function Home({ setCurrentView }) {
   const [loadingPlaylists, setLoadingPlaylists] = useState(true);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [loadingPlaylistDetails, setLoadingPlaylistDetails] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   
   const [extraMadeForYou, setExtraMadeForYou] = useState([]);
   const [extraPopularAlbums, setExtraPopularAlbums] = useState([]);
@@ -73,6 +74,29 @@ export default function Home({ setCurrentView }) {
     };
   }, []);
 
+  const handleOpenLikedSongs = useCallback(() => {
+    try {
+      const savedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+      const playlistDetails = {
+        playlistId: 'liked_songs',
+        title: 'Liked Songs',
+        author: 'Your Favorites',
+        thumbnail: '/liked_songs_cover.png',
+        description: 'Collection of all your favorite liked songs.',
+        count: savedList.length,
+        tracks: savedList,
+        isLikedPlaylist: true
+      };
+      if (!window.location.hash.includes('liked_songs') && !window.location.hash.includes('liked-songs')) {
+        window.location.hash = '#/playlist/liked_songs';
+      }
+      setSelectedPlaylist(playlistDetails);
+      setIsSaved(true);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   useEffect(() => {
     const handleHashChange = async () => {
       const hash = window.location.hash;
@@ -80,6 +104,10 @@ export default function Home({ setCurrentView }) {
       
       if (match) {
         const id = match[1];
+        if (id === 'liked_songs' || id === 'liked-songs') {
+          handleOpenLikedSongs();
+          return;
+        }
         if (!selectedPlaylist || selectedPlaylist.playlistId !== id) {
           setLoadingPlaylistDetails(true);
           setPlaylistPage(1);
@@ -88,6 +116,7 @@ export default function Home({ setCurrentView }) {
             const details = await fetchPlaylistDetails(id, 1);
             if (details) {
               setSelectedPlaylist(details);
+              checkIfSaved(details.playlistId);
               if (details.tracks && details.tracks.length < 30) {
                 setHasMorePlaylist(false);
               }
@@ -98,7 +127,9 @@ export default function Home({ setCurrentView }) {
             setLoadingPlaylistDetails(false);
           }
         }
-      } else if (hash === '#/home' || hash === '' || hash === '#') {
+      } else if (hash.includes('liked-songs') || hash.includes('liked_songs')) {
+        handleOpenLikedSongs();
+      } else {
         setSelectedPlaylist(null);
       }
     };
@@ -106,7 +137,44 @@ export default function Home({ setCurrentView }) {
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [selectedPlaylist]);
+  }, [selectedPlaylist, handleOpenLikedSongs]);
+
+  function checkIfSaved(playlistId) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      setIsSaved(saved.some(p => p.playlistId === playlistId));
+    } catch (e) {
+      setIsSaved(false);
+    }
+  };
+
+  const handleToggleSave = () => {
+    if (!selectedPlaylist) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      const existsIndex = saved.findIndex(p => p.playlistId === selectedPlaylist.playlistId);
+      if (existsIndex >= 0) {
+        saved.splice(existsIndex, 1);
+        setIsSaved(false);
+      } else {
+        const playlistToSave = {
+          playlistId: selectedPlaylist.playlistId,
+          title: selectedPlaylist.title,
+          author: selectedPlaylist.author || selectedPlaylist.artist || 'Play LooP',
+          thumbnail: selectedPlaylist.thumbnail,
+          description: selectedPlaylist.description,
+          count: selectedPlaylist.tracks ? selectedPlaylist.tracks.length : selectedPlaylist.count,
+          isArtist: selectedPlaylist.isArtist
+        };
+        saved.unshift(playlistToSave);
+        setIsSaved(true);
+      }
+      localStorage.setItem('playloop_saved_playlists', JSON.stringify(saved));
+      window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const loadMoreMadeForYou = async () => {
     if (loadingMoreMadeForYou) return;
@@ -155,25 +223,7 @@ export default function Home({ setCurrentView }) {
     if (node) observer.current.observe(node);
   }, [loadingMorePlaylist, hasMorePlaylist, selectedPlaylist, playlistPage]);
 
-  const handleOpenLikedSongs = useCallback(() => {
-    try {
-      const savedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
-      const playlistDetails = {
-        playlistId: 'liked_songs',
-        title: 'Liked Songs',
-        author: 'Your Favorites',
-        thumbnail: '/liked_songs_cover.png',
-        description: 'Collection of all your favorite liked songs.',
-        count: savedList.length,
-        tracks: savedList,
-        isLikedPlaylist: true
-      };
-      window.history.pushState({ view: 'home', playlistId: 'liked_songs' }, '', '#/playlist/liked_songs');
-      setSelectedPlaylist(playlistDetails);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
+
 
   useEffect(() => {
     const handlePopState = (e) => {
@@ -241,6 +291,7 @@ export default function Home({ setCurrentView }) {
     if (details) {
       window.history.pushState({ view: 'home', playlistId: playlist.playlistId }, '', `#/playlist/${playlist.playlistId}`);
       setSelectedPlaylist(details);
+      checkIfSaved(details.playlistId);
       if (details.tracks && details.tracks.length < 30) {
          setHasMorePlaylist(false); // probably reached end if less than limit
       }
@@ -249,8 +300,8 @@ export default function Home({ setCurrentView }) {
   };
 
   const handleBackToHome = () => {
-    if (window.history.length > 1 && window.location.hash !== '') {
-      window.history.back();
+    if (setCurrentView) {
+      setCurrentView('home');
     } else {
       window.location.hash = '#/home';
     }
@@ -382,8 +433,10 @@ export default function Home({ setCurrentView }) {
               >
                 <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play
               </button>
-              <button className="inline-flex items-center gap-2 px-6 py-3 bg-transparent border border-zinc-600 hover:border-zinc-400 text-white font-bold text-sm rounded-full transition cursor-pointer">
-                {selectedPlaylist.isArtist ? 'Follow' : <><span className="text-lg leading-none">+</span> Save</>}
+              <button onClick={handleToggleSave} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-zinc-600 hover:border-zinc-400 text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px]">
+                {selectedPlaylist.isArtist ? 'Follow' : (
+                  isSaved ? <span className="text-zinc-300">Saved</span> : <><span className="text-lg leading-none">+</span> Save</>
+                )}
               </button>
               <button className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer">
                 <span className="flex gap-1">
@@ -518,7 +571,7 @@ export default function Home({ setCurrentView }) {
     isAppDownloaded
       ? { title: 'Settings', subtitle: 'App preferences', icon: <Settings className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]', path: '#/settings' }
       : { title: 'Download App', subtitle: 'Install for offline', icon: <Download className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]', path: '#/download' },
-    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 text-white" />, color: 'bg-[#d28238]', action: handleOpenLikedSongs }
+    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 text-white" />, color: 'bg-[#d28238]', path: '#/library' }
   ];
 
   return (

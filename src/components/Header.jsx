@@ -197,7 +197,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
             <a 
               className="brand-link" 
               href="#home" 
-              onClick={(e) => { e.preventDefault(); window.location.hash = ''; setCurrentView('home'); }}
+              onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}
             >
               <img className="brand-logo" src="/logo.svg" alt="Play LooP logo" />
               LooP

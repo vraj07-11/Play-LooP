@@ -94,7 +94,6 @@ export default function FullPlayer({
       setIsRightSidebarOpen(true);
     }
     window.dispatchEvent(new CustomEvent('playloop-open-queue'));
-    showToast("Up Next queue opened");
   };
 
   const handleSave = () => {

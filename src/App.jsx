@@ -8,7 +8,9 @@ import Home from './pages/Home';
 import SearchPage from './pages/SearchPage';
 import DownloadPage from './pages/DownloadPage';
 import PlaceholderPage from './pages/PlaceholderPage';
+import LibraryPage from './pages/LibraryPage';
 import LanguageSelector from './components/LanguageSelector';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -25,71 +27,74 @@ function App() {
     // Prevent refresh when app is focused via a deep link or launch_handler
     if ('launchQueue' in window) {
       window.launchQueue.setConsumer((launchParams) => {
-        // Just consume it without doing a full page reload.
-        // We can access launchParams.targetURL if we ever need to route, 
-        // but for now, we just want to bring the app to the front seamlessly.
         console.log('App focused via launchQueue:', launchParams.targetURL);
       });
     }
 
-    // Set initial history state if none exists
-    if (!window.history.state) {
-      const initialHash = window.location.hash;
-      window.history.replaceState({ view: 'home', root: true }, '', initialHash || '#/home');
-    }
-
-    const handlePopState = (event) => {
-      // If mobile sidebar is open, close it first
+    const syncViewFromHash = () => {
       if (isSidebarOpenRef.current) {
         setIsSidebarOpen(false);
       }
 
-      const state = event.state;
-      const hash = window.location.hash;
+      const hash = window.location.hash || '';
 
-      if (state && state.view) {
-        setCurrentView(state.view);
+      if (hash.includes('playlist/liked_songs') || hash.includes('liked-songs') || hash.includes('liked_songs')) {
+        setCurrentView('home');
+      } else if (hash.includes('playlist/')) {
+        setCurrentView('home');
       } else if (hash.includes('search')) {
         setCurrentView('search');
+      } else if (hash.includes('library')) {
+        setCurrentView('library');
       } else if (hash.includes('download') || hash.includes('Download')) {
         setCurrentView('download');
-      } else if (!hash.includes('player')) {
+      } else if (hash.includes('create-playlist')) {
+        setCurrentView('create-playlist');
+      } else if (hash.includes('logout')) {
+        setCurrentView('logout');
+      } else if (hash.includes('settings')) {
+        setCurrentView('settings');
+      } else if (hash.includes('profile')) {
+        setCurrentView('profile');
+      } else {
         setCurrentView('home');
       }
     };
 
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('hashchange', handlePopState);
+    syncViewFromHash();
+
+    window.addEventListener('popstate', syncViewFromHash);
+    window.addEventListener('hashchange', syncViewFromHash);
     return () => {
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('hashchange', handlePopState);
+      window.removeEventListener('popstate', syncViewFromHash);
+      window.removeEventListener('hashchange', syncViewFromHash);
     };
   }, []);
 
   const handleSetCurrentView = (view) => {
-    if (view === 'home') {
-      setHomeKey((prev) => prev + 1);
-    }
-
-    if (view !== currentView) {
-      const currentHash = window.location.hash;
-      const targetHash = currentHash.startsWith(`#/${view}`) || currentHash.startsWith(`#${view}`)
-        ? currentHash
-        : `#/${view}`;
-      window.history.pushState({ view }, '', targetHash);
-      setCurrentView(view);
-    }
-
     if (isSidebarOpen) {
       setIsSidebarOpen(false);
     }
+
+    if (view === 'home') {
+      setHomeKey((prev) => prev + 1);
+      window.location.hash = '#/home';
+      setCurrentView('home');
+      return;
+    }
+
+    if (view === 'liked-songs' || view === 'liked') {
+      window.location.hash = '#/playlist/liked_songs';
+      setCurrentView('home');
+      return;
+    }
+
+    window.location.hash = `#/${view}`;
+    setCurrentView(view);
   };
 
   const handleSetIsSidebarOpen = (openState) => {
     const nextState = typeof openState === 'function' ? openState(isSidebarOpen) : openState;
-    if (nextState && !isSidebarOpen) {
-      window.history.pushState({ view: currentView, sidebarOpen: true }, '', '#/menu');
-    }
     setIsSidebarOpen(nextState);
   };
 
@@ -107,14 +112,17 @@ function App() {
           <main className="relative flex min-h-0 flex-1 select-none">
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} />
             <section className="app-content select-none" aria-live="polite">
-              {(currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked' || currentView === 'library') && (
-                <Home key={homeKey} setCurrentView={handleSetCurrentView} />
-              )}
-              {currentView === 'search' && <SearchPage />}
-              {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
-              {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
-                <PlaceholderPage view={currentView} />
-              )}
+              <ErrorBoundary>
+                {(currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked') && (
+                  <Home key={homeKey} setCurrentView={handleSetCurrentView} />
+                )}
+                {currentView === 'library' && <LibraryPage setCurrentView={handleSetCurrentView} />}
+                {currentView === 'search' && <SearchPage />}
+                {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
+                {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                  <PlaceholderPage view={currentView} />
+                )}
+              </ErrorBoundary>
             </section>
             <RightSidebar />
           </main>
