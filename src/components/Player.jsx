@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic } from 'lucide-react';
+import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart } from 'lucide-react';
 import FullPlayer from './FullPlayer';
 
 export default function Player() {
@@ -22,7 +22,55 @@ export default function Player() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isMobileQueueOpen, setIsMobileQueueOpen] = useState(false);
   const [initialShowLyrics, setInitialShowLyrics] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
   const progressRef = useRef(null);
+
+  useEffect(() => {
+    if (!pendingTrack?.videoId) return;
+    const checkIsLiked = () => {
+      try {
+        const liked = JSON.parse(localStorage.getItem('playloop_liked_tracks') || '[]');
+        setIsLiked(liked.includes(pendingTrack.videoId));
+      } catch (e) {
+        setIsLiked(false);
+      }
+    };
+    checkIsLiked();
+    window.addEventListener('playloop-liked-songs-updated', checkIsLiked);
+    return () => window.removeEventListener('playloop-liked-songs-updated', checkIsLiked);
+  }, [pendingTrack]);
+
+  const handleLikeClick = (e) => {
+    e.stopPropagation();
+    if (!pendingTrack?.videoId) return;
+    try {
+      const liked = JSON.parse(localStorage.getItem('playloop_liked_tracks') || '[]');
+      const likedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+      let updatedIds, updatedTracks;
+
+      if (isLiked) {
+        updatedIds = liked.filter(id => id !== pendingTrack.videoId);
+        updatedTracks = likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId);
+        setIsLiked(false);
+      } else {
+        updatedIds = [...liked.filter(id => id !== pendingTrack.videoId), pendingTrack.videoId];
+        const trackObj = {
+          videoId: pendingTrack.videoId,
+          title: pendingTrack.title || currentTitle || "Liked Track",
+          artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
+          thumbnail: pendingTrack.thumbnail || "/logo.svg",
+          duration: pendingTrack.duration || duration || 180
+        };
+        updatedTracks = [trackObj, ...likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId)];
+        setIsLiked(true);
+      }
+      localStorage.setItem('playloop_liked_tracks', JSON.stringify(updatedIds));
+      localStorage.setItem('playloop_liked_tracks_list', JSON.stringify(updatedTracks));
+      window.dispatchEvent(new CustomEvent('playloop-liked-songs-updated'));
+    } catch (err) {
+      setIsLiked(!isLiked);
+    }
+  };
 
   useEffect(() => {
     const handleToggleLyrics = () => {
@@ -231,21 +279,13 @@ export default function Player() {
 
   return (
     <>
+      {/* Desktop Player Bar (100% unchanged for desktop) */}
       <footer 
-        className="player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4 overflow-hidden"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onWheel={(e) => {
-          if (e.deltaY < -10) {
-            openFullPlayer(false);
-          }
-        }}
+        className="hidden md:flex player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 items-center justify-between gap-4 overflow-hidden shrink-0"
       >
         {/* Clickable track cover & title section */}
         <div 
-          className={`player-track flex items-center gap-4 w-full md:w-1/3 min-w-0 cursor-pointer group hover:opacity-95 select-none ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
-          style={{ transform: `translateX(${swipeOffset}px)` }}
+          className="player-track flex items-center gap-4 w-1/3 min-w-0 cursor-pointer group hover:opacity-95 select-none"
           onClick={() => openFullPlayer(false)}
           title="Click to view expanded player"
           role="button"
@@ -283,7 +323,7 @@ export default function Player() {
           </div>
         </div>
 
-        <div className="player-controls flex flex-col items-center w-full md:w-1/3 max-w-lg">
+        <div className="player-controls flex flex-col items-center w-1/3 max-w-lg">
           <div className="player-buttons flex items-center gap-3 md:gap-4 mb-2">
             <button 
               type="button" 
@@ -378,7 +418,7 @@ export default function Player() {
           </div>
         </div>
         
-        <div className="hidden md:flex w-1/3 justify-end items-center pr-2">
+        <div className="flex w-1/3 justify-end items-center pr-2">
           <button
             type="button"
             className={`p-2 rounded-full transition-colors ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}
@@ -390,6 +430,77 @@ export default function Player() {
           </button>
         </div>
       </footer>
+
+      {/* Mobile Compact Miniplayer Bar (Sleek 64px Bar with Like & Play/Pause) */}
+      <div 
+        className="md:hidden z-40 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/80 px-3.5 py-2 flex items-center justify-between gap-3 relative shrink-0 select-none shadow-2xl h-[64px] cursor-pointer"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClick={() => openFullPlayer(false)}
+      >
+        {/* Top 2px Progress Line */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-zinc-800/60 pointer-events-none">
+          <div 
+            className="h-full bg-white transition-all duration-150" 
+            style={{ width: `${progress || 0}%` }}
+          />
+        </div>
+
+        {/* Left Track Info & Artwork */}
+        <div 
+          className={`flex items-center gap-3.5 min-w-0 flex-1 ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
+          style={{ transform: `translateX(${swipeOffset}px)` }}
+        >
+          <img 
+            src={pendingTrack?.thumbnail || '/logo.svg'} 
+            alt="Track thumbnail" 
+            className={`w-12 h-12 rounded-lg shrink-0 ${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-black border border-zinc-800' : 'object-cover shadow-sm'}`}
+            onError={(e) => {
+              e.target.src = '/logo.svg';
+              e.target.className = 'w-12 h-12 rounded-lg shrink-0 object-contain p-1.5 bg-black border border-zinc-800';
+            }}
+          />
+          <div className="flex flex-col min-w-0 flex-1 justify-center">
+            <span className="text-sm font-semibold text-white truncate leading-tight">
+              {currentTitle || "Unknown Track"}
+            </span>
+            <span className="text-xs font-medium text-zinc-400 truncate leading-tight mt-0.5">
+              {pendingTrack?.artist || pendingTrack?.channelTitle || 'Play LooP'}
+            </span>
+          </div>
+        </div>
+
+        {/* Right Quick Action Buttons: 1st Like, 2nd Play/Pause */}
+        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button 
+            type="button" 
+            className="w-10 h-10 flex items-center justify-center transition-transform active:scale-90 cursor-pointer"
+            onClick={handleLikeClick}
+            aria-label={isLiked ? "Unlike track" : "Like track"}
+            title={isLiked ? "Unlike" : "Like"}
+          >
+            <Heart className={`w-6 h-6 transition-colors ${isLiked ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'text-zinc-400 hover:text-white'}`} />
+          </button>
+          <button 
+            type="button" 
+            className="w-10 h-10 flex items-center justify-center text-white hover:text-zinc-200 active:scale-90 transition-transform cursor-pointer"
+            onClick={playPause}
+            aria-label="Play or Pause"
+          >
+            {isPlaying ? (
+              <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <rect x="6.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
+                <rect x="14.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
+              </svg>
+            ) : (
+              <svg className="w-7 h-7 text-white translate-x-[1px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M7 4.5v15l12-7.5z" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
 
       {/* Mobile "Up Next" Queue Bottom Sheet */}
       <div 

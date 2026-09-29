@@ -12,6 +12,7 @@ import LibraryPage from './pages/LibraryPage';
 import SettingsPage from './pages/SettingsPage';
 import LanguageSelector from './components/LanguageSelector';
 import ErrorBoundary from './components/ErrorBoundary';
+import MobileBottomNav from './components/MobileBottomNav';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -131,6 +132,7 @@ function App() {
             <RightSidebar />
           </main>
           <Player />
+          <MobileBottomNav currentView={currentView} setCurrentView={handleSetCurrentView} />
         </>
       )}
     </div>
