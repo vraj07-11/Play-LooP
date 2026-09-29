@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS } from '../services/api.js';
 import Carousel from '../components/Carousel';
-import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download } from 'lucide-react';
+import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
 
 export default function Home({ setCurrentView }) {
   const [greeting, setGreeting] = useState('');
@@ -22,6 +22,40 @@ export default function Home({ setCurrentView }) {
 
   const [popularArtists, setPopularArtists] = useState([]);
   const [loadingMoreArtists, setLoadingMoreArtists] = useState(false);
+
+  const [sortBy, setSortBy] = useState('recent');
+  const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target)) {
+        setIsSortDropdownOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
+  }, []);
+
+  const sortedTracks = useMemo(() => {
+    if (!selectedPlaylist?.tracks) return [];
+    const tracks = [...selectedPlaylist.tracks];
+    switch (sortBy) {
+      case 'recent-reverse':
+        return tracks.reverse();
+      case 'title-asc':
+        return tracks.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      case 'title-desc':
+        return tracks.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+      case 'duration-asc':
+        return tracks.sort((a, b) => (a.duration || 0) - (b.duration || 0));
+      case 'duration-desc':
+        return tracks.sort((a, b) => (b.duration || 0) - (a.duration || 0));
+      case 'recent':
+      default:
+        return tracks;
+    }
+  }, [selectedPlaylist?.tracks, sortBy]);
 
   const loadMoreArtists = async () => {
     if (loadingMoreArtists) return;
@@ -308,14 +342,16 @@ export default function Home({ setCurrentView }) {
   };
 
   const handlePlayPlaylistAll = () => {
-    if (selectedPlaylist && selectedPlaylist.tracks && selectedPlaylist.tracks.length > 0) {
-      playPlaylist(selectedPlaylist.tracks, 0);
+    const listToPlay = sortedTracks.length > 0 ? sortedTracks : (selectedPlaylist?.tracks || []);
+    if (listToPlay.length > 0) {
+      playPlaylist(listToPlay, 0);
     }
   };
 
   const handlePlayTrackInPlaylist = (index) => {
-    if (selectedPlaylist && selectedPlaylist.tracks) {
-      playPlaylist(selectedPlaylist.tracks, index);
+    const listToPlay = sortedTracks.length > 0 ? sortedTracks : (selectedPlaylist?.tracks || []);
+    if (listToPlay.length > 0) {
+      playPlaylist(listToPlay, index);
     }
   };
 
@@ -455,9 +491,58 @@ export default function Home({ setCurrentView }) {
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white tracking-tight">{selectedPlaylist.isArtist ? 'Popular Tracks' : 'Tracks'}</h2>
-              <button className="text-sm font-medium text-zinc-400 hover:text-white flex items-center gap-1.5 transition">
-                Sort by <span className="text-[10px]">▼</span>
-              </button>
+              
+              <div className="relative z-20" ref={sortDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                  className="text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-3.5 py-1.5 flex items-center gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>
+                    Sort: {
+                      sortBy === 'recent' ? 'Newest First' :
+                      sortBy === 'recent-reverse' ? 'Oldest First' :
+                      sortBy === 'title-asc' ? 'Title (A-Z)' :
+                      sortBy === 'title-desc' ? 'Title (Z-A)' :
+                      sortBy === 'duration-asc' ? 'Shortest' :
+                      sortBy === 'duration-desc' ? 'Longest' : 'Newest First'
+                    }
+                  </span>
+                  <span className="text-[10px] text-zinc-400">▼</span>
+                </button>
+
+                {isSortDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800 mb-1">
+                      Sort Tracks By
+                    </div>
+                    {[
+                      { id: 'recent', label: 'Newest First' },
+                      { id: 'recent-reverse', label: 'Oldest First' },
+                      { id: 'title-asc', label: 'Title (A – Z)' },
+                      { id: 'title-desc', label: 'Title (Z – A)' },
+                      { id: 'duration-asc', label: 'Duration (Shortest)' },
+                      { id: 'duration-desc', label: 'Duration (Longest)' }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setSortBy(opt.id);
+                          setIsSortDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3.5 py-2 text-xs font-normal flex items-center justify-between transition cursor-pointer ${
+                          sortBy === opt.id ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {sortBy === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-[30px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_60px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
@@ -470,11 +555,11 @@ export default function Home({ setCurrentView }) {
             </div>
 
             <div className="flex flex-col gap-1">
-              {selectedPlaylist.tracks && selectedPlaylist.tracks.length > 0 ? (
-                selectedPlaylist.tracks.map((track, idx) => (
+              {sortedTracks && sortedTracks.length > 0 ? (
+                sortedTracks.map((track, idx) => (
                   <article
                     key={track.videoId || idx}
-                    ref={idx === selectedPlaylist.tracks.length - 1 ? lastTrackElementRef : null}
+                    ref={idx === sortedTracks.length - 1 ? lastTrackElementRef : null}
                     className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[30px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_60px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-lg hover:bg-zinc-800/50 transition group cursor-pointer"
                     onClick={() => handlePlayTrackInPlaylist(idx)}
                   >

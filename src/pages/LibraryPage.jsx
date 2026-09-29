@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Library, Play, Heart } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Library, Play, Heart, ArrowUpDown, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 
 export default function LibraryPage({ setCurrentView }) {
   const [savedPlaylists, setSavedPlaylists] = useState([]);
   const [likedCount, setLikedCount] = useState(0);
+  const [sortOption, setSortOption] = useState('recent');
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const sortRef = useRef(null);
 
   useEffect(() => {
     const fetchSaved = () => {
@@ -22,6 +25,28 @@ export default function LibraryPage({ setCurrentView }) {
     window.addEventListener('playloop-saved-playlists-updated', fetchSaved);
     return () => window.removeEventListener('playloop-saved-playlists-updated', fetchSaved);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (sortRef.current && !sortRef.current.contains(e.target)) {
+        setIsSortOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
+  }, []);
+
+  const sortedSavedPlaylists = useMemo(() => {
+    const list = [...savedPlaylists];
+    if (sortOption === 'recent-reverse') {
+      return list.reverse();
+    } else if (sortOption === 'name-asc') {
+      return list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    } else if (sortOption === 'name-desc') {
+      return list.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+    }
+    return list;
+  }, [savedPlaylists, sortOption]);
 
   const handlePlaylistClick = (playlist) => {
     window.location.hash = `#/playlist/${playlist.playlistId}`;
@@ -44,9 +69,59 @@ export default function LibraryPage({ setCurrentView }) {
 
   return (
     <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-6 select-none">
-      <div className="mb-8 pl-1 flex items-center gap-3">
-        <Library className="w-8 h-8 text-white" />
-        <h2 className="text-3xl font-extrabold text-white tracking-tight">Your Library</h2>
+      <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <Library className="w-8 h-8 text-white" />
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">Your Library</h2>
+        </div>
+
+        <div className="relative z-20" ref={sortRef}>
+          <button
+            type="button"
+            onClick={() => setIsSortOpen(!isSortOpen)}
+            className="text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-4 py-2 flex items-center gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
+            <span>
+              Sort: {
+                sortOption === 'recent' ? 'Newest First' :
+                sortOption === 'recent-reverse' ? 'Oldest First' :
+                sortOption === 'name-asc' ? 'Name (A-Z)' :
+                sortOption === 'name-desc' ? 'Name (Z-A)' : 'Newest First'
+              }
+            </span>
+            <span className="text-[10px] text-zinc-400">▼</span>
+          </button>
+
+          {isSortOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800 mb-1">
+                Sort Playlists By
+              </div>
+              {[
+                { id: 'recent', label: 'Newest First' },
+                { id: 'recent-reverse', label: 'Oldest First' },
+                { id: 'name-asc', label: 'Name (A – Z)' },
+                { id: 'name-desc', label: 'Name (Z – A)' }
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setSortOption(opt.id);
+                    setIsSortOpen(false);
+                  }}
+                  className={`w-full text-left px-3.5 py-2 text-xs font-normal flex items-center justify-between transition cursor-pointer ${
+                    sortOption === opt.id ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                  {sortOption === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
@@ -76,7 +151,7 @@ export default function LibraryPage({ setCurrentView }) {
         </div>
 
         {/* Saved Playlists */}
-        {savedPlaylists.map((item, index) => (
+        {sortedSavedPlaylists.map((item, index) => (
           <div
             key={`${item.playlistId}-${index}`}
             onClick={() => handlePlaylistClick(item)}
