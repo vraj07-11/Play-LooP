@@ -415,7 +415,7 @@ export default function FullPlayer({
         return;
       }
 
-      // Vertical swipe UP to show lyrics
+      // Vertical swipe UP to show lyrics on mobile
       if (deltaY < -25 && Math.abs(deltaY) > Math.abs(deltaX)) {
         setShowLyrics(true);
         touchStartY.current = null;
@@ -462,13 +462,15 @@ export default function FullPlayer({
   };
 
   const handleWheelCover = (e) => {
-    if (e.deltaY > 10) {
+    if (e.deltaY > 5) {
       // Scroll down -> close full player
       onClose();
-    } else if (e.deltaY < -10) {
-      // Scroll up -> show lyrics (Mobile only)
+    } else if (e.deltaY < -5) {
+      // Scroll up -> show lyrics on mobile, close player on desktop
       if (window.innerWidth < 768) {
         setShowLyrics(true);
+      } else {
+        onClose();
       }
     }
   };
@@ -552,7 +554,7 @@ export default function FullPlayer({
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMoveCover}
               onWheel={handleWheelCover}
-              title="Scroll or swipe DOWN to close player, UP for lyrics"
+              title="Swipe/scroll UP for lyrics, DOWN to minimize player"
               className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 touch-none transition-all duration-500 ease-out transform ${coverAnim} ${showLyrics
                 ? '-translate-y-full opacity-0 pointer-events-none scale-95 md:translate-y-0 md:opacity-100 md:pointer-events-auto md:scale-100'
                 : 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10'
@@ -656,14 +658,14 @@ export default function FullPlayer({
 
           {/* Main Media Control Toolbar */}
           <div className="w-full max-w-[340px] sm:max-w-[400px] flex items-center justify-between px-1 relative z-20 mx-auto mb-8">
-            {/* Shuffle */}
+            {/* Repeat */}
             <button
               type="button"
-              className={`p-2 rounded-full transition-all cursor-pointer hover:scale-110 active:scale-95 ${getSecondaryBtnClass(isShuffleEnabled)}`}
-              onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
-              aria-label="Shuffle"
+              className={`p-2 rounded-full transition-all cursor-pointer hover:scale-110 active:scale-95 ${getSecondaryBtnClass(isRepeatEnabled)}`}
+              onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
+              aria-label="Repeat"
             >
-              <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
             {/* Previous Track */}
@@ -703,14 +705,14 @@ export default function FullPlayer({
               <SkipForward className="w-7 h-7 sm:w-9 sm:h-9 fill-current" />
             </button>
 
-            {/* Repeat */}
+            {/* Shuffle */}
             <button
               type="button"
-              className={`p-2 rounded-full transition-all cursor-pointer hover:scale-110 active:scale-95 ${getSecondaryBtnClass(isRepeatEnabled)}`}
-              onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
-              aria-label="Repeat"
+              className={`p-2 rounded-full transition-all cursor-pointer hover:scale-110 active:scale-95 ${getSecondaryBtnClass(isShuffleEnabled)}`}
+              onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
+              aria-label="Shuffle"
             >
-              <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6" />
+              <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>
 

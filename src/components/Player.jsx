@@ -279,14 +279,23 @@ export default function Player() {
 
   return (
     <>
-      {/* Desktop Player Bar (100% unchanged for desktop) */}
+      {/* Desktop Player Bar */}
       <footer 
-        className="hidden md:flex player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 items-center justify-between gap-4 overflow-hidden shrink-0"
+        className="hidden md:flex player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 items-center justify-between gap-4 overflow-hidden shrink-0 cursor-pointer select-none"
+        onClick={() => openFullPlayer(false)}
+        onWheel={(e) => {
+          if (e.deltaY > 0 || e.deltaY < 0) {
+            openFullPlayer(false);
+          }
+        }}
       >
         {/* Clickable track cover & title section */}
         <div 
           className="player-track flex items-center gap-4 w-1/3 min-w-0 cursor-pointer group hover:opacity-95 select-none"
-          onClick={() => openFullPlayer(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            openFullPlayer(false);
+          }}
           title="Click to view expanded player"
           role="button"
           tabIndex={0}
@@ -323,7 +332,7 @@ export default function Player() {
           </div>
         </div>
 
-        <div className="player-controls flex flex-col items-center w-1/3 max-w-lg">
+        <div className="player-controls flex flex-col items-center w-1/3 max-w-lg" onClick={(e) => e.stopPropagation()}>
           <div className="player-buttons flex items-center gap-3 md:gap-4 mb-2">
             <button 
               type="button" 
@@ -418,7 +427,7 @@ export default function Player() {
           </div>
         </div>
         
-        <div className="flex w-1/3 justify-end items-center pr-2">
+        <div className="flex w-1/3 justify-end items-center pr-2" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             className={`p-2 rounded-full transition-colors ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}

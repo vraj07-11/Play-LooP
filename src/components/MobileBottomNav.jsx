@@ -23,7 +23,7 @@ export default function MobileBottomNav({ currentView, setCurrentView }) {
   return (
     <nav 
       aria-label="Mobile Bottom Navigation"
-      className="md:hidden z-30 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/80 px-3 py-2.5 flex items-center justify-around select-none shrink-0 shadow-[0_-8px_20px_rgba(0,0,0,0.7)]"
+      className="md:hidden z-30 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/80 px-2 py-1.5 flex items-center justify-around select-none shrink-0 shadow-[0_-8px_20px_rgba(0,0,0,0.7)]"
     >
       {navItems.map((item) => {
         const Icon = item.icon;
@@ -37,12 +37,12 @@ export default function MobileBottomNav({ currentView, setCurrentView }) {
             key={item.id}
             type="button"
             onClick={() => handleNavClick(item.id)}
-            className={`flex flex-col items-center justify-center flex-1 py-1 px-2 transition-all duration-200 cursor-pointer ${
+            className={`flex flex-col items-center justify-center flex-1 py-0.5 px-1 transition-all duration-200 cursor-pointer ${
               isActive ? 'text-white font-medium scale-105' : 'text-zinc-400 hover:text-zinc-200 font-normal'
             }`}
           >
-            <Icon className={`w-6 h-6 mb-0.5 transition-transform ${isActive ? 'stroke-[2.2px]' : 'stroke-[1.7px]'}`} />
-            <span className="text-[11px] tracking-tight mt-0.5">{item.label}</span>
+            <Icon className={`w-5 h-5 mb-0.5 transition-transform ${isActive ? 'stroke-[2.2px]' : 'stroke-[1.7px]'}`} />
+            <span className="text-[10px] tracking-tight mt-0.5">{item.label}</span>
           </button>
         );
       })}
