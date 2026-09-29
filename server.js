@@ -1157,9 +1157,9 @@ app.get("/api/import-playlist", async (req, res) => {
 
 			let data = null;
 			if (listid) {
-				data = await fetchJioSaavn({ __call: "playlist.getDetails", listid });
+				data = await fetchJioSaavn({ __call: "playlist.getDetails", listid, n: "200" });
 			} else if (token) {
-				data = await fetchJioSaavn({ __call: "webapi.get", type: "playlist", token, n: "50", p: "1" });
+				data = await fetchJioSaavn({ __call: "webapi.get", type: "playlist", token, n: "200", p: "1" });
 			} else {
 				const response = await fetch(link, {
 					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
@@ -1167,7 +1167,7 @@ app.get("/api/import-playlist", async (req, res) => {
 				const html = await response.text();
 				const matchId = html.match(/"listid":"([^"]+)"/) || html.match(/"type":"playlist","id":"([^"]+)"/) || html.match(/"playlist_id":"([^"]+)"/);
 				if (matchId) {
-					data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: matchId[1] });
+					data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: matchId[1], n: "200" });
 				}
 			}
 

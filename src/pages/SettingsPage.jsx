@@ -102,7 +102,7 @@ export default function SettingsPage({ setCurrentView }) {
 
       // If Spotify or YouTube playlist requiring track search matching
       if (Array.isArray(data.songsToSearch) && data.songsToSearch.length > 0) {
-        const total = data.songsToSearch.length;
+        const total = Math.min(data.songsToSearch.length, 200);
         const matchedTracks = [];
 
         for (let i = 0; i < total; i++) {
@@ -197,7 +197,7 @@ export default function SettingsPage({ setCurrentView }) {
           throw new Error('No valid song entries found in file.');
         }
 
-        const total = Math.min(songsToSearch.length, 50);
+        const total = Math.min(songsToSearch.length, 200);
         const matchedTracks = [];
 
         for (let i = 0; i < total; i++) {
@@ -367,7 +367,7 @@ export default function SettingsPage({ setCurrentView }) {
             </div>
 
             <p className="text-xs text-zinc-400">
-              Supports public playlist URLs from Spotify, YouTube Music, and JioSaavn.
+              Supports public playlist URLs (up to 200 tracks) from Spotify, YouTube Music, and JioSaavn.
             </p>
           </form>
         )}
@@ -389,7 +389,7 @@ export default function SettingsPage({ setCurrentView }) {
             </label>
 
             <p className="text-xs text-zinc-400 leading-relaxed">
-              File entries should contain song titles and artist names.
+              File entries should contain song titles and artist names (up to 200 tracks per file).
             </p>
           </div>
         )}
