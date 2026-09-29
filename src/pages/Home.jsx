@@ -182,29 +182,55 @@ export default function Home({ setCurrentView }) {
     }
   };
 
-  const handleToggleSave = () => {
-    if (!selectedPlaylist) return;
+  const [savedPlaylistsVersion, setSavedPlaylistsVersion] = useState(0);
+
+  const isPlaylistSaved = useCallback((playlistId) => {
+    if (!playlistId) return false;
     try {
       const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-      const existsIndex = saved.findIndex(p => p.playlistId === selectedPlaylist.playlistId);
+      return saved.some(p => p.playlistId === playlistId);
+    } catch (e) {
+      return false;
+    }
+  }, [savedPlaylistsVersion]);
+
+  useEffect(() => {
+    const handleSavedUpdated = () => {
+      setSavedPlaylistsVersion(v => v + 1);
+    };
+    window.addEventListener('playloop-saved-playlists-updated', handleSavedUpdated);
+    return () => window.removeEventListener('playloop-saved-playlists-updated', handleSavedUpdated);
+  }, []);
+
+  const handleToggleSave = (targetPlaylist) => {
+    const target = targetPlaylist || selectedPlaylist;
+    if (!target || !target.playlistId) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      const existsIndex = saved.findIndex(p => p.playlistId === target.playlistId);
       if (existsIndex >= 0) {
         saved.splice(existsIndex, 1);
-        setIsSaved(false);
+        if (selectedPlaylist?.playlistId === target.playlistId) {
+          setIsSaved(false);
+        }
       } else {
         const playlistToSave = {
-          playlistId: selectedPlaylist.playlistId,
-          title: selectedPlaylist.title,
-          author: selectedPlaylist.author || selectedPlaylist.artist || 'Play LooP',
-          thumbnail: selectedPlaylist.thumbnail,
-          description: selectedPlaylist.description,
-          count: selectedPlaylist.tracks ? selectedPlaylist.tracks.length : selectedPlaylist.count,
-          isArtist: selectedPlaylist.isArtist
+          playlistId: target.playlistId,
+          title: target.title,
+          author: target.author || target.artist || 'Play LooP',
+          thumbnail: target.thumbnail,
+          description: target.description,
+          count: target.tracks ? target.tracks.length : target.count,
+          isArtist: target.isArtist
         };
         saved.unshift(playlistToSave);
-        setIsSaved(true);
+        if (selectedPlaylist?.playlistId === target.playlistId) {
+          setIsSaved(true);
+        }
       }
       localStorage.setItem('playloop_saved_playlists', JSON.stringify(saved));
       window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+      setSavedPlaylistsVersion(v => v + 1);
     } catch (e) {
       console.error(e);
     }
@@ -400,7 +426,7 @@ export default function Home({ setCurrentView }) {
 
   if (selectedPlaylist) {
     return (
-      <div className="max-w-[1600px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
+      <div className="max-w-[1400px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
         <button
           type="button"
           onClick={handleBackToHome}
@@ -545,12 +571,12 @@ export default function Home({ setCurrentView }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-[30px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_60px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
+            <div className="grid grid-cols-[36px_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
               <span className="text-center">#</span>
               <span>Title</span>
               <span>Artist</span>
               <span>Album</span>
-              <span>Duration</span>
+              <span className="text-right pr-3">Duration</span>
               <span></span>
             </div>
 
@@ -560,7 +586,7 @@ export default function Home({ setCurrentView }) {
                   <article
                     key={track.videoId || idx}
                     ref={idx === sortedTracks.length - 1 ? lastTrackElementRef : null}
-                    className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[30px_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_60px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-lg hover:bg-zinc-800/50 transition group cursor-pointer"
+                    className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[36px_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-lg hover:bg-zinc-800/50 transition group cursor-pointer"
                     onClick={() => handlePlayTrackInPlaylist(idx)}
                   >
                     <span className="w-8 text-center text-sm font-medium text-zinc-500 group-hover:hidden">
@@ -598,7 +624,7 @@ export default function Home({ setCurrentView }) {
                       <p className="text-sm text-zinc-400 truncate hover:underline cursor-pointer">{track.album || track.title}</p>
                     </div>
 
-                    <div className="hidden md:flex text-sm text-zinc-500 font-medium">
+                    <div className="hidden md:flex justify-end text-sm text-zinc-500 font-medium pr-3">
                       {formatDuration(track.duration || (180 + Math.floor(Math.random() * 60)))}
                     </div>
 
@@ -640,6 +666,8 @@ export default function Home({ setCurrentView }) {
     );
   }
 
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
+
   const featuredPlaylist = playlists.length > 0 ? playlists[0] : (DEFAULT_PLAYLISTS[0] || null);
   const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : DEFAULT_PLAYLISTS.slice(1, 6)), ...extraMadeForYou];
   
@@ -648,7 +676,7 @@ export default function Home({ setCurrentView }) {
     : [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx).slice(0, 10);
   const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
-  const isAppDownloaded = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isAppDownloaded = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone);
 
   const quickAccessItems = [
     { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 text-white" />, color: 'bg-[#8938d2]', path: '#/search' },
@@ -660,107 +688,229 @@ export default function Home({ setCurrentView }) {
   ];
 
   return (
-    <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-6">
+    <div className="max-w-[1400px] mx-auto pb-36 px-3.5 sm:px-6 lg:px-8 mt-2 sm:mt-6 select-none">
 
-      {/* Greeting Section */}
+      {/* Greeting & Mobile Header Bar */}
       {!loadingPlaylists && (
-        <div className="mb-8 pl-1">
-          <h2 className="text-3xl font-extrabold text-white mb-2 tracking-tight">{greeting}</h2>
-          <p className="text-zinc-400 font-medium">Discover your next favorite track.</p>
-        </div>
-      )}
-
-      {/* Featured Section */}
-      {loadingPlaylists ? (
-        <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
-          <div className="xl:col-span-2 h-[450px] bg-[#121212] rounded-2xl animate-pulse"></div>
-          <div className="grid grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-3 xl:gap-4 h-auto xl:h-[380px]">
-             {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-[#121212] rounded-xl animate-pulse min-h-[60px]"></div>
-             ))}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
-          {/* Hero Featured Playlist */}
-          {featuredPlaylist && (
-            <div 
-              className="xl:col-span-2 relative h-[340px] sm:h-[450px] rounded-2xl overflow-hidden group cursor-pointer bg-[#121212] shadow-xl"
-              onClick={() => handlePlaylistClick(featuredPlaylist)}
-            >
-              <img 
-                src={featuredPlaylist.thumbnail} 
-                alt={featuredPlaylist.title}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/50 to-transparent"></div>
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
-              
-              <div className="absolute bottom-0 left-0 p-6 sm:p-8 md:p-10 w-full md:w-3/4 flex flex-col justify-end h-full">
-                <span className="text-[10px] sm:text-xs font-bold tracking-[0.2em] text-white/70 uppercase mb-3 block drop-shadow-md">
-                  Featured Playlist
-                </span>
-                <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight drop-shadow-lg">
-                  {featuredPlaylist.title}
-                </h1>
-                <p className="text-zinc-300 text-xs sm:text-sm md:text-base mb-6 sm:mb-8 line-clamp-2 max-w-lg font-medium drop-shadow-md">
-                  {featuredPlaylist.description || `A curated collection of ${featuredPlaylist.count || 'great'} songs by ${featuredPlaylist.author}.`}
-                </p>
-                
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <button 
-                    className="bg-white text-black px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition shadow-xl"
-                    onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
-                  >
-                    <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1px]" /> Play
-                  </button>
-                  <button 
-                    className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/10 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 transition"
-                    onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
-                  >
-                    <span className="text-lg leading-none mb-0.5">+</span> Save
-                  </button>
-                  <span className="hidden md:inline-block ml-4 text-zinc-300 text-sm font-medium">
-                    {featuredPlaylist.count} songs
-                  </span>
-                </div>
-              </div>
+        <div className="mb-6 pl-0.5">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div>
+              <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">{greeting}</h2>
+              <p className="text-xs sm:text-sm text-zinc-400 font-medium mt-0.5">Discover your next favorite track.</p>
             </div>
-          )}
+          </div>
 
-          {/* Quick Access Grid */}
-          <div className="grid grid-cols-2 xl:flex xl:flex-col gap-3 xl:gap-4 xl:justify-between h-auto xl:h-[450px]">
-            {quickAccessItems.map((item, index) => (
-              <div 
-                key={index}
-                onClick={() => { 
-                  if (item.action) {
-                    item.action();
-                  } else if (item.path) {
-                    if (setCurrentView) setCurrentView(item.path.replace('#/', ''));
-                    window.location.hash = item.path;
-                  }
-                }}
-                className="flex-1 bg-[#121212] hover:bg-[#1a1a1a] rounded-xl p-3 xl:p-4 flex items-center gap-3 xl:gap-4 cursor-pointer transition border border-white/5 hover:border-white/10 shadow-sm group"
+          {/* Mobile Category Filter Pills (Spotify Mobile Style) */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2 -mx-1 px-1">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'playlists', label: 'Playlists' },
+              { id: 'songs', label: 'Songs' },
+              { id: 'artists', label: 'Artists' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategoryFilter(cat.id)}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all duration-200 shrink-0 cursor-pointer ${
+                  activeCategoryFilter === cat.id
+                    ? 'bg-white text-black shadow-md scale-105'
+                    : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border border-white/10'
+                }`}
               >
-                <div className={`w-10 h-10 xl:w-14 xl:h-14 rounded-lg xl:rounded-xl flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
-                  {item.icon}
-                </div>
-                <div className="flex flex-col min-w-0 flex-1">
-                  <h3 className="text-white font-bold text-xs xl:text-sm truncate">{item.title}</h3>
-                  <p className="text-zinc-400 text-[10px] xl:text-xs truncate mt-0.5">{item.subtitle}</p>
-                </div>
-                <div className="hidden xl:flex w-8 h-8 rounded-full items-center justify-center text-zinc-500 group-hover:text-white transition-colors mr-1">
-                  <ChevronRight className="w-5 h-5" />
-                </div>
-              </div>
+                {cat.label}
+              </button>
             ))}
           </div>
         </div>
       )}
 
+      {/* Mobile-Only Redesigned Compact Hero Story Card */}
+      {!loadingPlaylists && featuredPlaylist && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        <div 
+          className="sm:hidden relative overflow-hidden rounded-2xl p-4 sm:p-5 mb-6 cursor-pointer bg-[#141416] hover:bg-[#18181c] border border-zinc-800/80 shadow-2xl group flex items-center justify-between gap-4"
+          onClick={() => handlePlaylistClick(featuredPlaylist)}
+        >
+          <div className="flex flex-col min-w-0 flex-1 justify-center z-10">
+            <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase mb-1.5 block">
+              Featured
+            </span>
+            <h2 className="text-lg font-black text-white tracking-tight leading-tight line-clamp-2 mb-1 drop-shadow">
+              {featuredPlaylist.title}
+            </h2>
+            <p className="text-[11px] text-zinc-400 line-clamp-1 mb-3.5 font-medium">
+              {featuredPlaylist.description || `${featuredPlaylist.count || '40'} tracks curated by Play LooP`}
+            </p>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                className="px-4 py-2 bg-white text-black font-bold text-xs rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
+              >
+                <Play className="w-3.5 h-3.5 fill-current translate-x-[0.5px]" /> Play
+              </button>
+              <button 
+                type="button"
+                className={`px-3.5 py-2 font-bold text-xs rounded-full flex items-center gap-1.5 backdrop-blur-md active:scale-95 transition cursor-pointer ${
+                  isPlaylistSaved(featuredPlaylist.playlistId)
+                    ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
+                }`}
+                onClick={(e) => { e.stopPropagation(); handleToggleSave(featuredPlaylist); }}
+              >
+                {isPlaylistSaved(featuredPlaylist.playlistId) ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" /> Saved
+                  </>
+                ) : (
+                  <>+ Save</>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Clean Right Thumbnail Art */}
+          <div className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden shadow-2xl border border-white/10 z-10 group-hover:scale-105 transition-transform duration-500 bg-zinc-900">
+            <img 
+              src={featuredPlaylist.thumbnail} 
+              alt={featuredPlaylist.title}
+              className="w-full h-full object-cover"
+              onError={(e) => { e.target.src = '/logo.svg'; }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Featured Section */}
+      {loadingPlaylists ? (
+        <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
+          <div className="xl:col-span-2 h-[320px] sm:h-[450px] bg-[#121212] rounded-2xl animate-pulse"></div>
+          <div className="grid grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-3 xl:gap-4 h-auto xl:h-[380px]">
+             {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-[#121212] rounded-xl animate-pulse min-h-[50px]"></div>
+             ))}
+          </div>
+        </div>
+      ) : (
+        (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+          <div className="hidden sm:flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
+            {/* Hero Featured Playlist */}
+            {featuredPlaylist && (
+              <div 
+                className="xl:col-span-2 relative h-[340px] sm:h-[450px] rounded-2xl overflow-hidden group cursor-pointer bg-[#121212] shadow-xl border border-white/5"
+                onClick={() => handlePlaylistClick(featuredPlaylist)}
+              >
+                <img 
+                  src={featuredPlaylist.thumbnail} 
+                  alt={featuredPlaylist.title}
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/60 to-transparent"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-transparent to-transparent"></div>
+                
+                <div className="absolute bottom-0 left-0 p-6 sm:p-8 md:p-10 w-full md:w-3/4 flex flex-col justify-end h-full">
+                  <span className="text-[10px] sm:text-xs font-bold tracking-[0.2em] text-zinc-400 uppercase mb-3 block drop-shadow-md">
+                    Featured Playlist
+                  </span>
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white mb-3 tracking-tight drop-shadow-lg">
+                    {featuredPlaylist.title}
+                  </h1>
+                  <p className="text-zinc-300 text-xs sm:text-sm md:text-base mb-6 sm:mb-8 line-clamp-2 max-w-lg font-medium drop-shadow-md">
+                    {featuredPlaylist.description || `A curated collection of ${featuredPlaylist.count || 'great'} songs by ${featuredPlaylist.author}.`}
+                  </p>
+                  
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <button 
+                      className="bg-white text-black px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 hover:scale-105 active:scale-95 transition shadow-xl cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
+                    >
+                      <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1px]" /> Play
+                    </button>
+                    <button 
+                      className={`px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
+                        isPlaylistSaved(featuredPlaylist.playlistId)
+                          ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/10'
+                      }`}
+                      onClick={(e) => { e.stopPropagation(); handleToggleSave(featuredPlaylist); }}
+                    >
+                      {isPlaylistSaved(featuredPlaylist.playlistId) ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400" /> Saved
+                        </>
+                      ) : (
+                        <>+ Save</>
+                      )}
+                    </button>
+                    <span className="hidden md:inline-block ml-4 text-zinc-300 text-sm font-medium">
+                      {featuredPlaylist.count} songs
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Access Grid Desktop */}
+            <div className="grid grid-cols-2 xl:flex xl:flex-col gap-3 xl:gap-4 xl:justify-between h-auto xl:h-[450px]">
+              {quickAccessItems.map((item, index) => (
+                <div 
+                  key={index}
+                  onClick={() => { 
+                    if (item.action) {
+                      item.action();
+                    } else if (item.path) {
+                      if (setCurrentView) setCurrentView(item.path.replace('#/', ''));
+                      window.location.hash = item.path;
+                    }
+                  }}
+                  className="flex-1 bg-[#121212] hover:bg-[#1a1a1a] rounded-xl p-3 xl:p-4 flex items-center gap-3 xl:gap-4 cursor-pointer transition border border-white/5 hover:border-white/10 shadow-sm group"
+                >
+                  <div className={`w-10 h-10 xl:w-14 xl:h-14 rounded-lg xl:rounded-xl flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                    {item.icon}
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <h3 className="text-white font-bold text-xs xl:text-sm truncate">{item.title}</h3>
+                    <p className="text-zinc-400 text-[10px] xl:text-xs truncate mt-0.5">{item.subtitle}</p>
+                  </div>
+                  <div className="hidden xl:flex w-8 h-8 rounded-full items-center justify-center text-zinc-500 group-hover:text-white transition-colors mr-1">
+                    <ChevronRight className="w-5 h-5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Quick Access Grid Mobile (Sleek Compact 2-Column Spotify Rows) */}
+      {!loadingPlaylists && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        <div className="sm:hidden grid grid-cols-2 gap-2.5 mb-8">
+          {quickAccessItems.map((item, index) => (
+            <div 
+              key={index}
+              onClick={() => { 
+                if (item.action) {
+                  item.action();
+                } else if (item.path) {
+                  if (setCurrentView) setCurrentView(item.path.replace('#/', ''));
+                  window.location.hash = item.path;
+                }
+              }}
+              className="bg-[#161618] hover:bg-[#202024] active:bg-[#25252a] rounded-xl p-2 flex items-center gap-3 cursor-pointer transition border border-white/5 shadow-md group h-14"
+            >
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                {item.icon}
+              </div>
+              <div className="flex flex-col min-w-0 flex-1 justify-center">
+                <h3 className="text-white font-bold text-xs truncate leading-tight">{item.title}</h3>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Recently Played Row */}
-      {recentlyPlayed && recentlyPlayed.length > 0 && (
+      {recentlyPlayed && recentlyPlayed.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'songs') && (
         <div className="mb-10 sm:mb-12">
           <Carousel
             title="Recently Played"
@@ -774,7 +924,7 @@ export default function Home({ setCurrentView }) {
       )}
 
       {/* Made For You Row (Wide Cards) */}
-      {!loadingPlaylists && madeForYouPlaylists.length > 0 && (
+      {!loadingPlaylists && madeForYouPlaylists.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
         <div className="mb-10 sm:mb-12">
           <Carousel
             title="Made For You"
@@ -788,71 +938,9 @@ export default function Home({ setCurrentView }) {
           />
         </div>
       )}
-      
-      {/* Popular Albums - Immersive Grid Redesign */}
-      {!loadingPlaylists && popularAlbumsPlaylists.length > 0 && (
-        <div className="mb-14 sm:mb-16 mt-8">
-          <div className="flex items-center justify-between mb-6 pl-1">
-            <h3 className="text-2xl font-bold tracking-tight text-white">Trending & Popular</h3>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
-            {popularAlbumsPlaylists.slice(0, visiblePopularCount).map((item, index) => (
-                <div
-                  key={`${item.playlistId}-${index}`}
-                  onClick={() => handlePlaylistClick(item)}
-                  className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] cursor-pointer transition-colors duration-300"
-                >
-                  <div className="relative w-full aspect-square rounded-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-zinc-800">
-                    <img
-                      src={item.thumbnail || '/logo.svg'}
-                      alt={item.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-102"
-                      onError={(e) => {
-                        e.target.src = '/logo.svg';
-                        e.target.className = 'w-full h-full object-contain p-6 bg-black';
-                      }}
-                      loading="lazy"
-                    />
-                    
-                    {/* Play Button Overlay */}
-                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
-                      <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
-                        <Play className="w-5 h-5 fill-current translate-x-[2px]" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <h4 className="font-bold text-white text-[15px] truncate mb-1.5 tracking-tight">
-                    {item.title}
-                  </h4>
-                  <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
-                    {item.author || item.artist || 'Collection'}
-                  </p>
-                </div>
-            ))}
-          </div>
-
-          <div className="mt-8 flex justify-center">
-            <button
-              type="button"
-              onClick={handleShowMorePopular}
-              disabled={loadingMorePopularAlbums}
-              className="px-6 py-2.5 rounded-full border border-zinc-700 text-sm font-bold text-white hover:bg-zinc-800 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loadingMorePopularAlbums ? (
-                <>
-                  <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
-                  Loading...
-                </>
-              ) : 'Show More'}
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Popular Artists Row */}
-      {popularArtists.length > 0 && (
+      {popularArtists.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'artists') && (
         <div className="mb-10 sm:mb-12">
           <Carousel
             title="Popular Artists"
@@ -866,6 +954,69 @@ export default function Home({ setCurrentView }) {
           />
         </div>
       )}
+
+      {/* Popular Albums - Immersive Grid Redesign */}
+      {!loadingPlaylists && popularAlbumsPlaylists.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        <div className="mb-14 sm:mb-16 mt-4 sm:mt-8">
+          <div className="flex items-center justify-between mb-5 pl-0.5">
+            <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Trending & Popular</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-5">
+            {popularAlbumsPlaylists.slice(0, visiblePopularCount).map((item, index) => (
+                <div
+                  key={`${item.playlistId}-${index}`}
+                  onClick={() => handlePlaylistClick(item)}
+                  className="group flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] cursor-pointer transition-colors duration-300 border border-white/5"
+                >
+                  <div className="relative w-full aspect-square rounded-lg shadow-lg overflow-hidden mb-3 bg-zinc-800">
+                    <img
+                      src={item.thumbnail || '/logo.svg'}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      onError={(e) => {
+                        e.target.src = '/logo.svg';
+                        e.target.className = 'w-full h-full object-contain p-6 bg-black';
+                      }}
+                      loading="lazy"
+                    />
+                    
+                    {/* Play Button Overlay */}
+                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1.5px]" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <h4 className="font-bold text-white text-xs sm:text-[15px] truncate mb-1 tracking-tight">
+                    {item.title}
+                  </h4>
+                  <p className="font-medium text-zinc-400 text-[11px] sm:text-[13px] line-clamp-2 leading-snug">
+                    {item.author || item.artist || 'Collection'}
+                  </p>
+                </div>
+            ))}
+          </div>
+
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={handleShowMorePopular}
+              disabled={loadingMorePopularAlbums}
+              className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+            >
+              {loadingMorePopularAlbums ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
+                  Loading...
+                </>
+              ) : 'Show More'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

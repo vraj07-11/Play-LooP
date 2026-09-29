@@ -330,8 +330,16 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
               <Search className="w-6 h-6" />
             </button>
           </form>
-          <button type="button" className="profile-button bg-zinc-900 p-2 rounded-full hover:bg-zinc-800 transition-colors" aria-label="Profile">
-            <User className="w-6 h-6" />
+          <button 
+            type="button" 
+            className="profile-button bg-zinc-900 p-2 rounded-full hover:bg-zinc-800 transition-colors cursor-pointer" 
+            aria-label="Profile"
+            onClick={() => {
+              if (typeof setCurrentView === 'function') setCurrentView('settings');
+              window.location.hash = '#/settings';
+            }}
+          >
+            <User className="w-6 h-6 text-white" />
           </button>
         </div>
       </nav>
