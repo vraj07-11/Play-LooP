@@ -39,6 +39,8 @@ const DEFAULT_POPULAR_SONGS = [
 export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [searchResults, setSearchResults] = useState({ songs: [], artists: [], playlists: [], topResult: null });
+  const [activeSearchFilter, setActiveSearchFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const { selectAndPlayTrack, playPlaylist } = usePlayer();
@@ -92,7 +94,7 @@ export default function SearchPage() {
     const prefStr = localStorage.getItem('preferred_languages');
     const langs = prefStr ? JSON.parse(prefStr) : [];
     
-    // 1. Fetch popular songs strictly by preferred languages (Equal representation)
+    // Fetch popular songs strictly by preferred languages
     fetchPopularSongs(langs)
       .then(songsData => {
         if (isMounted && Array.isArray(songsData) && songsData.length > 0) {
@@ -101,7 +103,7 @@ export default function SearchPage() {
       })
       .catch(e => console.error("Failed to fetch popular songs:", e));
 
-    // 2. Fetch popular artists independently
+    // Fetch popular artists independently
     fetchPopularArtists(langs)
       .then(artistData => {
         if (isMounted && Array.isArray(artistData) && artistData.length > 0) {
@@ -148,6 +150,7 @@ export default function SearchPage() {
     if (!trimmed) {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       setResults([]);
+      setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
       setLoading(false);
       window.location.hash = '#/search';
       return;
@@ -175,6 +178,7 @@ export default function SearchPage() {
         performSearch(q);
       } else {
         setResults([]);
+        setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
         setLoading(false);
       }
     };
@@ -204,7 +208,6 @@ export default function SearchPage() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       const active = document.activeElement;
-      // Let the search input handle its own keys if focused
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
 
       if (!results || results.length === 0 || !query) return;
@@ -236,15 +239,33 @@ export default function SearchPage() {
   const performSearch = async (searchTerm) => {
     setLoading(true);
     try {
-      const response = await fetchApi(`/api/search?q=${encodeURIComponent(searchTerm)}`);
+      const response = await fetchApi(`/api/search?q=${encodeURIComponent(searchTerm)}&type=all`);
       if (response.ok) {
         const data = await response.json();
-        setResults(data);
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          setSearchResults({
+            songs: data.songs || [],
+            artists: data.artists || [],
+            playlists: data.playlists || [],
+            topResult: data.topResult || null
+          });
+          setResults(data.songs || []);
+        } else if (Array.isArray(data)) {
+          setSearchResults({
+            songs: data,
+            artists: [],
+            playlists: [],
+            topResult: data.length > 0 ? { ...data[0], category: 'Song' } : null
+          });
+          setResults(data);
+        }
       } else {
+        setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
         setResults([]);
       }
     } catch (e) {
       console.error(e);
+      setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
       setResults([]);
     } finally {
       setLoading(false);
@@ -252,20 +273,31 @@ export default function SearchPage() {
   };
 
   const handleCardClick = (item) => {
+    if (!item) return;
     if (item.playlistId?.startsWith('ARTIST:')) {
-      window.location.hash = `#/search?q=${encodeURIComponent(item.title)}`;
+      window.location.hash = `#/playlist/${item.playlistId}`;
+    } else if (item.isArtist || item.type === 'artist') {
+      if (item.playlistId) {
+        window.location.hash = `#/playlist/${item.playlistId}`;
+      } else if (item.id) {
+        window.location.hash = `#/playlist/ARTIST:${item.id}`;
+      } else {
+        window.location.hash = `#/search?q=${encodeURIComponent(item.title || item.name || '')}`;
+      }
     } else if (item.playlistId?.startsWith('QUERY:')) {
       window.location.hash = `#/search?q=${encodeURIComponent(item.title.replace(' Mix', ''))}`;
     } else if (item.playlistId) {
       window.location.hash = `#/playlist/${item.playlistId}`;
+    } else if (item.videoId) {
+      selectAndPlayTrack(item.videoId, item.title, item.artist, item.thumbnail);
     } else {
-      window.location.hash = `#/search?q=${encodeURIComponent(item.title)}`;
+      window.location.hash = `#/search?q=${encodeURIComponent(item.title || item.name || '')}`;
     }
   };
 
   return (
-    <div ref={mainScrollRef} className="flex flex-col h-full overflow-y-auto custom-scrollbar pb-32 pt-8">
-      <div className="px-6 md:px-12 lg:px-16 xl:px-24 max-w-[1600px] mx-auto w-full">
+    <div ref={mainScrollRef} className="flex flex-col h-full overflow-y-auto no-scrollbar-mobile custom-scrollbar pb-32 pt-8">
+      <div className="px-6 md:px-12 lg:px-16 xl:px-24 max-w-[1600px] mx-auto w-full select-none">
         
         {/* Mobile-Only Search Bar on Search Page */}
         <div className="mb-6 max-w-3xl sm:hidden">
@@ -296,6 +328,7 @@ export default function SearchPage() {
                   if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
                   setQuery('');
                   setResults([]);
+                  setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
                   setLoading(false);
                   window.location.hash = '#/search';
                 }}
@@ -311,7 +344,7 @@ export default function SearchPage() {
         {!query ? (
           <div className="flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {/* 1. Popular Songs (Full-Width 2-Column Desktop Grid) */}
+            {/* 1. Popular Songs */}
             <section className="mb-10 sm:mb-16 w-full">
               <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
                 <Music className="text-white w-5 h-5 sm:w-6 sm:h-6" />
@@ -365,7 +398,6 @@ export default function SearchPage() {
                 )}
               </div>
 
-              {/* Load More Popular Songs Button */}
               <div className="mt-5 flex justify-center">
                 <button
                   type="button"
@@ -385,7 +417,7 @@ export default function SearchPage() {
               </div>
             </section>
 
-            {/* 2. Trending Artists (Hero Spotlight + Stack Design) */}
+            {/* 2. Trending Artists */}
             <section className="mb-10 sm:mb-16">
               <div className="flex items-center gap-3 mb-6">
                 <Mic2 className="text-white w-6 h-6" />
@@ -394,7 +426,6 @@ export default function SearchPage() {
               
               {popularArtists.length > 0 ? (
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
-                  {/* #1 Artist Hero */}
                   <div 
                     className="lg:col-span-3 relative rounded-2xl overflow-hidden cursor-pointer group min-h-[280px] sm:min-h-[340px] lg:min-h-[380px] shadow-xl flex flex-col justify-end p-6 sm:p-8"
                     onClick={() => handleCardClick(popularArtists[0])}
@@ -412,7 +443,6 @@ export default function SearchPage() {
                     </div>
                   </div>
                   
-                  {/* Next 4 Artists Stack */}
                   <div className="lg:col-span-2 flex flex-col gap-3 sm:gap-4">
                     {popularArtists.slice(1, 5).map((artist, idx) => (
                       <div 
@@ -558,59 +588,303 @@ export default function SearchPage() {
         ) : (
           /* Search Results */
           <div className="animate-in fade-in duration-300">
-            <h2 className="text-2xl font-bold text-white mb-6 tracking-tight">Top Results for "{query}"</h2>
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Search Results for "{query}"</h2>
+            </div>
+
+            {/* Filter Pills Bar */}
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mb-6 py-1">
+              {[
+                { id: 'all', label: 'All Results' },
+                { id: 'songs', label: 'Songs' },
+                { id: 'artists', label: 'Artists' },
+                { id: 'playlists', label: 'Playlists & Albums' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setActiveSearchFilter(cat.id)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    activeSearchFilter === cat.id
+                      ? 'bg-white text-black shadow-md scale-105'
+                      : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 border border-white/10'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
             
             {loading ? (
-              <div className="flex flex-col gap-2">
-                {[...Array(6)].map((_, idx) => (
-                  <div key={idx} className="bg-[#121212] border border-white/5 rounded-lg p-3 flex items-center gap-4 animate-pulse">
-                    <div className="w-12 h-12 rounded bg-zinc-800/90 shrink-0" />
-                    <div className="flex-1 flex flex-col gap-2">
-                      <div className="w-1/3 h-4 bg-zinc-800/90 rounded" />
-                      <div className="w-1/4 h-3 bg-zinc-800/50 rounded" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, idx) => (
+                  <div key={idx} className="bg-[#121212] border border-white/5 rounded-xl p-4 flex items-center gap-4 animate-pulse">
+                    <div className="w-14 h-14 rounded-lg bg-zinc-800 shrink-0" />
+                    <div className="flex-1 flex flex-col gap-2 min-w-0">
+                      <div className="w-3/4 h-4 bg-zinc-800 rounded" />
+                      <div className="w-1/2 h-3 bg-zinc-800/60 rounded" />
                     </div>
                   </div>
                 ))}
               </div>
-            ) : results.length === 0 ? (
+            ) : (searchResults.songs.length === 0 && searchResults.artists.length === 0 && searchResults.playlists.length === 0) ? (
               <div className="text-center py-20">
                 <Search className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
-                <p className="text-xl text-zinc-400">No tracks found for "{query}"</p>
+                <p className="text-xl text-zinc-400">No results found for "{query}"</p>
                 <p className="text-sm text-zinc-500 mt-2">Please make sure your words are spelled correctly or use less or different keywords.</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
-                {results.map((track, idx) => {
-                  const title = track.title || track.name || "Unknown track";
-                  const artist = typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist");
-                  const thumbnail = track.thumbnail || track.thumbnails?.find((item) => item?.url)?.url || '/logo.svg';
-                  const isSelected = idx === selectedIndex;
-                  
-                  return (
-                    <div 
-                      key={idx} 
-                      className={`flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-800/50 group'}`}
-                      onClick={() => selectAndPlayTrack(track.videoId, title, artist, thumbnail)}
-                      onMouseEnter={() => setSelectedIndex(idx)}
-                    >
-                      <div className="relative shrink-0 w-12 h-12 rounded overflow-hidden shadow-md">
-                        <img 
-                          src={thumbnail} 
-                          alt="" 
-                          className="w-full h-full object-cover" 
-                          onError={(e) => { e.target.src = "/logo.svg"; e.target.className = "w-full h-full object-contain p-1.5 bg-black"; }}
-                        />
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                           <Play className="w-5 h-5 text-white fill-current" />
+              <div className="flex flex-col gap-10">
+
+                {/* ALL TAB */}
+                {activeSearchFilter === 'all' && (
+                  <>
+                    {/* Top Result + Songs Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                      
+                      {/* Top Result Card */}
+                      {searchResults.topResult && (
+                        <div className="lg:col-span-2 flex flex-col">
+                          <h3 className="text-xl font-bold text-white mb-4">Top Result</h3>
+                          <div 
+                            className="bg-[#141416] hover:bg-[#1c1c20] border border-white/10 rounded-2xl p-6 flex flex-col justify-between cursor-pointer transition-all duration-300 group relative shadow-2xl flex-1 min-h-[220px]"
+                            onClick={() => {
+                              if (searchResults.topResult.videoId) {
+                                selectAndPlayTrack(searchResults.topResult.videoId, searchResults.topResult.title, searchResults.topResult.artist, searchResults.topResult.thumbnail);
+                              } else {
+                                handleCardClick(searchResults.topResult);
+                              }
+                            }}
+                          >
+                            <div className="flex flex-col gap-4">
+                              <img 
+                                src={searchResults.topResult.thumbnail} 
+                                alt={searchResults.topResult.title}
+                                className={`shadow-2xl object-cover ${searchResults.topResult.isArtist ? 'w-24 h-24 sm:w-28 sm:h-28 rounded-full' : 'w-24 h-24 sm:w-28 sm:h-28 rounded-xl'}`}
+                                onError={(e) => { e.target.src = '/logo.svg'; }}
+                              />
+                              <div>
+                                <h4 className="text-2xl sm:text-3xl font-black text-white tracking-tight line-clamp-2 leading-tight group-hover:text-white transition-colors">
+                                  {searchResults.topResult.title}
+                                </h4>
+                                <p className="text-sm text-zinc-400 font-medium mt-1">
+                                  {searchResults.topResult.artist || searchResults.topResult.author || 'Result'}
+                                </p>
+                                <span className="inline-block mt-3 px-3 py-1 bg-white/10 text-white font-bold text-xs rounded-full uppercase tracking-wider">
+                                  {searchResults.topResult.category || (searchResults.topResult.isArtist ? 'Artist' : 'Song')}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="absolute bottom-6 right-6 w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 hover:scale-105">
+                              <Play className="w-6 h-6 text-black fill-current translate-x-0.5" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Top Songs */}
+                      {searchResults.songs.length > 0 && (
+                        <div className={`${searchResults.topResult ? 'lg:col-span-3' : 'lg:col-span-5'} flex flex-col`}>
+                          <h3 className="text-xl font-bold text-white mb-4">Songs</h3>
+                          <div className="flex flex-col gap-1.5">
+                            {searchResults.songs.slice(0, 4).map((song, idx) => (
+                              <div 
+                                key={song.videoId || idx}
+                                className="flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] border border-white/5 cursor-pointer transition-all group"
+                                onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                              >
+                                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
+                                    <img src={song.thumbnail} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <h4 className="text-white font-bold text-sm sm:text-base truncate group-hover:text-white transition-colors">{song.title}</h4>
+                                    <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
+                                  </div>
+                                </div>
+                                <span className="text-xs text-zinc-500 font-mono hidden sm:block">
+                                  {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Artists Section */}
+                    {searchResults.artists.length > 0 && (
+                      <div>
+                        <h3 className="text-xl font-bold text-white mb-4">Artists</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                          {searchResults.artists.map((artist, idx) => (
+                            <div 
+                              key={idx}
+                              className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
+                              onClick={() => handleCardClick(artist)}
+                            >
+                              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
+                                <img src={artist.thumbnail} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                              </div>
+                              <h4 className="font-bold text-white text-sm sm:text-base truncate w-full">{artist.title}</h4>
+                              <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className={`font-medium truncate ${isSelected ? 'text-white' : 'text-zinc-200'}`}>{title}</h3>
-                        <p className="text-sm text-zinc-400 truncate">{artist}</p>
+                    )}
+
+                    {/* Playlists & Albums Section */}
+                    {searchResults.playlists.length > 0 && (
+                      <div>
+                        <h3 className="text-xl font-bold text-white mb-4">Playlists & Albums</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                          {searchResults.playlists.map((pl, idx) => (
+                            <div 
+                              key={idx}
+                              className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
+                              onClick={() => handleCardClick(pl)}
+                            >
+                              <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
+                                <img src={pl.thumbnail} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
+                                    <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                                  </div>
+                                </div>
+                              </div>
+                              <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
+                              <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    )}
+                  </>
+                )}
+
+                {/* SONGS TAB */}
+                {activeSearchFilter === 'songs' && (
+                  searchResults.songs.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {searchResults.songs.map((song, idx) => (
+                        <div 
+                          key={song.videoId || idx}
+                          className="flex items-center justify-between gap-4 p-3 rounded-xl bg-[#141416] hover:bg-[#202024] border border-white/5 cursor-pointer transition-all group"
+                          onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                        >
+                          <div className="flex items-center gap-4 min-w-0 flex-1">
+                            <span className="w-6 text-center text-xs font-bold text-zinc-500 shrink-0">{idx + 1}</span>
+                            <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
+                              <img src={song.thumbnail} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                              </div>
+                            </div>
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <h4 className="text-white font-bold text-base truncate">{song.title}</h4>
+                              <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-zinc-500 font-mono">
+                            {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  ) : (
+                    <div className="text-center py-16 bg-[#141416]/50 rounded-2xl border border-white/5 p-6">
+                      <Music className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                      <p className="text-lg text-zinc-300 font-medium">No song results found for "{query}"</p>
+                      <p className="text-xs text-zinc-500 mt-1 mb-4">Try checking other categories or searching with different keywords.</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSearchFilter('all')}
+                        className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-zinc-200 transition-all cursor-pointer"
+                      >
+                        Show All Results
+                      </button>
+                    </div>
+                  )
+                )}
+
+                {/* ARTISTS TAB */}
+                {activeSearchFilter === 'artists' && (
+                  searchResults.artists.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {searchResults.artists.map((artist, idx) => (
+                        <div 
+                          key={idx}
+                          className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
+                          onClick={() => handleCardClick(artist)}
+                        >
+                          <div className="relative w-28 h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
+                            <img src={artist.thumbnail} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                          </div>
+                          <h4 className="font-bold text-white text-base truncate w-full">{artist.title}</h4>
+                          <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 bg-[#141416]/50 rounded-2xl border border-white/5 p-6">
+                      <Mic2 className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                      <p className="text-lg text-zinc-300 font-medium">No artist results found for "{query}"</p>
+                      <p className="text-xs text-zinc-500 mt-1 mb-4">Try checking songs or searching with different keywords.</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSearchFilter('all')}
+                        className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-zinc-200 transition-all cursor-pointer"
+                      >
+                        Show All Results
+                      </button>
+                    </div>
+                  )
+                )}
+
+                {/* PLAYLISTS TAB */}
+                {activeSearchFilter === 'playlists' && (
+                  searchResults.playlists.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {searchResults.playlists.map((pl, idx) => (
+                        <div 
+                          key={idx}
+                          className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
+                          onClick={() => handleCardClick(pl)}
+                        >
+                          <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
+                            <img src={pl.thumbnail} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
+                                <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                              </div>
+                            </div>
+                          </div>
+                          <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
+                          <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 bg-[#141416]/50 rounded-2xl border border-white/5 p-6">
+                      <Disc3 className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                      <p className="text-lg text-zinc-300 font-medium">No playlists or albums found for "{query}"</p>
+                      <p className="text-xs text-zinc-500 mt-1 mb-4">Try checking songs or searching with different keywords.</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSearchFilter('all')}
+                        className="px-5 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-zinc-200 transition-all cursor-pointer"
+                      >
+                        Show All Results
+                      </button>
+                    </div>
+                  )
+                )}
+
               </div>
             )}
           </div>

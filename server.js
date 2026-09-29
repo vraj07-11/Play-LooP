@@ -89,6 +89,22 @@ function getValidImage(imgUrl) {
 	return url;
 }
 
+function cleanStr(val, fallback = "") {
+	if (!val) return fallback;
+	if (typeof val === "string") {
+		return val.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+	}
+	if (Array.isArray(val)) {
+		const str = val.map(v => typeof v === 'string' ? v : (v?.name || v?.title || '')).filter(Boolean).join(', ');
+		return str ? str.replace(/&quot;/g, '"').replace(/&amp;/g, '&') : fallback;
+	}
+	if (typeof val === "object") {
+		const str = val.name || val.title || val.description || fallback;
+		return String(str).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+	}
+	return String(val).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+}
+
 function formatSong(song, quality = "320") {
 	const encUrl = song.encrypted_media_url || song.more_info?.encrypted_media_url;
 	const decUrl = encUrl ? decryptSaavnUrl(encUrl) : null;
@@ -113,8 +129,8 @@ function formatSong(song, quality = "320") {
 
 	return {
 		videoId: song.id,
-		title: (song.title || "").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
-		artist: artistName.replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+		title: cleanStr(song.title, "Unknown Track"),
+		artist: cleanStr(artistName, "Various Artists"),
 		thumbnail: getValidImage(song.image),
 		duration: parseInt(song.more_info?.duration || song.duration || 0, 10),
 		streamUrl: qualityUrl
@@ -131,14 +147,140 @@ app.get("/api/search", async (req, res) => {
 	const query = String(req.query.q || "").trim();
 	if (!query) return res.status(400).json({ error: 'Query parameter "q" is required' });
 
+	const type = String(req.query.type || "").toLowerCase();
+	const isMulti = type === "all" || req.query.multi === "true";
+
 	try {
-		const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" });
-		if (!data || !data.results) {
-			return res.json([]);
+		if (isMulti) {
+			const [songsRes, artistsRes, playlistsRes, albumsRes, autoRes] = await Promise.allSettled([
+				fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" }),
+				fetchJioSaavn({ __call: "search.getArtistResults", q: query, n: "8", p: "1" }),
+				fetchJioSaavn({ __call: "search.getPlaylistResults", q: query, n: "6", p: "1" }),
+				fetchJioSaavn({ __call: "search.getAlbumResults", q: query, n: "6", p: "1" }),
+				fetchJioSaavn({ __call: "autocomplete.get", query: query })
+			]);
+
+			const songsData = songsRes.status === 'fulfilled' && songsRes.value?.results ? songsRes.value.results : [];
+			const artistsData = artistsRes.status === 'fulfilled' && artistsRes.value?.results ? artistsRes.value.results : [];
+			const playlistsData = playlistsRes.status === 'fulfilled' && playlistsRes.value?.results ? playlistsRes.value.results : [];
+			const albumsData = albumsRes.status === 'fulfilled' && albumsRes.value?.results ? albumsRes.value.results : [];
+			const autoData = autoRes.status === 'fulfilled' && autoRes.value ? autoRes.value : {};
+
+			let songs = songsData.map(s => formatSong(s));
+			if (songs.length === 0 && autoData.songs?.data) {
+				songs = autoData.songs.data.map(s => ({
+					videoId: s.id,
+					title: cleanStr(s.title, "Unknown Track"),
+					artist: cleanStr(s.more_info?.primary_artists || s.description, "Play LooP"),
+					thumbnail: getValidImage(s.image),
+					duration: 180
+				}));
+			}
+
+			let artists = artistsData.map(a => ({
+				playlistId: `ARTIST:${a.id}`,
+				title: cleanStr(a.name || a.title, "Artist"),
+				artist: "Verified Artist",
+				thumbnail: getValidImage(a.image),
+				type: "artist",
+				description: cleanStr(a.role || a.description, "Artist"),
+				isArtist: true
+			}));
+
+			if (artists.length === 0 && autoData.artists?.data) {
+				artists = autoData.artists.data.map(a => ({
+					playlistId: `ARTIST:${a.id}`,
+					title: cleanStr(a.title || a.name, "Artist"),
+					artist: "Verified Artist",
+					thumbnail: getValidImage(a.image),
+					type: "artist",
+					description: cleanStr(a.description, "Artist"),
+					isArtist: true
+				}));
+			}
+
+			let playlists = [
+				...playlistsData.map(p => ({
+					playlistId: p.id,
+					title: cleanStr(p.title || p.name, "Playlist"),
+					author: cleanStr(p.more_info?.artist_name || p.subtitle, "Play LooP"),
+					thumbnail: getValidImage(p.image),
+					type: "playlist",
+					count: p.more_info?.song_count ? `${p.more_info.song_count} songs` : "Playlist"
+				})),
+				...albumsData.map(al => ({
+					playlistId: al.id,
+					title: cleanStr(al.title || al.name, "Album"),
+					author: cleanStr(al.music || al.artist || al.subtitle, "Album"),
+					thumbnail: getValidImage(al.image),
+					type: "album",
+					count: "Album"
+				}))
+			];
+
+			if (playlists.length === 0 && (autoData.playlists?.data || autoData.albums?.data)) {
+				const autoPlaylists = (autoData.playlists?.data || []).map(p => ({
+					playlistId: p.id,
+					title: cleanStr(p.title, "Playlist"),
+					author: cleanStr(p.description || p.subtitle, "Play LooP"),
+					thumbnail: getValidImage(p.image),
+					type: "playlist",
+					count: "Playlist"
+				}));
+				const autoAlbums = (autoData.albums?.data || []).map(al => ({
+					playlistId: al.id,
+					title: cleanStr(al.title, "Album"),
+					author: cleanStr(al.description || al.subtitle, "Album"),
+					thumbnail: getValidImage(al.image),
+					type: "album",
+					count: "Album"
+				}));
+				playlists = [...autoPlaylists, ...autoAlbums];
+			}
+
+			// Determine Top Result (Songs given top priority)
+			let topResult = null;
+			const queryLower = query.toLowerCase().trim();
+			const exactArtistMatch = artists.length > 0 && artists[0].title.toLowerCase().trim() === queryLower;
+
+			if (exactArtistMatch) {
+				topResult = { ...artists[0], category: 'Artist' };
+			} else if (songs.length > 0) {
+				topResult = { ...songs[0], category: 'Song' };
+			} else if (artists.length > 0) {
+				topResult = { ...artists[0], category: 'Artist' };
+			} else if (playlists.length > 0) {
+				topResult = { ...playlists[0], category: 'Playlist' };
+			}
+
+			return res.json({
+				songs,
+				artists,
+				playlists,
+				topResult
+			});
 		}
 
-		const songs = data.results.map(s => formatSong(s));
-		res.json(songs);
+		// Single song search fallback
+		const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" });
+		if (data && data.results && data.results.length > 0) {
+			const songs = data.results.map(s => formatSong(s));
+			return res.json(songs);
+		}
+
+		const autoData = await fetchJioSaavn({ __call: "autocomplete.get", query: query });
+		if (autoData && autoData.songs?.data) {
+			const songs = autoData.songs.data.map(s => ({
+				videoId: s.id,
+				title: (s.title || "").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+				artist: (s.more_info?.primary_artists || s.description || "Play LooP").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+				thumbnail: getValidImage(s.image),
+				duration: 180
+			}));
+			return res.json(songs);
+		}
+
+		return res.json([]);
 	} catch (error) {
 		console.error("Search endpoint error:", error);
 		res.status(500).json({ error: "Failed to fetch search results" });
@@ -803,7 +945,13 @@ app.get("/api/playlist", async (req, res) => {
 		}
 
 		if (playlistId.startsWith("QUERY:")) {
-			const query = playlistId.replace("QUERY:", "");
+			const rawQuery = playlistId.replace("QUERY:", "");
+			let query = rawQuery;
+			try {
+				query = decodeURIComponent(rawQuery).replace(/%20/g, " ");
+			} catch (e) {
+				query = rawQuery.replace(/%20/g, " ");
+			}
 			
 			const cleanTitle = (str) => {
 				return String(str || "")

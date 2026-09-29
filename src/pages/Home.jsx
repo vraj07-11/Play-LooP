@@ -345,19 +345,7 @@ export default function Home({ setCurrentView }) {
 
   const handlePlaylistClick = async (playlist) => {
     if (!playlist || !playlist.playlistId) return;
-    setLoadingPlaylistDetails(true);
-    setPlaylistPage(1);
-    setHasMorePlaylist(true);
-    const details = await fetchPlaylistDetails(playlist.playlistId, 1);
-    if (details) {
-      window.history.pushState({ view: 'home', playlistId: playlist.playlistId }, '', `#/playlist/${playlist.playlistId}`);
-      setSelectedPlaylist(details);
-      checkIfSaved(details.playlistId);
-      if (details.tracks && details.tracks.length < 30) {
-         setHasMorePlaylist(false); // probably reached end if less than limit
-      }
-    }
-    setLoadingPlaylistDetails(false);
+    window.location.hash = `#/playlist/${playlist.playlistId}`;
   };
 
   const handleBackToHome = () => {
@@ -468,7 +456,13 @@ export default function Home({ setCurrentView }) {
               {selectedPlaylist.isArtist ? (selectedPlaylist.isVerified ? 'Verified Artist' : 'Artist') : 'Playlist'}
             </span>
             <h2 className="text-5xl md:text-7xl font-extrabold text-white mb-3 tracking-tight leading-tight">
-              {selectedPlaylist.title}
+              {(() => {
+                try {
+                  return decodeURIComponent(selectedPlaylist.title || '').replace(/%20/g, ' ');
+                } catch (e) {
+                  return (selectedPlaylist.title || '').replace(/%20/g, ' ');
+                }
+              })()}
             </h2>
             
             {selectedPlaylist.isArtist && selectedPlaylist.followerCount ? (
@@ -478,7 +472,13 @@ export default function Home({ setCurrentView }) {
             ) : (
               <>
                 <p className="text-base text-zinc-300 mb-2 max-w-2xl font-medium">
-                  {selectedPlaylist.description || 'Relax • Unwind • Repeat'}
+                  {(() => {
+                    try {
+                      return decodeURIComponent(selectedPlaylist.description || '').replace(/%20/g, ' ');
+                    } catch (e) {
+                      return (selectedPlaylist.description || '').replace(/%20/g, ' ');
+                    }
+                  })() || 'Relax • Unwind • Repeat'}
                 </p>
                 <p className="text-sm text-zinc-400 mb-6 font-medium flex items-center gap-2">
                   <span>{selectedPlaylist.tracks ? selectedPlaylist.tracks.length : 0} songs</span>
