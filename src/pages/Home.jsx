@@ -22,6 +22,7 @@ export default function Home({ setCurrentView }) {
 
   const [popularArtists, setPopularArtists] = useState([]);
   const [loadingMoreArtists, setLoadingMoreArtists] = useState(false);
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
 
   const [sortBy, setSortBy] = useState('recent');
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
@@ -665,8 +666,6 @@ export default function Home({ setCurrentView }) {
       </div>
     );
   }
-
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
 
   const featuredPlaylist = playlists.length > 0 ? playlists[0] : (DEFAULT_PLAYLISTS[0] || null);
   const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : DEFAULT_PLAYLISTS.slice(1, 6)), ...extraMadeForYou];
