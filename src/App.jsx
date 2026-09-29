@@ -90,7 +90,9 @@ function App() {
       return;
     }
 
-    window.location.hash = `#/${view}`;
+    if (!window.location.hash.startsWith(`#/${view}`)) {
+      window.location.hash = `#/${view}`;
+    }
     setCurrentView(view);
   };
 

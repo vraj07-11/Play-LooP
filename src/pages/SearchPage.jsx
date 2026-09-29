@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
-import { Search, Play, Music, Mic2, Disc3, Radio } from 'lucide-react';
+import { Search, Play, Music, Mic2, Disc3, Radio, X } from 'lucide-react';
 
 const DEFAULT_POPULAR_SONGS = [
   {
@@ -140,26 +140,60 @@ export default function SearchPage() {
     setVisibleSongCount(nextCount);
   };
 
+  const debounceTimerRef = useRef(null);
+
+  const handleMobileInputChange = (val) => {
+    setQuery(val);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      setResults([]);
+      setLoading(false);
+      window.location.hash = '#/search';
+      return;
+    }
+
+    setLoading(true);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
+      performSearch(trimmed);
+    }, 250);
+  };
+
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      const match = hash.match(/#\/?search\?q=(.+)/);
-      if (match) {
-        const q = decodeURIComponent(match[1]);
-        setQuery(q);
+    const handleHashChange = (overrideQuery) => {
+      const q = typeof overrideQuery === 'string' ? overrideQuery : (() => {
+        const hash = window.location.hash || '';
+        const match = hash.match(/#\/?search\?q=(.+)/);
+        return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+      })();
+
+      setQuery(q);
+      if (q) {
+        setLoading(true);
         performSearch(q);
       } else {
-        setQuery('');
         setResults([]);
+        setLoading(false);
       }
     };
 
     handleHashChange();
+
+    const onCustomSearch = (e) => {
+      if (e.detail) {
+        handleHashChange(e.detail);
+      }
+    };
+
     window.addEventListener('hashchange', handleHashChange);
     window.addEventListener('popstate', handleHashChange);
+    window.addEventListener('app-search-trigger', onCustomSearch);
     return () => {
       window.removeEventListener('hashchange', handleHashChange);
       window.removeEventListener('popstate', handleHashChange);
+      window.removeEventListener('app-search-trigger', onCustomSearch);
     };
   }, []);
 
@@ -233,6 +267,47 @@ export default function SearchPage() {
     <div ref={mainScrollRef} className="flex flex-col h-full overflow-y-auto custom-scrollbar pb-32 pt-8">
       <div className="px-6 md:px-12 lg:px-16 xl:px-24 max-w-[1600px] mx-auto w-full">
         
+        {/* Mobile-Only Search Bar on Search Page */}
+        <div className="mb-6 max-w-3xl sm:hidden">
+          <div className="relative flex items-center">
+            <Search className="absolute left-4 w-5 h-5 text-zinc-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="What do you want to play? (Songs, Artists, Albums)"
+              value={query}
+              onChange={(e) => handleMobileInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const trimmed = query.trim();
+                  if (trimmed) {
+                    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+                    window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
+                    performSearch(trimmed);
+                    e.target.blur();
+                  }
+                }
+              }}
+              className="w-full pl-12 pr-12 py-3.5 bg-zinc-900/90 hover:bg-zinc-900 border border-zinc-700/60 focus:border-white rounded-full text-white placeholder-zinc-400 outline-none text-sm sm:text-base transition-all shadow-md focus:ring-2 focus:ring-white/20"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+                  setQuery('');
+                  setResults([]);
+                  setLoading(false);
+                  window.location.hash = '#/search';
+                }}
+                className="absolute right-4 text-zinc-400 hover:text-white transition-colors p-1"
+                aria-label="Clear search"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {!query ? (
           <div className="flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
             

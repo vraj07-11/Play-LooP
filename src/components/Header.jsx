@@ -41,6 +41,23 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
     }
   }, [isSearchOpen]);
 
+  useEffect(() => {
+    const syncQueryFromHash = () => {
+      const hash = window.location.hash || '';
+      const match = hash.match(/#\/?search\?q=(.+)/);
+      if (match) {
+        setQuery(decodeURIComponent(match[1].replace(/\+/g, ' ')));
+      }
+    };
+    syncQueryFromHash();
+    window.addEventListener('hashchange', syncQueryFromHash);
+    window.addEventListener('popstate', syncQueryFromHash);
+    return () => {
+      window.removeEventListener('hashchange', syncQueryFromHash);
+      window.removeEventListener('popstate', syncQueryFromHash);
+    };
+  }, []);
+
   const fetchSuggestions = async (searchTerm) => {
     if (searchTerm.length < 2) {
       setSuggestions([]);
@@ -101,7 +118,15 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => {
       fetchSuggestions(trimmed);
-    }, 60);
+      if (window.location.hash.includes('search')) {
+        if (trimmed.length >= 2) {
+          window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
+          window.dispatchEvent(new CustomEvent('app-search-trigger', { detail: trimmed }));
+        } else if (!trimmed) {
+          window.location.hash = '#/search';
+        }
+      }
+    }, 200);
   };
 
   const handleKeyDown = (e) => {
@@ -134,15 +159,17 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
 
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
-    if (query.trim()) {
+    const trimmed = query.trim();
+    if (trimmed) {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
       if (abortControllerRef.current) abortControllerRef.current.abort();
       
       setShowSuggestions(false);
       setIsSearching(false);
       setHasSearched(false);
-      window.location.hash = `#/search?q=${encodeURIComponent(query.trim())}`;
+      window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
       setCurrentView('search');
+      window.dispatchEvent(new CustomEvent('app-search-trigger', { detail: trimmed }));
       
       const input = searchFormRef.current?.querySelector('input');
       if (input) input.blur();
@@ -161,6 +188,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
     setHasSearched(false);
     window.location.hash = `#/search?q=${encodeURIComponent(suggestion)}`;
     setCurrentView('search');
+    window.dispatchEvent(new CustomEvent('app-search-trigger', { detail: suggestion }));
     
     const input = searchFormRef.current?.querySelector('input');
     if (input) input.blur();
@@ -272,6 +300,9 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
                 setShowSuggestions(false);
                 setIsSearching(false);
                 setSuggestions([]);
+                if (window.location.hash.includes('search')) {
+                  window.location.hash = '#/search';
+                }
               }} 
               aria-label="Clear search"
             >
