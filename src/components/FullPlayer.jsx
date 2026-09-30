@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ChevronDown, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { getAudioUrl } from '../services/api';
 
@@ -42,19 +42,25 @@ export default function FullPlayer({
     }, 2500);
   };
 
-  // Sync liked & saved state when track changes
+  // Sync liked & saved state when track changes or playloop-liked-songs-updated fires
   useEffect(() => {
     if (!pendingTrack?.videoId) return;
-    try {
-      const liked = JSON.parse(localStorage.getItem('playloop_liked_tracks') || '[]');
-      setIsLiked(liked.includes(pendingTrack.videoId));
+    const checkLikedAndSaved = () => {
+      try {
+        const liked = JSON.parse(localStorage.getItem('playloop_liked_tracks') || '[]');
+        setIsLiked(liked.includes(pendingTrack.videoId));
 
-      const saved = JSON.parse(localStorage.getItem('playloop_saved_tracks') || '[]');
-      setIsSaved(saved.some(t => (t.videoId || t) === pendingTrack.videoId));
-    } catch (e) {
-      setIsLiked(false);
-      setIsSaved(false);
-    }
+        const saved = JSON.parse(localStorage.getItem('playloop_saved_tracks') || '[]');
+        setIsSaved(saved.some(t => (t.videoId || t) === pendingTrack.videoId));
+      } catch (e) {
+        setIsLiked(false);
+        setIsSaved(false);
+      }
+    };
+
+    checkLikedAndSaved();
+    window.addEventListener('playloop-liked-songs-updated', checkLikedAndSaved);
+    return () => window.removeEventListener('playloop-liked-songs-updated', checkLikedAndSaved);
   }, [pendingTrack]);
 
   const handleLike = () => {
@@ -84,6 +90,7 @@ export default function FullPlayer({
       }
       localStorage.setItem('playloop_liked_tracks', JSON.stringify(updatedIds));
       localStorage.setItem('playloop_liked_tracks_list', JSON.stringify(updatedTracks));
+      window.dispatchEvent(new CustomEvent('playloop-liked-songs-updated'));
     } catch (e) {
       setIsLiked(!isLiked);
     }
@@ -168,6 +175,10 @@ export default function FullPlayer({
   const touchStartX = useRef(null);
   const userInteractingRef = useRef(false);
   const userInteractionTimer = useRef(null);
+  const lastTapRef = useRef({ time: 0, x: 0, y: 0 });
+  const isSwipingRef = useRef(false);
+  const isTouchRef = useRef(false);
+  const [doubleTapFeedback, setDoubleTapFeedback] = useState(null);
 
   // Reset animation when track changes
   useEffect(() => {
@@ -395,17 +406,81 @@ export default function FullPlayer({
       : 'text-zinc-400 hover:text-white';
   };
 
+  const handleCoverTap = (clientX, clientY, element) => {
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const relativeX = x / rect.width;
+
+    const now = Date.now();
+    const lastTap = lastTapRef.current;
+    const timeDiff = now - lastTap.time;
+    const dist = Math.hypot(clientX - lastTap.x, clientY - lastTap.y);
+
+    if (timeDiff > 20 && timeDiff < 350 && dist < 60) {
+      // Double tap detected!
+      lastTapRef.current = { time: 0, x: 0, y: 0 };
+
+      if (relativeX < 0.35) {
+        // Left side -> Rewind 10 seconds
+        if (typeof seekBy === 'function') seekBy(-10);
+        setDoubleTapFeedback({ type: 'rewind', id: now });
+        showToast("Rewound 10s");
+      } else if (relativeX > 0.65) {
+        // Right side -> Skip forward 10 seconds
+        if (typeof seekBy === 'function') seekBy(10);
+        setDoubleTapFeedback({ type: 'forward', id: now });
+        showToast("Skipped 10s");
+      } else {
+        // Middle -> Like / Unlike song
+        handleLike();
+        setDoubleTapFeedback({ type: 'like', id: now });
+      }
+
+      setTimeout(() => {
+        setDoubleTapFeedback(prev => (prev?.id === now ? null : prev));
+      }, 700);
+    } else {
+      lastTapRef.current = { time: now, x: clientX, y: clientY };
+    }
+  };
+
   const handleTouchStart = (e) => {
+    isTouchRef.current = true;
     if (e.touches && e.touches[0]) {
       touchStartY.current = e.touches[0].clientY;
       touchStartX.current = e.touches[0].clientX;
+      isSwipingRef.current = false;
     }
+  };
+
+  const handleTouchEndCover = (e) => {
+    if (!isSwipingRef.current && touchStartX.current !== null && e.changedTouches && e.changedTouches[0]) {
+      const clientX = e.changedTouches[0].clientX;
+      const clientY = e.changedTouches[0].clientY;
+      handleCoverTap(clientX, clientY, e.currentTarget);
+    }
+    touchStartY.current = null;
+    touchStartX.current = null;
+    isSwipingRef.current = false;
+  };
+
+  const handleClickCover = (e) => {
+    if (isTouchRef.current) {
+      isTouchRef.current = false;
+      return;
+    }
+    handleCoverTap(e.clientX, e.clientY, e.currentTarget);
   };
 
   const handleTouchMoveCover = (e) => {
     if (touchStartY.current !== null && touchStartX.current !== null && e.touches && e.touches[0]) {
       const deltaY = e.touches[0].clientY - touchStartY.current;
       const deltaX = e.touches[0].clientX - touchStartX.current;
+
+      if (Math.abs(deltaY) > 15 || Math.abs(deltaX) > 15) {
+        isSwipingRef.current = true;
+      }
 
       // Vertical swipe DOWN to close full player
       if (deltaY > 25 && Math.abs(deltaY) > Math.abs(deltaX)) {
@@ -553,8 +628,10 @@ export default function FullPlayer({
             <div
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMoveCover}
+              onTouchEnd={handleTouchEndCover}
+              onClick={handleClickCover}
               onWheel={handleWheelCover}
-              title="Swipe/scroll UP for lyrics, DOWN to minimize player"
+              title="Double tap: Left (-10s), Middle (Like), Right (+10s)"
               className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 touch-none transition-all duration-500 ease-out transform ${coverAnim} ${showLyrics
                 ? '-translate-y-full opacity-0 pointer-events-none scale-95 md:translate-y-0 md:opacity-100 md:pointer-events-auto md:scale-100'
                 : 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10'
@@ -565,10 +642,10 @@ export default function FullPlayer({
                   src={imgSrc}
                   alt={currentTitle || 'Track cover'}
                   onError={handleImageError}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none"
                 />
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black relative">
+                <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black relative pointer-events-none">
                   <div className="absolute inset-0 bg-white/5 blur-2xl rounded-full scale-75 pointer-events-none" />
                   <img
                     src="/logo.svg"
@@ -576,6 +653,48 @@ export default function FullPlayer({
                     className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] mb-3 transition-transform duration-500 group-hover:scale-110"
                   />
                   <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Play LooP</span>
+                </div>
+              )}
+
+              {/* Double Tap Visual Feedback Overlays */}
+              {doubleTapFeedback?.type === 'rewind' && (
+                <div className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/80 via-black/50 to-transparent backdrop-blur-md flex flex-col items-center justify-center rounded-l-2xl z-30 pointer-events-none animate-double-tap-ripple-left">
+                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1 shadow-[0_0_30px_rgba(255,255,255,0.3)] border border-white/30 animate-double-tap-icon-bounce">
+                    <RotateCcw className="w-8 h-8 text-white drop-shadow-md" />
+                  </div>
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    <ChevronLeft className="w-4 h-4 text-white/90 animate-arrow-pulse-1" />
+                    <span className="text-xs font-black text-white tracking-widest drop-shadow-md">-10 SEC</span>
+                  </div>
+                </div>
+              )}
+
+              {doubleTapFeedback?.type === 'forward' && (
+                <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-black/80 via-black/50 to-transparent backdrop-blur-md flex flex-col items-center justify-center rounded-r-2xl z-30 pointer-events-none animate-double-tap-ripple-right">
+                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1 shadow-[0_0_30px_rgba(255,255,255,0.3)] border border-white/30 animate-double-tap-icon-bounce">
+                    <RotateCw className="w-8 h-8 text-white drop-shadow-md" />
+                  </div>
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    <span className="text-xs font-black text-white tracking-widest drop-shadow-md">+10 SEC</span>
+                    <ChevronRight className="w-4 h-4 text-white/90 animate-arrow-pulse-2" />
+                  </div>
+                </div>
+              )}
+
+              {doubleTapFeedback?.type === 'like' && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center rounded-2xl z-30 pointer-events-none overflow-hidden">
+                  {/* Expanding Ring Aura */}
+                  <div className="absolute w-24 h-24 rounded-full border-2 border-rose-500/80 animate-heart-ring-expand" />
+                  
+                  {/* Bursting Heart Icon */}
+                  <div className="relative z-10 flex flex-col items-center animate-heart-burst-pop">
+                    <div className="w-20 h-20 rounded-full bg-rose-500/20 backdrop-blur-lg flex items-center justify-center shadow-[0_0_40px_rgba(244,63,94,0.6)] border border-rose-500/40 mb-2">
+                      <Heart className={`w-11 h-11 ${isLiked ? 'fill-rose-500 text-rose-500' : 'text-white'}`} />
+                    </div>
+                    <span className="text-xs font-black text-white tracking-wider bg-black/70 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/20 shadow-lg">
+                      {isLiked ? ' LIKED' : ' UNLIKED'}
+                    </span>
+                  </div>
                 </div>
               )}
 

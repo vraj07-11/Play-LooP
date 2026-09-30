@@ -879,13 +879,17 @@ export function PlayerProvider({ children }) {
   }, [pendingTrack, currentTrackIndex, trackQueue, recommendationQueue, isShuffleEnabled]);
 
   const seekBy = (seconds) => {
-    if (!Number.isFinite(duration) || duration <= 0) return;
     if (nativeAudioPlayer.current) {
-      const cTime = nativeAudioPlayer.current.currentTime || currentTime;
-      const newTime = Math.max(0, Math.min(duration, cTime + seconds));
+      const cTime = nativeAudioPlayer.current.currentTime || currentTime || 0;
+      const audioDuration = (Number.isFinite(duration) && duration > 0) 
+        ? duration 
+        : (nativeAudioPlayer.current.duration || 3600);
+      const newTime = Math.max(0, Math.min(audioDuration, cTime + seconds));
       nativeAudioPlayer.current.currentTime = newTime;
       setCurrentTime(newTime);
-      setProgress((newTime / duration) * 100);
+      if (audioDuration > 0) {
+        setProgress((newTime / audioDuration) * 100);
+      }
     }
   };
   

@@ -334,3 +334,143 @@
   animation: full-player-slide-down 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/* Enhanced Double Tap Animations for Cover Art */
+@keyframes double-tap-ripple-left {
+  0% {
+    opacity: 0;
+    transform: scale(0.65) translateX(-20px);
+    border-top-right-radius: 100%;
+    border-bottom-right-radius: 100%;
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    border-top-right-radius: 80%;
+    border-bottom-right-radius: 80%;
+  }
+  75% {
+    opacity: 0.95;
+    transform: scale(1.03) translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08) translateX(-10px);
+  }
+}
+
+@keyframes double-tap-ripple-right {
+  0% {
+    opacity: 0;
+    transform: scale(0.65) translateX(20px);
+    border-top-left-radius: 100%;
+    border-bottom-left-radius: 100%;
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    border-top-left-radius: 80%;
+    border-bottom-left-radius: 80%;
+  }
+  75% {
+    opacity: 0.95;
+    transform: scale(1.03) translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08) translateX(10px);
+  }
+}
+
+@keyframes double-tap-icon-bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-20deg);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.25) rotate(0deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.05) rotate(5deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.85) rotate(0deg);
+  }
+}
+
+@keyframes heart-burst-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(-15deg) translateY(10px);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.35) rotate(0deg) translateY(-6px);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.1) rotate(6deg) translateY(-12px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8) rotate(0deg) translateY(-24px);
+  }
+}
+
+@keyframes heart-ring-expand {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+@keyframes arrow-pulse {
+  0% {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+}
+
+.animate-double-tap-ripple-left {
+  animation: double-tap-ripple-left 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-double-tap-ripple-right {
+  animation: double-tap-ripple-right 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-double-tap-icon-bounce {
+  animation: double-tap-icon-bounce 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-heart-burst-pop {
+  animation: heart-burst-pop 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-heart-ring-expand {
+  animation: heart-ring-expand 0.75s ease-out forwards;
+}
+
+.animate-arrow-pulse-1 {
+  animation: arrow-pulse 0.6s ease-in-out infinite;
+}
+
+.animate-arrow-pulse-2 {
+  animation: arrow-pulse 0.6s ease-in-out infinite 0.15s;
+}
+
+
