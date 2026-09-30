@@ -439,7 +439,7 @@ export default function FullPlayer({
 
       setTimeout(() => {
         setDoubleTapFeedback(prev => (prev?.id === now ? null : prev));
-      }, 700);
+      }, 450);
     } else {
       lastTapRef.current = { time: now, x: clientX, y: clientY };
     }
@@ -658,41 +658,41 @@ export default function FullPlayer({
 
               {/* Double Tap Visual Feedback Overlays */}
               {doubleTapFeedback?.type === 'rewind' && (
-                <div className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/80 via-black/50 to-transparent backdrop-blur-md flex flex-col items-center justify-center rounded-l-2xl z-30 pointer-events-none animate-double-tap-ripple-left">
-                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1 shadow-[0_0_30px_rgba(255,255,255,0.3)] border border-white/30 animate-double-tap-icon-bounce">
+                <div className="absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-black/85 via-black/55 to-transparent flex flex-col items-center justify-center rounded-l-2xl z-30 pointer-events-none animate-double-tap-overlay">
+                  <div className="w-16 h-16 rounded-full bg-white/15 flex items-center justify-center mb-1 shadow-[0_0_25px_rgba(255,255,255,0.25)] border border-white/30 animate-double-tap-badge">
                     <RotateCcw className="w-8 h-8 text-white drop-shadow-md" />
                   </div>
                   <div className="flex items-center gap-0.5 mt-0.5">
-                    <ChevronLeft className="w-4 h-4 text-white/90 animate-arrow-pulse-1" />
+                    <ChevronLeft className="w-4 h-4 text-white/90 animate-arrow-cascade-1" />
                     <span className="text-xs font-black text-white tracking-widest drop-shadow-md">-10 SEC</span>
                   </div>
                 </div>
               )}
 
               {doubleTapFeedback?.type === 'forward' && (
-                <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-black/80 via-black/50 to-transparent backdrop-blur-md flex flex-col items-center justify-center rounded-r-2xl z-30 pointer-events-none animate-double-tap-ripple-right">
-                  <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mb-1 shadow-[0_0_30px_rgba(255,255,255,0.3)] border border-white/30 animate-double-tap-icon-bounce">
+                <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-black/85 via-black/55 to-transparent flex flex-col items-center justify-center rounded-r-2xl z-30 pointer-events-none animate-double-tap-overlay">
+                  <div className="w-16 h-16 rounded-full bg-white/15 flex items-center justify-center mb-1 shadow-[0_0_25px_rgba(255,255,255,0.25)] border border-white/30 animate-double-tap-badge">
                     <RotateCw className="w-8 h-8 text-white drop-shadow-md" />
                   </div>
                   <div className="flex items-center gap-0.5 mt-0.5">
                     <span className="text-xs font-black text-white tracking-widest drop-shadow-md">+10 SEC</span>
-                    <ChevronRight className="w-4 h-4 text-white/90 animate-arrow-pulse-2" />
+                    <ChevronRight className="w-4 h-4 text-white/90 animate-arrow-cascade-2" />
                   </div>
                 </div>
               )}
 
               {doubleTapFeedback?.type === 'like' && (
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-md flex flex-col items-center justify-center rounded-2xl z-30 pointer-events-none overflow-hidden">
+                <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center rounded-2xl z-30 pointer-events-none overflow-hidden animate-double-tap-overlay">
                   {/* Expanding Ring Aura */}
-                  <div className="absolute w-24 h-24 rounded-full border-2 border-rose-500/80 animate-heart-ring-expand" />
+                  <div className="absolute w-24 h-24 rounded-full border-2 border-white/80 animate-double-tap-ring" />
                   
                   {/* Bursting Heart Icon */}
-                  <div className="relative z-10 flex flex-col items-center animate-heart-burst-pop">
-                    <div className="w-20 h-20 rounded-full bg-rose-500/20 backdrop-blur-lg flex items-center justify-center shadow-[0_0_40px_rgba(244,63,94,0.6)] border border-rose-500/40 mb-2">
-                      <Heart className={`w-11 h-11 ${isLiked ? 'fill-rose-500 text-rose-500' : 'text-white'}`} />
+                  <div className="relative z-10 flex flex-col items-center animate-double-tap-heart">
+                    <div className="w-20 h-20 rounded-full bg-white/15 flex items-center justify-center shadow-[0_0_35px_rgba(255,255,255,0.5)] border border-white/30 mb-2">
+                      <Heart className={`w-11 h-11 ${isLiked ? 'fill-white text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.95)]' : 'text-white'}`} />
                     </div>
-                    <span className="text-xs font-black text-white tracking-wider bg-black/70 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/20 shadow-lg">
-                      {isLiked ? ' LIKED' : ' UNLIKED'}
+                    <span className="text-xs font-black text-white tracking-wider bg-black/80 px-3.5 py-1 rounded-full border border-white/20 shadow-lg">
+                      {isLiked ? 'LIKED' : 'UNLIKED'}
                     </span>
                   </div>
                 </div>
@@ -845,7 +845,7 @@ export default function FullPlayer({
               title={isLiked ? "Unlike" : "Like track"}
               aria-label="Like track"
             >
-              <Heart className={`w-5 h-5 sm:w-6 sm:h-6 ${isLiked ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'text-zinc-400 hover:text-white'}`} />
+              <Heart className={`w-5 h-5 sm:w-6 sm:h-6 ${isLiked ? 'fill-white text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]' : 'text-zinc-400 hover:text-white'}`} />
             </button>
 
             {/* Save */}

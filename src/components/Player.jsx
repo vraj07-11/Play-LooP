@@ -489,7 +489,7 @@ export default function Player() {
             aria-label={isLiked ? "Unlike track" : "Like track"}
             title={isLiked ? "Unlike" : "Like"}
           >
-            <Heart className={`w-6 h-6 transition-colors ${isLiked ? 'fill-rose-500 text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'text-zinc-400 hover:text-white'}`} />
+            <Heart className={`w-6 h-6 transition-colors ${isLiked ? 'fill-white text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]' : 'text-zinc-400 hover:text-white'}`} />
           </button>
           <button 
             type="button" 
