@@ -1,34 +1,34 @@
-# Play LooP
+# Play LooP 🎵
 
 **Play LooP** is a modern, lightweight, and fully-featured web application designed to stream and enjoy music seamlessly. Built with performance and user experience in mind, it acts as a powerful bridge that fetches and streams ad-free audio, paired with a beautiful interface and an intelligent local caching mechanism.
 
 ---
 
-## Live Demo (Under Development)
+## 🚀 Live Demo
 
-Experience the application live here:
-<br></br>  &nbsp; **[play-loop.onrender.com](https://play-loop.onrender.com)**
-
----
-
-## Key Features
-
-*   **Direct & Ad-Free Audio Streaming**
-    Leverages a lightning-fast custom backend that interfaces with high-performance audio APIs to pull high-quality audio streams without interruptions, completely bypassing heavy extractors like youtube-dl.
-*   **Progressive Web Application (PWA)**
-    Engineered as a fully functional PWA. Install it on your mobile device or desktop for a native app-like experience. Features seamless deep-linking, background playback support, and a responsive app shell.
-*   **Secure Offline Downloads**
-    Download your favorite tracks directly to your device for offline listening. Downloads are routed through a secure backend proxy to ensure fast delivery and protect stream origin privacy.
-*   **Instant Streaming Proxy**
-    To heavily optimize performance and reduce latency, audio streams are proxied and piped directly to the client on-the-fly. No heavy disk-caching or cleanup required—just instant music.
-*   **Intelligent "Up Next" Queue**
-    A hybrid recommendation system that dynamically analyzes your currently playing song and preferred languages (English, Hindi, Punjabi, etc.) to generate a highly varied, infinite-scrolling queue that feels magical and non-repetitive.
-*   **Premium & Fluid UI**
-    Designed with a sleek, mobile-first approach. Whether you're on a massive desktop monitor or a small smartphone screen, the interface features glassmorphism, fluid micro-animations, and dynamic player states that rival top-tier commercial apps.
+Experience the application live here:  
+👉 **[play-loop.onrender.com](https://play-loop.onrender.com)**
 
 ---
 
-## Technology Stack
+## ✨ Key Features
+
+* **Direct & Ad-Free Audio Streaming**  
+  Leverages a lightning-fast custom Express backend that interfaces with high-performance audio APIs (`ytmusic-api`) to pull high-quality audio streams without interruptions.
+* **Progressive Web Application (PWA)**  
+  Engineered as a fully functional PWA. Install it on your mobile device or desktop for a native app-like experience with background playback support and service workers (`sw.js`).
+* **Secure Offline Downloads**  
+  Download your favorite tracks directly to your device for offline listening via secure backend streaming proxy.
+* **Instant Streaming Proxy**  
+  Audio streams are proxied and piped directly to the client on-the-fly, eliminating heavy disk-caching delays.
+* **Intelligent "Up Next" Queue**  
+  Dynamic recommendation system that analyzes your currently playing song and language preferences (English, Hindi, Punjabi, etc.) for continuous, non-repetitive playback.
+* **Premium & Fluid UI**  
+  Designed with a sleek dark aesthetic, glassmorphism, responsive UI components, and fluid micro-animations built with React 19 and Lucide icons.
+
+---
+
+## 🛠️ Technology Stack
 
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
@@ -40,18 +40,69 @@ Experience the application live here:
 
 ---
 
-## About the Developer
+## ⚙️ Getting Started
 
-This project is the independent work of a 19-year-old solo developer. 
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- `npm` or `yarn`
 
-Driven by a strong passion for music, design, and software engineering, Play LooP was built entirely from scratch. Every aspect of the application—from the responsive frontend architecture and custom audio player to the backend routing and recommendation integrations—was engineered by a single person. The goal was to create a premium, fast, and ad-free music streaming experience that rivals commercial platforms while serving as a testament to the capabilities of modern web technologies.
+### Installation
+
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/vraj07-11/Play-LooP.git
+   cd Play-LooP
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure Environment Variables**
+   Create a `.env` file in the root directory:
+   ```env
+   LASTFM_API_KEY=your_lastfm_api_key
+   LASTFM_SHARED_SECRET=your_lastfm_secret
+   ```
+
+4. **Run the Development Application**
+   - **Frontend (Vite dev server):**
+     ```bash
+     npm run dev
+     ```
+   - **Backend Server (Express API & Audio Proxy):**
+     ```bash
+     npm start
+     ```
 
 ---
 
-## Contact
+## 📁 Project Structure
 
-Feel free to reach out for any questions, or just to say hi!
+```text
+├── public/          # Static assets & icons
+├── src/             # React application source code
+│   ├── components/  # Reusable UI components (Player, Sidebar, Audio cards)
+│   ├── pages/       # Application views (Home, Search, Playlists, etc.)
+│   └── styles/      # Modular CSS stylesheets
+├── server.js        # Express backend for streaming proxy & API endpoints
+├── sw.js            # Service worker for PWA caching & offline support
+├── vite.config.mjs  # Vite build configuration
+└── package.json     # Project metadata and dependencies
+```
+
+---
+
+## 👤 About the Developer
+
+This project is the independent work of a solo developer. Driven by a passion for music, design, and software engineering, **Play LooP** was built entirely from scratch to provide a premium, fast, and ad-free music streaming experience.
+
+---
+
+## 📬 Contact & Links
 
 - **GitHub:** [@vraj07-11](https://github.com/vraj07-11)
-- **Email:** [Email Address](gajeravraj593@gmail.com)
-- **LinkedIn:** [LinkedIn Profile](https://www.linkedin.com/in/vraj-gajera-260a96377)
+- **Email:** [gajeravraj593@gmail.com](mailto:gajeravraj593@gmail.com)
+- **LinkedIn:** [Vraj Gajera](https://www.linkedin.com/in/vraj-gajera-260a96377)
+
