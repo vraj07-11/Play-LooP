@@ -183,7 +183,7 @@ export default function LibraryPage({ setCurrentView }) {
           aria-label="Import Playlist"
           className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] focus:bg-[#282828] focus:outline-none focus:ring-2 focus:ring-white cursor-pointer transition-colors duration-300 sm:hidden"
         >
-          <div className="relative w-full aspect-square rounded-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center border border-white/10">
+          <div className="relative w-full aspect-square rounded-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center">
             <Download className="w-12 h-12 text-white drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
             <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
               <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 text-black">
