@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Library, Play, Heart, ArrowUpDown, Check } from 'lucide-react';
+import { Library, Play, Heart, ArrowUpDown, Check, Download } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 
 export default function LibraryPage({ setCurrentView }) {
@@ -56,6 +56,13 @@ export default function LibraryPage({ setCurrentView }) {
     window.location.hash = '#/playlist/liked_songs';
   };
 
+  const handleImportClick = () => {
+    if (setCurrentView) {
+      setCurrentView('settings');
+    }
+    window.location.hash = '#/settings#import';
+  };
+
   const handleKeyDown = (e, action, param) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -69,58 +76,70 @@ export default function LibraryPage({ setCurrentView }) {
 
   return (
     <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-6 select-none">
-      <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Library className="w-8 h-8 text-white" />
-          <h2 className="text-3xl font-extrabold text-white tracking-tight">Your Library</h2>
+      <div className="mb-6 sm:mb-8 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap w-full">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <Library className="w-6 h-6 sm:w-8 sm:h-8 text-white shrink-0" />
+          <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight truncate">Your Library</h2>
         </div>
 
-        <div className="relative z-20" ref={sortRef}>
+        <div className="flex items-center gap-2 sm:gap-2.5 ml-auto shrink-0">
           <button
             type="button"
-            onClick={() => setIsSortOpen(!isSortOpen)}
-            className="text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-4 py-2 flex items-center gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+            onClick={handleImportClick}
+            className="hidden sm:inline-flex text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 items-center gap-1.5 sm:gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95 shrink-0"
+            title="Import playlists from Spotify, YT Music, JioSaavn or files"
           >
-            <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
-            <span>
-              Sort: {
-                sortOption === 'recent' ? 'Newest First' :
-                sortOption === 'recent-reverse' ? 'Oldest First' :
-                sortOption === 'name-asc' ? 'Name (A-Z)' :
-                sortOption === 'name-desc' ? 'Name (Z-A)' : 'Newest First'
-              }
-            </span>
-            <span className="text-[10px] text-zinc-400">▼</span>
+            <Download className="w-3.5 h-3.5 text-white shrink-0" />
+            <span>Import</span>
           </button>
 
-          {isSortOpen && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-              <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800 mb-1">
-                Sort Playlists By
+          <div className="relative z-20 shrink-0" ref={sortRef}>
+            <button
+              type="button"
+              onClick={() => setIsSortOpen(!isSortOpen)}
+              className="text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95 shrink-0"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
+              <span>
+                Sort: {
+                  sortOption === 'recent' ? 'Newest First' :
+                  sortOption === 'recent-reverse' ? 'Oldest First' :
+                  sortOption === 'name-asc' ? 'Name (A-Z)' :
+                  sortOption === 'name-desc' ? 'Name (Z-A)' : 'Newest First'
+                }
+              </span>
+              <span className="text-[10px] text-zinc-400">▼</span>
+            </button>
+
+            {isSortOpen && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wider border-b border-zinc-800 mb-1">
+                  Sort Playlists By
+                </div>
+                {[
+                  { id: 'recent', label: 'Newest First' },
+                  { id: 'recent-reverse', label: 'Oldest First' },
+                  { id: 'name-asc', label: 'Name (A – Z)' },
+                  { id: 'name-desc', label: 'Name (Z – A)' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setSortOption(opt.id);
+                      setIsSortOpen(false);
+                    }}
+                    className={`w-full text-left px-3.5 py-2 text-xs font-normal flex items-center justify-between transition cursor-pointer ${
+                      sortOption === opt.id ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    <span>{opt.label}</span>
+                    {sortOption === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                  </button>
+                ))}
               </div>
-              {[
-                { id: 'recent', label: 'Newest First' },
-                { id: 'recent-reverse', label: 'Oldest First' },
-                { id: 'name-asc', label: 'Name (A – Z)' },
-                { id: 'name-desc', label: 'Name (Z – A)' }
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    setSortOption(opt.id);
-                    setIsSortOpen(false);
-                  }}
-                  className={`w-full text-left px-3.5 py-2 text-xs font-normal flex items-center justify-between transition cursor-pointer ${
-                    sortOption === opt.id ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                  }`}
-                >
-                  <span>{opt.label}</span>
-                  {sortOption === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
-                </button>
-              ))}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -147,6 +166,36 @@ export default function LibraryPage({ setCurrentView }) {
           </h4>
           <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
             {likedCount} {likedCount === 1 ? 'song' : 'songs'}
+          </p>
+        </div>
+
+        {/* Import Playlist Card (Mobile Grid Tile) */}
+        <div
+          onClick={handleImportClick}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleImportClick();
+            }
+          }}
+          tabIndex={0}
+          role="button"
+          aria-label="Import Playlist"
+          className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] focus:bg-[#282828] focus:outline-none focus:ring-2 focus:ring-white cursor-pointer transition-colors duration-300 sm:hidden"
+        >
+          <div className="relative w-full aspect-square rounded-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center border border-white/10">
+            <Download className="w-12 h-12 text-white drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
+            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
+              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 text-black">
+                <Download className="w-4 h-4 text-black" />
+              </div>
+            </div>
+          </div>
+          <h4 className="font-bold text-white text-[15px] truncate mb-1.5 tracking-tight">
+            Import Playlist
+          </h4>
+          <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
+            Spotify, YT & Files
           </p>
         </div>
 

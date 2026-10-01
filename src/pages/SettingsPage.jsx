@@ -47,6 +47,15 @@ export default function SettingsPage({ setCurrentView }) {
     } catch (e) {
       console.error(e);
     }
+
+    if (window.location.hash.includes('import')) {
+      const el = document.getElementById('import-section');
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+      }
+    }
   }, []);
 
   const toggleLanguage = (langId) => {
@@ -290,7 +299,7 @@ export default function SettingsPage({ setCurrentView }) {
       </div>
 
       {/* --- IMPORT PLAYLISTS CARD --- */}
-      <div className="p-6 bg-zinc-900/80 rounded-2xl border border-zinc-800 shadow-xl space-y-6">
+      <div id="import-section" className="p-6 bg-zinc-900/80 rounded-2xl border border-zinc-800 shadow-xl space-y-6">
         <div className="flex items-center gap-3">
           <img src="/logo.svg" alt="Play LooP Logo" className="w-8 h-8 shrink-0" />
           <div>
