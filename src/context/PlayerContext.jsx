@@ -77,6 +77,11 @@ export function PlayerProvider({ children }) {
     });
   };
   
+  const recentlyPlayedRef = useRef(recentlyPlayed);
+  useEffect(() => {
+    recentlyPlayedRef.current = recentlyPlayed;
+  }, [recentlyPlayed]);
+
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
   const [upcomingTrack, setUpcomingTrack] = useState(null);
@@ -316,26 +321,25 @@ export function PlayerProvider({ children }) {
       console.error("[Audio Engine] Native audio playback error:", e);
       setPlayerStatus("Playback failed");
       setIsPlaying(false);
+      // Auto-recover after 1.5s if playback fails or drops in background
+      setTimeout(() => {
+        if (pendingTrackRef.current) {
+          console.log("[Audio Engine] Attempting background auto-recovery to next track...");
+          playNextTrack();
+        }
+      }, 1500);
     };
     
     const nativeAudio = nativeAudioPlayer.current;
-    const upcomingAudio = upcomingAudioPlayer.current;
 
     nativeAudio.addEventListener('timeupdate', handleTimeUpdate);
     nativeAudio.addEventListener('ended', handleEnded);
     nativeAudio.addEventListener('error', handleError);
 
-    upcomingAudio.addEventListener('timeupdate', handleTimeUpdate);
-    upcomingAudio.addEventListener('ended', handleEnded);
-    upcomingAudio.addEventListener('error', handleError);
-
     return () => {
       nativeAudio.removeEventListener('timeupdate', handleTimeUpdate);
       nativeAudio.removeEventListener('ended', handleEnded);
       nativeAudio.removeEventListener('error', handleError);
-      upcomingAudio.removeEventListener('timeupdate', handleTimeUpdate);
-      upcomingAudio.removeEventListener('ended', handleEnded);
-      upcomingAudio.removeEventListener('error', handleError);
     };
   }, []);
 
@@ -366,7 +370,6 @@ export function PlayerProvider({ children }) {
       if (nativeAudioPlayer.current) {
         nativeAudioPlayer.current.pause();
         nativeAudioPlayer.current.currentTime = 0;
-        nativeAudioPlayer.current.src = "";
       }
     } catch (e) {}
   };
@@ -418,15 +421,19 @@ export function PlayerProvider({ children }) {
 
     applyMediaSessionMetadata(title, artist, thumbnail, videoId);
 
-    // Playback using Native Audio with direct JioSaavn URL
+    // Playback using Native Audio with direct audio stream URL
     console.log(`[Audio Engine] Playing track (${title}) via native audio stream...`);
     const targetUrl = getAudioUrl(videoId);
     nativeAudioPlayer.current.src = targetUrl;
-    nativeAudioPlayer.current.load();
     nativeAudioPlayer.current.play().then(() => {
       setIsPlaying(true);
       setPlayerStatus("Playing");
-    }).catch(console.error);
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = "playing";
+      }
+    }).catch(e => {
+      console.error("[Audio Engine] Play error:", e);
+    });
 
     markTrackSeen(trackObj);
 
@@ -446,75 +453,67 @@ export function PlayerProvider({ children }) {
       }
 
       if (recommendationQueueRef.current.length < 5) {
-        setTimeout(() => refreshUpNext(true), 500);
+        refreshUpNext(true);
       }
       return;
     }
 
-    // Hybrid Recommendations Engine for Queue
-    setTimeout(() => {
+    // Hybrid Recommendations Engine for Queue (Executed immediately without background timer throttle)
+    try {
+      const excludeIds = Array.from(sessionSeenIdsRef.current).slice(-40).join(",");
+      const excludeTitles = Array.from(sessionSeenTitlesRef.current).slice(-40).map(t => encodeURIComponent(t)).join("|");
+
+      let userLanguages = "english,hindi";
       try {
-        const excludeIds = Array.from(sessionSeenIdsRef.current).slice(-40).join(",");
-        const excludeTitles = Array.from(sessionSeenTitlesRef.current).slice(-40).map(t => encodeURIComponent(t)).join("|");
-
-        let userLanguages = "english,hindi";
-        try {
-          const stored = localStorage.getItem('preferred_languages');
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              userLanguages = parsed.join(',');
-            }
+        const stored = localStorage.getItem('preferred_languages');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            userLanguages = parsed.join(',');
           }
-        } catch(e) {}
+        }
+      } catch(e) {}
 
-        const queryParams = new URLSearchParams({
-          id: videoId || "",
-          artist: artist || "",
-          title: title || "",
-          excludeIds,
-          excludeTitles,
-          languages: userLanguages
-        }).toString();
+      const queryParams = new URLSearchParams({
+        id: videoId || "",
+        artist: artist || "",
+        title: title || "",
+        excludeIds,
+        excludeTitles,
+        languages: userLanguages
+      }).toString();
 
-        fetchApi(`/api/recommendations?${queryParams}`)
-          .then((res) => (res.ok ? res.json() : []))
-          .then((data) => {
-            if (Array.isArray(data) && data.length > 0) {
-              const currentPlayingTrack = { videoId, title, artist, thumbnail };
-              const scoredRecs = generateRecommendations({
-                currentTrack: currentPlayingTrack,
-                candidatePool: data,
-                history: trackHistoryRef.current || [],
-                likedSongs: [],
-                seenIds: sessionSeenIdsRef.current,
-                seenTitles: sessionSeenTitlesRef.current,
-                limit: 10
-              });
+      fetchApi(`/api/recommendations?${queryParams}`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            const currentPlayingTrack = { videoId, title, artist, thumbnail };
+            const scoredRecs = generateRecommendations({
+              currentTrack: currentPlayingTrack,
+              candidatePool: data,
+              history: trackHistoryRef.current || [],
+              likedSongs: [],
+              seenIds: sessionSeenIdsRef.current,
+              seenTitles: sessionSeenTitlesRef.current,
+              limit: 10
+            });
 
-              if (scoredRecs.length > 0) {
-                scoredRecs.forEach(markTrackSeen);
-                recommendationQueueRef.current = scoredRecs;
-                setRecommendationQueue(scoredRecs);
+            if (scoredRecs.length > 0) {
+              scoredRecs.forEach(markTrackSeen);
+              recommendationQueueRef.current = scoredRecs;
+              setRecommendationQueue(scoredRecs);
 
-                // Immediately sync top recommended track to upcoming
-                const topNext = scoredRecs[0];
-                if (topNext && topNext.videoId !== videoId) {
-                  setUpcoming(topNext);
-                  if (upcomingAudioPlayer.current) {
-                    upcomingAudioPlayer.current.preload = "auto";
-                    upcomingAudioPlayer.current.src = getAudioUrl(topNext.videoId);
-                    upcomingAudioPlayer.current.load();
-                  }
-                }
+              const topNext = scoredRecs[0];
+              if (topNext && topNext.videoId !== videoId) {
+                setUpcoming(topNext);
               }
             }
-          })
-          .catch((e) => console.error(e));
-      } catch (e) {
-        console.error(e);
-      }
-    }, 300);
+          }
+        })
+        .catch((e) => console.error(e));
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const refreshUpNext = useCallback(async (append = false) => {
@@ -590,11 +589,6 @@ export function PlayerProvider({ children }) {
             const topNext = freshQueue[0];
             if (topNext && topNext.videoId !== currentTrack.videoId) {
               setUpcoming(topNext);
-              if (upcomingAudioPlayer.current) {
-                upcomingAudioPlayer.current.preload = "auto";
-                upcomingAudioPlayer.current.src = getAudioUrl(topNext.videoId);
-                upcomingAudioPlayer.current.load();
-              }
             }
           }
         }
@@ -623,7 +617,7 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const playNextTrack = useCallback(async () => {
+  const playNextTrack = useCallback(() => {
     const tQueue = trackQueueRef.current;
     const isShuffle = isShuffleEnabledRef.current;
     const cTrackIndex = currentTrackIndexRef.current;
@@ -716,41 +710,12 @@ export function PlayerProvider({ children }) {
       }
     }
 
-    // 4. Instant Search Fallback if no queue item is available yet
+    // 4. Synchronous Recently Played Fallback if queue is exhausted
     if (!nextTrackObj || (currentTrack && nextTrackObj.videoId === currentTrack.videoId)) {
-      console.warn("[PlayerContext] Next button clicked with empty queue - fetching instant search fallback...");
-      try {
-        let cleanArtist = "";
-        if (currentTrack?.artist) {
-          cleanArtist = currentTrack.artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim();
-        }
-        const query = cleanArtist ? `${cleanArtist}` : "Top Hits";
-        
-        let res = await fetchApi(`/api/search?q=${encodeURIComponent(query)}`);
-        let results = res.ok ? await res.json() : [];
-        
-        let fallbackTrack = Array.isArray(results) ? results.find(t => 
-          t.videoId !== currentTrack?.videoId &&
-          (!currentTrack || cleanTitle(t.title) !== cleanTitle(currentTrack.title))
-        ) : null;
-
-        if (!fallbackTrack) {
-          // If no different track found, try a generic Top Hits query
-          res = await fetchApi(`/api/search?q=Top Hits`);
-          results = res.ok ? await res.json() : [];
-          fallbackTrack = Array.isArray(results) ? results.find(t => 
-            t.videoId !== currentTrack?.videoId &&
-            (!currentTrack || cleanTitle(t.title) !== cleanTitle(currentTrack.title))
-          ) : null;
-        }
-
-        if (fallbackTrack) {
-          nextTrackObj = fallbackTrack;
-        } else if (results.length > 0) {
-          nextTrackObj = results[0];
-        }
-      } catch (e) {
-        console.error("[PlayerContext] Fallback next track error:", e);
+      const recentlyPlayedList = Array.isArray(recentlyPlayedRef.current) ? recentlyPlayedRef.current : [];
+      const validRecent = recentlyPlayedList.filter(t => t && t.videoId && t.videoId !== currentTrack?.videoId);
+      if (validRecent.length > 0) {
+        nextTrackObj = validRecent[Math.floor(Math.random() * validRecent.length)];
       }
     }
 
@@ -866,16 +831,6 @@ export function PlayerProvider({ children }) {
     }
 
     setUpcoming(nextTrackObj);
-
-    if (nextTrackObj?.videoId && nextTrackObj.videoId !== pendingTrack.videoId) {
-      console.log(`[Audio Engine] Auto pre-buffering next track (${nextTrackObj.title || nextTrackObj.videoId})...`);
-      // Client browser audio pre-buffer
-      if (upcomingAudioPlayer.current) {
-        upcomingAudioPlayer.current.preload = "auto";
-        upcomingAudioPlayer.current.src = getAudioUrl(nextTrackObj.videoId);
-        upcomingAudioPlayer.current.load();
-      }
-    }
   }, [pendingTrack, currentTrackIndex, trackQueue, recommendationQueue, isShuffleEnabled]);
 
   const seekBy = (seconds) => {

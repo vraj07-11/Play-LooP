@@ -26,6 +26,7 @@ export default function SettingsPage({ setCurrentView }) {
   const [previewPlaylist, setPreviewPlaylist] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [savedPlaylistId, setSavedPlaylistId] = useState('');
+  const [showUnmatched, setShowUnmatched] = useState(false);
 
   // Preferred Languages State
   const [selectedLangs, setSelectedLangs] = useState([]);
@@ -97,11 +98,11 @@ export default function SettingsPage({ setCurrentView }) {
 
       const data = await res.json();
 
-      // If JioSaavn playlist with direct tracks
-      if (data.source === 'jiosaavn' && Array.isArray(data.tracks)) {
+      // If JioSaavn or SoundCloud playlist with direct tracks
+      if ((data.source === 'jiosaavn' || data.source === 'soundcloud') && Array.isArray(data.tracks)) {
         setPreviewPlaylist({
-          title: data.title || 'JioSaavn Playlist',
-          author: data.author || 'JioSaavn',
+          title: data.title || (data.source === 'soundcloud' ? 'SoundCloud Playlist' : 'JioSaavn Playlist'),
+          author: data.author || (data.source === 'soundcloud' ? 'SoundCloud' : 'JioSaavn'),
           thumbnail: data.thumbnail || '/logo.svg',
           tracks: data.tracks
         });
@@ -111,8 +112,9 @@ export default function SettingsPage({ setCurrentView }) {
 
       // If Spotify or YouTube playlist requiring track search matching
       if (Array.isArray(data.songsToSearch) && data.songsToSearch.length > 0) {
-        const total = Math.min(data.songsToSearch.length, 200);
+        const total = Math.min(data.songsToSearch.length, 250);
         const matchedTracks = [];
+        const unmatchedTracks = [];
 
         for (let i = 0; i < total; i++) {
           const songQuery = data.songsToSearch[i];
@@ -122,25 +124,56 @@ export default function SettingsPage({ setCurrentView }) {
             statusText: `Matching track ${i + 1} of ${total}: "${songQuery.slice(0, 30)}..."`
           });
 
+          // Multi-step query matching
+          let matched = null;
           try {
-            const searchRes = await fetchApi(`/api/search?q=${encodeURIComponent(songQuery)}`);
-            if (searchRes.ok) {
-              const songs = await searchRes.json();
-              if (Array.isArray(songs) && songs.length > 0) {
-                matchedTracks.push(songs[0]);
-              } else if (songQuery.includes(' ')) {
-                const fallbackQuery = songQuery.split(' ').slice(0, 3).join(' ');
-                const fallbackRes = await fetchApi(`/api/search?q=${encodeURIComponent(fallbackQuery)}`);
-                if (fallbackRes.ok) {
-                  const fallbackSongs = await fallbackRes.json();
-                  if (Array.isArray(fallbackSongs) && fallbackSongs.length > 0) {
-                    matchedTracks.push(fallbackSongs[0]);
-                  }
+            // Attempt 1: Full Query (Title + Artist)
+            const res1 = await fetchApi(`/api/search?q=${encodeURIComponent(songQuery)}`);
+            if (res1.ok) {
+              const songs1 = await res1.json();
+              if (Array.isArray(songs1) && songs1.length > 0) matched = songs1[0];
+            }
+
+            // Attempt 2: Clean Title (remove feat, brackets)
+            if (!matched) {
+              const cleanTitle = songQuery.replace(/[\(\[\{].*?[\)\]\}]/g, '').replace(/feat\..*/i, '').trim();
+              if (cleanTitle && cleanTitle !== songQuery) {
+                const res2 = await fetchApi(`/api/search?q=${encodeURIComponent(cleanTitle)}`);
+                if (res2.ok) {
+                  const songs2 = await res2.json();
+                  if (Array.isArray(songs2) && songs2.length > 0) matched = songs2[0];
                 }
+              }
+            }
+
+            // Attempt 3: First 3 words fallback
+            if (!matched && songQuery.includes(' ')) {
+              const wordsQuery = songQuery.split(' ').slice(0, 3).join(' ');
+              const res3 = await fetchApi(`/api/search?q=${encodeURIComponent(wordsQuery)}`);
+              if (res3.ok) {
+                const songs3 = await res3.json();
+                if (Array.isArray(songs3) && songs3.length > 0) matched = songs3[0];
               }
             }
           } catch (err) {
             console.error(`Failed matching track ${songQuery}:`, err);
+          }
+
+          if (matched) {
+            matchedTracks.push(matched);
+          } else {
+            const parts = songQuery.split(/ - | by | – /);
+            const trackTitle = parts[0]?.trim() || songQuery;
+            const trackArtist = parts[1]?.trim() || 'Imported Song';
+
+            matchedTracks.push({
+              videoId: `QUERY:${encodeURIComponent(songQuery)}`,
+              title: trackTitle,
+              artist: trackArtist,
+              thumbnail: data.thumbnail || '/logo.svg',
+              duration: 180,
+              isImportedQuery: true
+            });
           }
         }
 
@@ -152,7 +185,8 @@ export default function SettingsPage({ setCurrentView }) {
           title: data.title || 'Imported Playlist',
           author: `${data.source.toUpperCase()} Import`,
           thumbnail: data.thumbnail || matchedTracks[0]?.thumbnail || '/logo.svg',
-          tracks: matchedTracks
+          tracks: matchedTracks,
+          totalExtracted: total
         });
       } else {
         throw new Error('No songs could be extracted from this playlist link.');
@@ -206,7 +240,7 @@ export default function SettingsPage({ setCurrentView }) {
           throw new Error('No valid song entries found in file.');
         }
 
-        const total = Math.min(songsToSearch.length, 200);
+        const total = Math.min(songsToSearch.length, 250);
         const matchedTracks = [];
 
         for (let i = 0; i < total; i++) {
@@ -217,16 +251,32 @@ export default function SettingsPage({ setCurrentView }) {
             statusText: `Matching ${i + 1} of ${total}: "${songQuery.slice(0, 25)}..."`
           });
 
+          let matched = null;
           try {
             const searchRes = await fetchApi(`/api/search?q=${encodeURIComponent(songQuery)}`);
             if (searchRes.ok) {
               const songs = await searchRes.json();
-              if (Array.isArray(songs) && songs.length > 0) {
-                matchedTracks.push(songs[0]);
-              }
+              if (Array.isArray(songs) && songs.length > 0) matched = songs[0];
             }
           } catch (err) {
             console.error(`Failed matching track ${songQuery}:`, err);
+          }
+
+          if (matched) {
+            matchedTracks.push(matched);
+          } else {
+            const parts = songQuery.split(/ - | by | – /);
+            const trackTitle = parts[0]?.trim() || songQuery;
+            const trackArtist = parts[1]?.trim() || 'Imported Song';
+
+            matchedTracks.push({
+              videoId: `QUERY:${encodeURIComponent(songQuery)}`,
+              title: trackTitle,
+              artist: trackArtist,
+              thumbnail: '/logo.svg',
+              duration: 180,
+              isImportedQuery: true
+            });
           }
         }
 
@@ -304,7 +354,7 @@ export default function SettingsPage({ setCurrentView }) {
           <img src="/logo.svg" alt="Play LooP Logo" className="w-8 h-8 shrink-0" />
           <div>
             <h3 className="text-xl font-semibold text-white">Import Playlists</h3>
-            <p className="text-xs text-zinc-400">Bring music from Spotify, YT Music, JioSaavn, or local JSON/CSV files</p>
+            <p className="text-xs text-zinc-400">Bring music from Spotify, YT Music, SoundCloud, JioSaavn, or local JSON/CSV files</p>
           </div>
         </div>
 
@@ -353,7 +403,7 @@ export default function SettingsPage({ setCurrentView }) {
                 required
                 value={playlistLink}
                 onChange={(e) => setPlaylistLink(e.target.value)}
-                placeholder="Paste Spotify, YT Music, or JioSaavn link..."
+                placeholder="Paste Spotify, YT Music, SoundCloud, or JioSaavn link..."
                 className="flex-1 bg-black/60 border border-zinc-700/80 focus:border-zinc-400 focus:outline-none text-white placeholder-zinc-500 px-4 py-2.5 rounded-full text-sm transition"
               />
               <button
@@ -475,6 +525,34 @@ export default function SettingsPage({ setCurrentView }) {
               <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium">
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>Playlist imported and saved to Your Library!</span>
+              </div>
+            )}
+
+            {previewPlaylist.unmatchedTracks && previewPlaylist.unmatchedTracks.length > 0 && (
+              <div className="p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg text-xs space-y-2">
+                <div className="flex items-center justify-between text-zinc-400">
+                  <span>
+                    Matched <strong className="text-white">{previewPlaylist.tracks.length}</strong> of <strong className="text-white">{previewPlaylist.totalExtracted || (previewPlaylist.tracks.length + previewPlaylist.unmatchedTracks.length)}</strong> tracks from link.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnmatched(!showUnmatched)}
+                    className="text-zinc-400 hover:text-white underline cursor-pointer"
+                  >
+                    {showUnmatched ? 'Hide' : `View ${previewPlaylist.unmatchedTracks.length} unavailable tracks`}
+                  </button>
+                </div>
+
+                {showUnmatched && (
+                  <div className="pt-2 border-t border-zinc-800/80 space-y-1 max-h-36 overflow-y-auto">
+                    {previewPlaylist.unmatchedTracks.map((query, idx) => (
+                      <div key={idx} className="text-zinc-500 flex items-center justify-between py-0.5">
+                        <span className="truncate">{idx + 1}. {query}</span>
+                        <span className="text-[10px] text-zinc-600 shrink-0 ml-2">Not found in catalog</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

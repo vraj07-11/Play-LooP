@@ -223,8 +223,19 @@ async function getSoundCloudStreamUrl(scId) {
 		const trackData = await trackRes.json();
 
 		const trans = trackData.media?.transcodings || [];
-		// Prefer progressive MP3 over HLS if available for direct player compatibility
-		const transcoding = trans.find(t => t.format?.protocol === 'progressive') || trans[0];
+		if (trans.length === 0) return null;
+
+		// 1. Prefer non-snipped full-length streams over previews
+		const fullLength = trans.filter(t => !t.snipped);
+		const candidates = fullLength.length > 0 ? fullLength : trans;
+
+		// 2. Select highest quality audio encoding available (AAC 256k -> AAC 160k -> Progressive MP3 -> fallback)
+		const transcoding = 
+			candidates.find(t => t.preset === 'aac_256k') ||
+			candidates.find(t => t.preset === 'aac_160k') ||
+			candidates.find(t => t.format?.protocol === 'progressive') ||
+			candidates[0];
+
 		if (!transcoding || !transcoding.url) return null;
 
 		const streamRes = await fetch(`${transcoding.url}?client_id=${clientId}`, {
@@ -473,6 +484,31 @@ app.get("/api/audio", async (req, res) => {
 		} else {
 			return res.status(404).send("SoundCloud stream URL not found");
 		}
+	}
+
+	// Handle dynamic search query tracks
+	if (videoId.startsWith("QUERY:")) {
+		let query = videoId.replace(/^QUERY:/, "");
+		try { query = decodeURIComponent(query); } catch(e) {}
+		
+		try {
+			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "3", p: "1" });
+			if (searchData && searchData.results && searchData.results.length > 0) {
+				const formatted = formatSong(searchData.results[0], quality);
+				if (formatted.streamUrl) return res.redirect(302, formatted.streamUrl);
+			}
+		} catch (e) {}
+
+		try {
+			const scSongs = await searchSoundCloud(query, 3);
+			if (scSongs.length > 0) {
+				const scId = scSongs[0].videoId.replace(/^sc:/, "");
+				const scStreamUrl = await getSoundCloudStreamUrl(scId);
+				if (scStreamUrl) return res.redirect(302, scStreamUrl);
+			}
+		} catch (e) {}
+
+		return res.status(404).send("Audio stream for query not found");
 	}
 
 	try {
@@ -1445,7 +1481,7 @@ async function getYouTubePlaylistDetails(ytUrl) {
 			}
 		}
 
-		const cleaned = [...new Set(songsToSearch)].filter(s => 
+		const cleaned = songsToSearch.filter(s => 
 			s.length > 2 && 
 			!s.includes("Keyboard shortcuts") && 
 			!s.includes("Playback") &&
@@ -1458,6 +1494,63 @@ async function getYouTubePlaylistDetails(ytUrl) {
 		}
 	} catch (e) {
 		console.error("getYouTubePlaylistDetails error:", e);
+	}
+	return null;
+}
+
+async function getSoundCloudPlaylistDetails(scUrl) {
+	try {
+		const clientId = await getSoundCloudClientId();
+		if (!clientId) return null;
+
+		const resolveUrl = `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(scUrl)}&client_id=${clientId}`;
+		const res = await fetch(resolveUrl, {
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+		});
+
+		if (!res.ok) return null;
+		const data = await res.json();
+		if (data.kind !== 'playlist' && data.kind !== 'system-playlist') return null;
+
+		const title = data.title || "SoundCloud Playlist";
+		const author = data.user?.username || data.user?.full_name || "SoundCloud";
+		const rawArt = data.artwork_url || data.user?.avatar_url || "";
+		const thumbnail = rawArt ? rawArt.replace("-large", "-t500x500") : "/logo.svg";
+
+		const tracks = [];
+		const songsToSearch = [];
+
+		if (Array.isArray(data.tracks)) {
+			for (const t of data.tracks) {
+				const trackTitle = t.title;
+				const trackArtist = t.user?.username || t.user?.full_name || "SoundCloud Artist";
+				if (trackTitle) {
+					songsToSearch.push(`${trackTitle} ${trackArtist}`.trim());
+					if (t.id) {
+						const art = t.artwork_url || t.user?.avatar_url || rawArt || "";
+						const img = art ? art.replace("-large", "-t500x500") : thumbnail;
+						tracks.push({
+							videoId: `sc:${t.id}`,
+							title: cleanStr(trackTitle, "SoundCloud Track"),
+							artist: cleanStr(trackArtist, "SoundCloud Artist"),
+							thumbnail: getValidImage(img),
+							duration: Math.round((t.duration || 0) / 1000),
+							source: "soundcloud",
+							provider: "SoundCloud",
+							tag: "SoundCloud"
+						});
+					}
+				}
+			}
+		}
+
+		if (tracks.length > 0) {
+			return { source: 'soundcloud', title, author, thumbnail, tracks };
+		} else if (songsToSearch.length > 0) {
+			return { source: 'soundcloud', title, author, thumbnail, songsToSearch };
+		}
+	} catch (e) {
+		console.error("getSoundCloudPlaylistDetails error:", e);
 	}
 	return null;
 }
@@ -1534,6 +1627,14 @@ app.get("/api/import-playlist", async (req, res) => {
 					thumbnail: details.thumbnail,
 					songsToSearch: details.songsToSearch
 				});
+			}
+		}
+
+		// 4. SoundCloud Playlist Link
+		if (link.includes("soundcloud.com")) {
+			const details = await getSoundCloudPlaylistDetails(link);
+			if (details) {
+				return res.json(details);
 			}
 		}
 
