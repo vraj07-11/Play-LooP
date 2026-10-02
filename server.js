@@ -4,6 +4,10 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("node:crypto");
 const CryptoJS = require("crypto-js");
+const dns = require("node:dns");
+
+// Enforce IPv4 priority to prevent Windows IPv6 connection timeouts (UND_ERR_CONNECT_TIMEOUT)
+dns.setDefaultResultOrder("ipv4first");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -137,6 +141,127 @@ function formatSong(song, quality = "320") {
 	};
 }
 
+// --- SoundCloud Helper Functions ---
+let scClientIdCache = { id: null, fetchedAt: 0 };
+
+async function getSoundCloudClientId() {
+	const now = Date.now();
+	// Cache for 2 hours
+	if (scClientIdCache.id && (now - scClientIdCache.fetchedAt < 2 * 60 * 60 * 1000)) {
+		return scClientIdCache.id;
+	}
+
+	try {
+		const htmlRes = await fetch("https://soundcloud.com", {
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+		});
+		const html = await htmlRes.text();
+		
+		const scriptMatches = [...html.matchAll(/<script [^>]*src="([^"]+)"/g)];
+		const scriptUrls = scriptMatches.map(m => m[1]).filter(url => url.startsWith("http"));
+
+		for (const url of scriptUrls) {
+			const jsRes = await fetch(url, {
+				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+			});
+			const jsText = await jsRes.text();
+			const match = jsText.match(/client_id["']?[:=]["']?([a-zA-Z0-9]{32})/);
+			if (match && match[1]) {
+				scClientIdCache = { id: match[1], fetchedAt: now };
+				return match[1];
+			}
+		}
+	} catch (e) {
+		console.error("[SoundCloud] Error fetching client ID:", e);
+	}
+	return scClientIdCache.id || "dkevB9EsY4jIoSm8RfddPNUKyn6hurXF";
+}
+
+async function searchSoundCloud(query, limit = 8) {
+	try {
+		const clientId = await getSoundCloudClientId();
+		if (!clientId) return [];
+
+		const url = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${clientId}&limit=${limit}`;
+		const res = await fetch(url, {
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+		});
+		if (!res.ok) return [];
+		const data = await res.json();
+		const collection = data.collection || [];
+
+		return collection.map(track => {
+			const artwork = track.artwork_url || track.user?.avatar_url || "";
+			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/logo.svg";
+
+			return {
+				videoId: `sc:${track.id}`,
+				title: cleanStr(track.title, "SoundCloud Track"),
+				artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
+				thumbnail: getValidImage(highResArt),
+				duration: Math.round((track.duration || 0) / 1000),
+				source: "soundcloud",
+				provider: "SoundCloud",
+				tag: "SoundCloud"
+			};
+		});
+	} catch (err) {
+		console.error("[SoundCloud] Search error:", err);
+		return [];
+	}
+}
+
+async function getSoundCloudStreamUrl(scId) {
+	try {
+		const clientId = await getSoundCloudClientId();
+		if (!clientId) return null;
+
+		const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+		});
+		if (!trackRes.ok) return null;
+		const trackData = await trackRes.json();
+
+		const trans = trackData.media?.transcodings || [];
+		// Prefer progressive MP3 over HLS if available for direct player compatibility
+		const transcoding = trans.find(t => t.format?.protocol === 'progressive') || trans[0];
+		if (!transcoding || !transcoding.url) return null;
+
+		const streamRes = await fetch(`${transcoding.url}?client_id=${clientId}`, {
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+		});
+		if (!streamRes.ok) return null;
+		const streamData = await streamRes.json();
+		return streamData.url || null;
+	} catch (err) {
+		console.error("[SoundCloud] Stream resolve error:", err);
+		return null;
+	}
+}
+
+// --- Search Relevance Helper ---
+function computeRelevanceScore(song, queryLower) {
+	const title = (song.title || "").toLowerCase().trim();
+	const artist = (song.artist || "").toLowerCase().trim();
+	if (!queryLower) return 0;
+
+	if (title === queryLower) return 100;
+	if (title.startsWith(queryLower)) return 85;
+	
+	const queryWords = queryLower.split(/\s+/).filter(Boolean);
+	if (queryWords.length === 0) return 0;
+
+	let matchCount = 0;
+	for (const w of queryWords) {
+		if (title.includes(w)) matchCount++;
+	}
+	const matchRatio = matchCount / queryWords.length;
+	let score = Math.round(matchRatio * 75);
+
+	if (artist.includes(queryLower)) score += 15;
+	return score;
+}
+
 // --- API Endpoints ---
 
 app.get("/api/health", (req, res) => {
@@ -149,15 +274,17 @@ app.get("/api/search", async (req, res) => {
 
 	const type = String(req.query.type || "").toLowerCase();
 	const isMulti = type === "all" || req.query.multi === "true";
+	const queryLower = query.toLowerCase().trim();
 
 	try {
 		if (isMulti) {
-			const [songsRes, artistsRes, playlistsRes, albumsRes, autoRes] = await Promise.allSettled([
+			const [songsRes, artistsRes, playlistsRes, albumsRes, autoRes, scRes] = await Promise.allSettled([
 				fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" }),
 				fetchJioSaavn({ __call: "search.getArtistResults", q: query, n: "8", p: "1" }),
 				fetchJioSaavn({ __call: "search.getPlaylistResults", q: query, n: "6", p: "1" }),
 				fetchJioSaavn({ __call: "search.getAlbumResults", q: query, n: "6", p: "1" }),
-				fetchJioSaavn({ __call: "autocomplete.get", query: query })
+				fetchJioSaavn({ __call: "autocomplete.get", query: query }),
+				searchSoundCloud(query, 8)
 			]);
 
 			const songsData = songsRes.status === 'fulfilled' && songsRes.value?.results ? songsRes.value.results : [];
@@ -165,16 +292,37 @@ app.get("/api/search", async (req, res) => {
 			const playlistsData = playlistsRes.status === 'fulfilled' && playlistsRes.value?.results ? playlistsRes.value.results : [];
 			const albumsData = albumsRes.status === 'fulfilled' && albumsRes.value?.results ? albumsRes.value.results : [];
 			const autoData = autoRes.status === 'fulfilled' && autoRes.value ? autoRes.value : {};
+			const scSongs = scRes.status === 'fulfilled' && Array.isArray(scRes.value) ? scRes.value : [];
 
-			let songs = songsData.map(s => formatSong(s));
-			if (songs.length === 0 && autoData.songs?.data) {
-				songs = autoData.songs.data.map(s => ({
+			let saavnSongs = songsData.map(s => formatSong(s));
+			if (saavnSongs.length === 0 && autoData.songs?.data) {
+				saavnSongs = autoData.songs.data.map(s => ({
 					videoId: s.id,
 					title: cleanStr(s.title, "Unknown Track"),
 					artist: cleanStr(s.more_info?.primary_artists || s.description, "Play LooP"),
 					thumbnail: getValidImage(s.image),
 					duration: 180
 				}));
+			}
+
+			// Score and rank both sources by query relevance
+			const scoredSaavn = saavnSongs.map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+			const scoredSC = scSongs.map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+
+			// Interleave and merge based on highest relevance score
+			let songs = [];
+			let i = 0, j = 0;
+			while (i < scoredSaavn.length || j < scoredSC.length) {
+				const saavnItem = scoredSaavn[i];
+				const scItem = scoredSC[j];
+
+				if (scItem && (!saavnItem || scItem.score >= saavnItem.score)) {
+					songs.push(scItem);
+					j++;
+				} else if (saavnItem) {
+					songs.push(saavnItem);
+					i++;
+				}
 			}
 
 			let artists = artistsData.map(a => ({
@@ -238,9 +386,8 @@ app.get("/api/search", async (req, res) => {
 				playlists = [...autoPlaylists, ...autoAlbums];
 			}
 
-			// Determine Top Result (Songs given top priority)
+			// Determine Top Result (Song with highest match score given top priority)
 			let topResult = null;
-			const queryLower = query.toLowerCase().trim();
 			const exactArtistMatch = artists.length > 0 && artists[0].title.toLowerCase().trim() === queryLower;
 
 			if (exactArtistMatch) {
@@ -261,26 +408,47 @@ app.get("/api/search", async (req, res) => {
 			});
 		}
 
-		// Single song search fallback
-		const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" });
-		if (data && data.results && data.results.length > 0) {
-			const songs = data.results.map(s => formatSong(s));
-			return res.json(songs);
+		// Single song search fallback with relevance sorting
+		const [saavnData, scSongs] = await Promise.all([
+			fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" }).catch(() => null),
+			searchSoundCloud(query, 8)
+		]);
+
+		let saavnSongs = [];
+		if (saavnData && saavnData.results && saavnData.results.length > 0) {
+			saavnSongs = saavnData.results.map(s => formatSong(s));
+		} else {
+			const autoData = await fetchJioSaavn({ __call: "autocomplete.get", query: query }).catch(() => null);
+			if (autoData && autoData.songs?.data) {
+				saavnSongs = autoData.songs.data.map(s => ({
+					videoId: s.id,
+					title: (s.title || "").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+					artist: (s.more_info?.primary_artists || s.description || "Play LooP").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
+					thumbnail: getValidImage(s.image),
+					duration: 180
+				}));
+			}
 		}
 
-		const autoData = await fetchJioSaavn({ __call: "autocomplete.get", query: query });
-		if (autoData && autoData.songs?.data) {
-			const songs = autoData.songs.data.map(s => ({
-				videoId: s.id,
-				title: (s.title || "").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
-				artist: (s.more_info?.primary_artists || s.description || "Play LooP").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
-				thumbnail: getValidImage(s.image),
-				duration: 180
-			}));
-			return res.json(songs);
+		const scoredSaavn = saavnSongs.map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+		const scoredSC = (scSongs || []).map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+
+		let songs = [];
+		let i = 0, j = 0;
+		while (i < scoredSaavn.length || j < scoredSC.length) {
+			const saavnItem = scoredSaavn[i];
+			const scItem = scoredSC[j];
+
+			if (scItem && (!saavnItem || scItem.score >= saavnItem.score)) {
+				songs.push(scItem);
+				j++;
+			} else if (saavnItem) {
+				songs.push(saavnItem);
+				i++;
+			}
 		}
 
-		return res.json([]);
+		return res.json(songs);
 	} catch (error) {
 		console.error("Search endpoint error:", error);
 		res.status(500).json({ error: "Failed to fetch search results" });
@@ -295,6 +463,17 @@ app.get("/api/audio", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
 	const quality = String(req.query.quality || "320").trim();
 	if (!videoId) return res.status(400).send("Video ID is required");
+
+	// Handle SoundCloud tracks
+	if (videoId.startsWith("sc:")) {
+		const scId = videoId.replace(/^sc:/, "");
+		const scStreamUrl = await getSoundCloudStreamUrl(scId);
+		if (scStreamUrl) {
+			return res.redirect(302, scStreamUrl);
+		} else {
+			return res.status(404).send("SoundCloud stream URL not found");
+		}
+	}
 
 	try {
 		const data = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });

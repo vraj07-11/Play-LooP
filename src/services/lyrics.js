@@ -43,13 +43,14 @@ export function parseLRC(lrcText) {
 }
 
 /**
- * Clean up title string to improve LRCLIB matching precision
+ * Clean up title string to improve LRCLIB matching precision (especially for SoundCloud tracks)
  */
 function cleanSongTitle(title) {
   if (!title) return '';
   return title
-    .replace(/[\(\[\{].*?(official|lyric|video|audio|full song|hd|4k|remix|version).*?[\)\]\}]/gi, '')
+    .replace(/[\(\[\{].*?(official|lyric|video|audio|full song|hd|4k|remix|version|slowed|reverb|lofi|lo-fi|prod|edit).*?[\)\]\}]/gi, '')
     .replace(/ft\..*|feat\..*/gi, '')
+    .replace(/\s*-\s*.*$/i, '') // Handle "Song Title - Artist" format common on SoundCloud
     .trim();
 }
 
@@ -57,9 +58,9 @@ function cleanSongTitle(title) {
  * Clean up artist name
  */
 function cleanArtistName(artist) {
-  if (!artist || artist === 'Play LooP' || artist === 'Various Artists') return '';
+  if (!artist || artist === 'Play LooP' || artist === 'Various Artists' || artist === 'SoundCloud Artist') return '';
   return artist
-    .replace(/topic|official|channel|vevo/gi, '')
+    .replace(/topic|official|channel|vevo|🥀/gi, '')
     .trim();
 }
 
