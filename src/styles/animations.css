@@ -186,3 +186,39 @@
   pointer-events: none;
 }
 
+/* Mobile Tab Swipe & Navigation Slide Animations (Crisp & Smooth) */
+@keyframes mobileTabSlideInRight {
+  0% {
+    opacity: 0.7;
+    transform: translate3d(40px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mobileTabSlideInLeft {
+  0% {
+    opacity: 0.7;
+    transform: translate3d(-40px, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (max-width: 767px) {
+  .mobile-tab-slide-forward {
+    animation: mobileTabSlideInRight 0.32s cubic-bezier(0.25, 1, 0.5, 1) both;
+    will-change: transform, opacity;
+  }
+
+  .mobile-tab-slide-backward {
+    animation: mobileTabSlideInLeft 0.32s cubic-bezier(0.25, 1, 0.5, 1) both;
+    will-change: transform, opacity;
+  }
+}
+
+

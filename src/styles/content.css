@@ -2,6 +2,7 @@
   width: 100%;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 2rem;
   scrollbar-gutter: stable;
 }

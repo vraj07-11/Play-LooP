@@ -13,12 +13,15 @@ import SettingsPage from './pages/SettingsPage';
 import LanguageSelector from './components/LanguageSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import MobileBottomNav from './components/MobileBottomNav';
+import { useSwipeTabs } from './hooks/useSwipeTabs';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('home');
   const [homeKey, setHomeKey] = useState(0);
   const [languagesReady, setLanguagesReady] = useState(false);
+  const [transitionDirection, setTransitionDirection] = useState(null);
+  const contentRef = useRef(null);
 
   const isSidebarOpenRef = useRef(isSidebarOpen);
   useEffect(() => {
@@ -73,9 +76,18 @@ function App() {
     };
   }, []);
 
-  const handleSetCurrentView = (view) => {
+  const handleSetCurrentView = (view, explicitDirection = null) => {
     if (isSidebarOpen) {
       setIsSidebarOpen(false);
+    }
+
+    const prevIndex = getTabIndex ? getTabIndex(currentView) : 0;
+    const nextIndex = getTabIndex ? getTabIndex(view) : 0;
+    const dir = explicitDirection || (nextIndex > prevIndex ? 'forward' : nextIndex < prevIndex ? 'backward' : null);
+    setTransitionDirection(dir);
+
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
     }
 
     if (view === 'home') {
@@ -97,6 +109,13 @@ function App() {
     setCurrentView(view);
   };
 
+  const { getTabIndex, swipeHandlers } = useSwipeTabs({
+    currentView,
+    onNavigate: handleSetCurrentView,
+    isSidebarOpen,
+    enabled: languagesReady,
+  });
+
   const handleSetIsSidebarOpen = (openState) => {
     const nextState = typeof openState === 'function' ? openState(isSidebarOpen) : openState;
     setIsSidebarOpen(nextState);
@@ -115,24 +134,40 @@ function App() {
         <>
           <main className="relative flex min-h-0 flex-1 select-none">
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} />
-            <section className="app-content select-none" aria-live="polite">
-              <ErrorBoundary>
-                {(currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked') && (
-                  <Home key={homeKey} setCurrentView={handleSetCurrentView} />
-                )}
-                {currentView === 'library' && <LibraryPage setCurrentView={handleSetCurrentView} />}
-                {currentView === 'settings' && <SettingsPage setCurrentView={handleSetCurrentView} />}
-                {currentView === 'search' && <SearchPage />}
-                {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
-                {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
-                  <PlaceholderPage view={currentView} />
-                )}
-              </ErrorBoundary>
+            <section 
+              ref={contentRef}
+              className="app-content select-none touch-pan-y" 
+              aria-live="polite"
+              {...swipeHandlers}
+            >
+              <div 
+                key={currentView}
+                className={`w-full min-h-full ${
+                  transitionDirection === 'forward'
+                    ? 'mobile-tab-slide-forward'
+                    : transitionDirection === 'backward'
+                    ? 'mobile-tab-slide-backward'
+                    : ''
+                }`}
+              >
+                <ErrorBoundary>
+                  {(currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked') && (
+                    <Home key={homeKey} setCurrentView={handleSetCurrentView} />
+                  )}
+                  {currentView === 'library' && <LibraryPage setCurrentView={handleSetCurrentView} />}
+                  {currentView === 'settings' && <SettingsPage setCurrentView={handleSetCurrentView} />}
+                  {currentView === 'search' && <SearchPage />}
+                  {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
+                  {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                    <PlaceholderPage view={currentView} />
+                  )}
+                </ErrorBoundary>
+              </div>
             </section>
             <RightSidebar />
           </main>
           <Player />
-          <MobileBottomNav currentView={currentView} setCurrentView={handleSetCurrentView} />
+          <MobileBottomNav currentView={currentView} setCurrentView={handleSetCurrentView} swipeHandlers={swipeHandlers} />
         </>
       )}
     </div>
