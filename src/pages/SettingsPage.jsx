@@ -341,7 +341,7 @@ export default function SettingsPage({ setCurrentView }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-24">
+    <div className="max-w-[1200px] mx-auto space-y-6 sm:space-y-8 pb-24 px-4 sm:px-6 lg:px-8 mt-6">
       {/* Play LooP Page Header */}
       <div className="page-header">
         <h2>Settings</h2>
@@ -349,7 +349,7 @@ export default function SettingsPage({ setCurrentView }) {
       </div>
 
       {/* --- IMPORT PLAYLISTS CARD --- */}
-      <div id="import-section" className="p-6 bg-zinc-900/80 rounded-2xl border border-zinc-800 shadow-xl space-y-6">
+      <div id="import-section" className="page-card space-y-6">
         <div className="flex items-center gap-3">
           <img src="/logo.svg" alt="Play LooP Logo" className="w-8 h-8 shrink-0" />
           <div>
@@ -367,14 +367,14 @@ export default function SettingsPage({ setCurrentView }) {
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+        <div className="flex items-center gap-2 border-b border-zinc-800/80 pb-3">
           <button
             type="button"
             onClick={() => setActiveTab('link')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'link'
-                ? 'bg-emerald-500 text-black'
-                : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                ? 'bg-white text-black'
+                : 'bg-zinc-900 text-zinc-400 border border-zinc-700/80 hover:text-white hover:bg-zinc-800'
             }`}
           >
             <Link className="w-3.5 h-3.5" />
@@ -383,10 +383,10 @@ export default function SettingsPage({ setCurrentView }) {
           <button
             type="button"
             onClick={() => setActiveTab('file')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer ${
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'file'
-                ? 'bg-emerald-500 text-black'
-                : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                ? 'bg-white text-black'
+                : 'bg-zinc-900 text-zinc-400 border border-zinc-700/80 hover:text-white hover:bg-zinc-800'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -404,12 +404,12 @@ export default function SettingsPage({ setCurrentView }) {
                 value={playlistLink}
                 onChange={(e) => setPlaylistLink(e.target.value)}
                 placeholder="Paste Spotify, YT Music, SoundCloud, or JioSaavn link..."
-                className="flex-1 bg-black/60 border border-zinc-700/80 focus:border-zinc-400 focus:outline-none text-white placeholder-zinc-500 px-4 py-2.5 rounded-full text-sm transition"
+                className="flex-1 bg-black/50 border border-zinc-700/80 focus:border-zinc-400 focus:outline-none text-white placeholder-zinc-500 px-4 py-2.5 rounded-lg text-sm transition"
               />
               <button
                 type="submit"
                 disabled={isProcessing || !playlistLink.trim()}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded-full transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-lg transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
               >
                 {isProcessing ? (
                   <>
@@ -434,7 +434,7 @@ export default function SettingsPage({ setCurrentView }) {
         {/* TAB 2: File Importer */}
         {activeTab === 'file' && (
           <div className="space-y-4">
-            <label className="border border-dashed border-zinc-700 hover:border-emerald-400 bg-black/40 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition">
+            <label className="border border-dashed border-zinc-700 hover:border-zinc-500 bg-black/30 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition">
               <Upload className="w-8 h-8 text-zinc-400 mb-2" />
               <p className="text-sm font-medium text-white mb-1">Upload a playlist file</p>
               <p className="text-xs text-zinc-400">Select a .json or .csv file from your computer</p>
@@ -455,14 +455,14 @@ export default function SettingsPage({ setCurrentView }) {
 
         {/* Status / Progress Indicator */}
         {isProcessing && importProgress.total > 0 && (
-          <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 space-y-2">
+          <div className="p-4 bg-black/40 rounded-xl border border-zinc-800/80 space-y-2">
             <div className="flex justify-between text-xs text-zinc-300">
               <span>{importProgress.statusText}</span>
               <span>{Math.round((importProgress.current / importProgress.total) * 100)}%</span>
             </div>
             <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-emerald-400 h-full transition-all duration-300"
+                className="bg-white h-full transition-all duration-300"
                 style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
               />
             </div>
@@ -471,7 +471,7 @@ export default function SettingsPage({ setCurrentView }) {
 
         {/* Error Alert */}
         {importError && (
-          <div className="p-4 bg-zinc-950 border border-red-900/60 rounded-xl flex items-center gap-3 text-red-400 text-xs">
+          <div className="p-4 bg-red-950/20 border border-red-900/50 rounded-xl flex items-center gap-3 text-red-300 text-xs">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{importError}</span>
           </div>
@@ -479,7 +479,7 @@ export default function SettingsPage({ setCurrentView }) {
 
         {/* Preview & Save View */}
         {previewPlaylist && (
-          <div className="p-5 bg-zinc-950 rounded-xl border border-zinc-800 space-y-4">
+          <div className="p-5 bg-black/40 rounded-xl border border-zinc-800/80 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-3">
                 <img
@@ -497,7 +497,7 @@ export default function SettingsPage({ setCurrentView }) {
                 <button
                   type="button"
                   onClick={handleSaveImportedPlaylist}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs rounded-full transition shadow-md cursor-pointer self-start sm:self-auto"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-zinc-200 text-black font-semibold text-xs rounded-lg transition shadow-md cursor-pointer self-start sm:self-auto"
                 >
                   <Check className="w-4 h-4" />
                   <span>Save to Your Library</span>
@@ -513,7 +513,7 @@ export default function SettingsPage({ setCurrentView }) {
                       window.location.hash = '#/library';
                     }
                   }}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs rounded-full transition shadow-md cursor-pointer self-start sm:self-auto"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-zinc-200 text-black font-semibold text-xs rounded-lg transition shadow-md cursor-pointer self-start sm:self-auto"
                 >
                   <CheckCircle className="w-4 h-4" />
                   <span>Open Playlist Now</span>
@@ -522,14 +522,14 @@ export default function SettingsPage({ setCurrentView }) {
             </div>
 
             {saveSuccess && (
-              <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium">
-                <CheckCircle className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-2 text-zinc-200 text-xs font-medium">
+                <CheckCircle className="w-4 h-4 shrink-0 text-green-400" />
                 <span>Playlist imported and saved to Your Library!</span>
               </div>
             )}
 
             {previewPlaylist.unmatchedTracks && previewPlaylist.unmatchedTracks.length > 0 && (
-              <div className="p-3 bg-zinc-900/90 border border-zinc-800 rounded-lg text-xs space-y-2">
+              <div className="p-3 bg-zinc-900/70 border border-zinc-800 rounded-lg text-xs space-y-2">
                 <div className="flex items-center justify-between text-zinc-400">
                   <span>
                     Matched <strong className="text-white">{previewPlaylist.tracks.length}</strong> of <strong className="text-white">{previewPlaylist.totalExtracted || (previewPlaylist.tracks.length + previewPlaylist.unmatchedTracks.length)}</strong> tracks from link.
@@ -612,7 +612,7 @@ export default function SettingsPage({ setCurrentView }) {
           <select
             value={audioQuality}
             onChange={handleQualityChange}
-            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-500 cursor-pointer"
+            className="w-full bg-zinc-900/90 border border-zinc-700/80 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-zinc-500 cursor-pointer"
           >
             <option value="320">Extreme (320 kbps High Quality)</option>
             <option value="160">High (160 kbps Standard)</option>
