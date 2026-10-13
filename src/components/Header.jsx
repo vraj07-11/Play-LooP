@@ -221,17 +221,20 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
               <X className="w-7 h-7" />
             </button>
           </div>
-          <h1 className="header-title text-2xl font-bold">
-            <a 
-              className="brand-link" 
-              href="#home" 
-              onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}
-            >
-              <img className="brand-logo" src="/logo.svg" alt="Play LooP logo" />
-              LooP
-            </a>
-          </h1>
         </div>
+
+        <h1 className="header-title text-2xl font-bold">
+          <a 
+            className="brand-link" 
+            href="#home" 
+            aria-label="Play LooP"
+            onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}
+          >
+            <span>L</span>
+            <img className="brand-logo" src="/logo.svg" alt="" aria-hidden="true" />
+            <span>P</span>
+          </a>
+        </h1>
         
         <div className="header-actions flex items-center gap-3">
           <form 
