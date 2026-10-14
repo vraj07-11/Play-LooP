@@ -162,12 +162,15 @@
   }
 }
 
-.skeleton-shimmer-card {
+.skeleton-shimmer-card,
+.skeleton-shimmer {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
 }
 
-.skeleton-shimmer-card::after {
+.skeleton-shimmer-card::after,
+.skeleton-shimmer::after {
   position: absolute;
   top: 0;
   right: 0;
@@ -176,14 +179,16 @@
   transform: translateX(-100%);
   background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0) 0,
-    rgba(255, 255, 255, 0.05) 20%,
-    rgba(255, 255, 255, 0.12) 60%,
-    rgba(255, 255, 255, 0)
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.03) 75%,
+    rgba(255, 255, 255, 0) 100%
   );
-  animation: skeleton-shimmer 1.8s infinite;
+  animation: skeleton-shimmer 1.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   content: '';
   pointer-events: none;
+  z-index: 10;
 }
 
 /* Mobile Tab Swipe & Navigation Slide Animations (Crisp & Smooth) */

@@ -121,8 +121,23 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     };
   }, [refreshKey]);
 
+  const resetScrollToTop = useCallback(() => {
+    const appContent = document.querySelector('.app-content');
+    if (appContent) {
+      appContent.scrollTop = 0;
+    }
+    const mainSection = document.querySelector('section.app-content');
+    if (mainSection) {
+      mainSection.scrollTop = 0;
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
+  }, []);
+
   const handleOpenLikedSongs = useCallback(() => {
     try {
+      resetScrollToTop();
       const savedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
       const playlistDetails = {
         playlistId: 'liked_songs',
@@ -139,10 +154,25 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
       }
       setSelectedPlaylist(playlistDetails);
       setIsSaved(true);
+      resetScrollToTop();
     } catch (e) {
       console.error(e);
     }
-  }, []);
+  }, [resetScrollToTop]);
+
+  useEffect(() => {
+    if (selectedPlaylist || loadingPlaylistDetails) {
+      resetScrollToTop();
+      const rAF1 = requestAnimationFrame(() => {
+        resetScrollToTop();
+        const rAF2 = requestAnimationFrame(() => {
+          resetScrollToTop();
+        });
+        return () => cancelAnimationFrame(rAF2);
+      });
+      return () => cancelAnimationFrame(rAF1);
+    }
+  }, [selectedPlaylist?.playlistId, loadingPlaylistDetails, resetScrollToTop]);
 
   useEffect(() => {
     const handleHashChange = async () => {
@@ -151,18 +181,21 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
       
       if (match) {
         const id = match[1];
+        resetScrollToTop();
         if (id === 'liked_songs' || id === 'liked-songs') {
           handleOpenLikedSongs();
           return;
         }
         if (!selectedPlaylist || selectedPlaylist.playlistId !== id) {
           setLoadingPlaylistDetails(true);
+          resetScrollToTop();
           setPlaylistPage(1);
           setHasMorePlaylist(true);
           try {
             const details = await fetchPlaylistDetails(id, 1);
             if (details) {
               setSelectedPlaylist(details);
+              resetScrollToTop();
               if (details.playlistId && details.thumbnail) {
                 setPlaylistThumbnailMap(prev => ({
                   ...prev,
@@ -363,6 +396,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
   const handlePlaylistClick = async (playlist) => {
     if (!playlist || !playlist.playlistId) return;
+    resetScrollToTop();
     fetchPlaylistDetails(playlist.playlistId, 1).then(details => {
       if (details && details.thumbnail) {
         setPlaylistThumbnailMap(prev => ({
@@ -392,6 +426,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   }, [popularAlbumsPlaylists, visiblePopularCount, playlistThumbnailMap]);
 
   const handleBackToHome = () => {
+    setSelectedPlaylist(null);
+    resetScrollToTop();
     if (setCurrentView) {
       setCurrentView('home');
     } else {
@@ -423,32 +459,83 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   // If loading playlist details, render Playlist Skeleton View
   if (loadingPlaylistDetails) {
     return (
-      <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-4 select-none">
-        <div className="w-28 h-9 bg-zinc-900 rounded-full mb-8 animate-pulse" />
+      <div className="max-w-[1400px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
+        {/* Back Button Skeleton */}
+        <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-900/50 border border-zinc-800/60 rounded-full w-36 h-9 skeleton-shimmer-card">
+          <ArrowLeft className="w-4 h-4 text-zinc-600" />
+          <div className="w-20 h-3.5 bg-zinc-700/60 rounded" />
+        </div>
 
-        <div className="flex flex-col md:flex-row items-start md:items-end gap-6 sm:gap-8 mb-12">
-          <div className="w-44 h-44 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl bg-zinc-900 border border-zinc-800/80 shrink-0 skeleton-shimmer-card animate-pulse" />
-          <div className="flex flex-col min-w-0 w-full gap-3">
-            <div className="w-16 h-3.5 bg-zinc-800/60 rounded-md animate-pulse" />
-            <div className="w-3/4 max-w-lg h-9 sm:h-12 bg-zinc-800 rounded-lg animate-pulse" />
-            <div className="w-full max-w-md h-4 bg-zinc-800/50 rounded-md animate-pulse" />
-            <div className="flex items-center gap-4 mt-2">
-              <div className="w-28 sm:w-32 h-11 sm:h-12 rounded-full bg-zinc-800 animate-pulse" />
-              <div className="w-16 h-4 bg-zinc-800/50 rounded-md animate-pulse" />
+        {/* Playlist Header Skeleton */}
+        <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-6 md:gap-8 mb-8">
+          <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl mx-auto md:mx-0 bg-zinc-900 border border-white/10 shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] skeleton-shimmer-card" />
+          <div className="flex flex-col min-w-0 items-center md:items-start w-full">
+            <div className="w-20 h-3.5 bg-zinc-800/80 rounded-full mb-2" />
+            <div className="w-3/4 max-w-lg h-10 sm:h-14 md:h-16 bg-zinc-700/80 rounded-xl mb-3 skeleton-shimmer-card" />
+            <div className="w-full max-w-md h-4 bg-zinc-800/60 rounded mb-2" />
+            <div className="w-36 h-3.5 bg-zinc-800/40 rounded mb-6" />
+            <div className="flex items-center gap-4">
+              <div className="w-28 sm:w-32 h-11 sm:h-12 rounded-full bg-zinc-700/80 skeleton-shimmer-card" />
+              <div className="w-24 sm:w-28 h-11 sm:h-12 rounded-full bg-zinc-800/60 border border-zinc-700/60 skeleton-shimmer-card" />
             </div>
           </div>
         </div>
 
-        <div className="track-list">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="track-card bg-[#121212] border border-zinc-800/60 rounded-lg p-3 flex items-center gap-4 animate-pulse skeleton-shimmer-card">
-              <div className="w-6 h-4 bg-zinc-800/60 rounded" />
-              <div className="w-12 h-12 rounded bg-zinc-800/90 shrink-0" />
-              <div className="flex-1 flex flex-col gap-2 min-w-0">
-                <div className="w-1/2 h-4 bg-zinc-800/90 rounded" />
-                <div className="w-1/3 h-3 bg-zinc-800/50 rounded" />
+        {/* Desktop Table Header Skeleton */}
+        <div className="grid grid-cols-[36px_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-4 text-xs font-semibold text-zinc-500 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
+          <span className="text-center">#</span>
+          <span>Title</span>
+          <span>Artist</span>
+          <span>Album</span>
+          <span className="text-right pr-3">Duration</span>
+          <span></span>
+        </div>
+
+        {/* Track Rows Skeleton (matches exact grid on mobile and desktop) */}
+        <div className="flex flex-col gap-1">
+          {[...Array(8)].map((_, idx) => (
+            <div
+              key={idx}
+              className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[36px_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-lg border border-white/[0.02] bg-[#141416]/50 skeleton-shimmer-card"
+            >
+              {/* Index */}
+              <div className="w-8 flex justify-center">
+                <div className="w-4 h-3.5 bg-zinc-800/60 rounded" />
               </div>
-              <div className="w-12 h-4 bg-zinc-800/40 rounded hidden sm:block" />
+
+              {/* Title & Artwork */}
+              <div className="flex items-center gap-4 min-w-0 pr-4">
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded shrink-0 bg-zinc-800 border border-white/5" />
+                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                  <div className="w-40 sm:w-56 h-4 bg-zinc-700/80 rounded" />
+                  <div className="w-28 sm:w-36 h-3 bg-zinc-800/50 rounded md:hidden" />
+                </div>
+              </div>
+
+              {/* Desktop Artist */}
+              <div className="hidden md:flex min-w-0 pr-4">
+                <div className="w-28 h-3.5 bg-zinc-800/70 rounded" />
+              </div>
+
+              {/* Desktop Album */}
+              <div className="hidden md:flex min-w-0 pr-4">
+                <div className="w-24 h-3.5 bg-zinc-800/50 rounded" />
+              </div>
+
+              {/* Duration */}
+              <div className="hidden md:flex justify-end pr-3">
+                <div className="w-10 h-3.5 bg-zinc-800/50 rounded" />
+              </div>
+
+              {/* Desktop Action */}
+              <div className="hidden md:flex justify-center">
+                <div className="w-5 h-5 rounded-full bg-zinc-800/40" />
+              </div>
+
+              {/* Mobile Right Duration */}
+              <div className="flex md:hidden items-center justify-end">
+                <div className="w-10 h-3.5 bg-zinc-800/50 rounded" />
+              </div>
             </div>
           ))}
         </div>
@@ -756,74 +843,109 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
       )}
 
-      {/* Mobile-Only Redesigned Compact Hero Story Card */}
-      {!loadingPlaylists && featuredPlaylist && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
-        <div 
-          className="sm:hidden relative overflow-hidden rounded-2xl p-4 sm:p-5 mb-6 cursor-pointer bg-[#141416] hover:bg-[#18181c] border border-zinc-800/80 shadow-2xl group flex items-center justify-between gap-4"
-          onClick={() => handlePlaylistClick(featuredPlaylist)}
-        >
-          <div className="flex flex-col min-w-0 flex-1 justify-center z-10">
-            <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase mb-1.5 block">
-              Featured
-            </span>
-            <h2 className="text-lg font-black text-white tracking-tight leading-tight line-clamp-2 mb-1 drop-shadow">
-              {featuredPlaylist.title}
-            </h2>
-            <p className="text-[11px] text-zinc-400 line-clamp-1 mb-3.5 font-medium">
-              {featuredPlaylist.description || `${featuredPlaylist.count || '40'} tracks curated by Play LooP`}
-            </p>
-            <div className="flex items-center gap-2">
-              <button 
-                type="button"
-                className="px-4 py-2 bg-white text-black font-bold text-xs rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
-              >
-                <Play className="w-3.5 h-3.5 fill-current translate-x-[0.5px]" /> Play
-              </button>
-              <button 
-                type="button"
-                className={`px-3.5 py-2 font-bold text-xs rounded-full flex items-center gap-1.5 backdrop-blur-md active:scale-95 transition cursor-pointer ${
-                  isPlaylistSaved(featuredPlaylist.playlistId)
-                    ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
-                }`}
-                onClick={(e) => { e.stopPropagation(); handleToggleSave(featuredPlaylist); }}
-              >
-                {isPlaylistSaved(featuredPlaylist.playlistId) ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-400" /> Saved
-                  </>
-                ) : (
-                  <>+ Save</>
-                )}
-              </button>
+      {/* Mobile-Only Hero Story Card (Real or Skeleton) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        loadingPlaylists ? (
+          <div className="sm:hidden relative overflow-hidden rounded-2xl p-4 sm:p-5 mb-6 bg-[#141416] border border-zinc-800/80 shadow-2xl flex items-center justify-between gap-4 skeleton-shimmer-card">
+            <div className="flex flex-col min-w-0 flex-1 justify-center z-10">
+              <div className="w-16 h-3 bg-zinc-800/80 rounded-full mb-2" />
+              <div className="w-4/5 h-5 bg-zinc-700/80 rounded mb-1.5" />
+              <div className="w-3/5 h-3 bg-zinc-800/60 rounded mb-3.5" />
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-7 rounded-full bg-zinc-700/80" />
+                <div className="w-18 h-7 rounded-full bg-zinc-800/60 border border-white/10" />
+              </div>
             </div>
+            <div className="relative w-28 h-28 shrink-0 rounded-xl bg-zinc-800/80 border border-white/10" />
           </div>
+        ) : (
+          featuredPlaylist && (
+            <div 
+              className="sm:hidden relative overflow-hidden rounded-2xl p-4 sm:p-5 mb-6 cursor-pointer bg-[#141416] hover:bg-[#18181c] border border-zinc-800/80 shadow-2xl group flex items-center justify-between gap-4"
+              onClick={() => handlePlaylistClick(featuredPlaylist)}
+            >
+              <div className="flex flex-col min-w-0 flex-1 justify-center z-10">
+                <span className="text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase mb-1.5 block">
+                  Featured
+                </span>
+                <h2 className="text-lg font-black text-white tracking-tight leading-tight line-clamp-2 mb-1 drop-shadow">
+                  {featuredPlaylist.title}
+                </h2>
+                <p className="text-[11px] text-zinc-400 line-clamp-1 mb-3.5 font-medium">
+                  {featuredPlaylist.description || `${featuredPlaylist.count || '40'} tracks curated by Play LooP`}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    className="px-4 py-2 bg-white text-black font-bold text-xs rounded-full flex items-center gap-1.5 shadow-lg active:scale-95 transition cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); handlePlaylistClick(featuredPlaylist); }}
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current translate-x-[0.5px]" /> Play
+                  </button>
+                  <button 
+                    type="button"
+                    className={`px-3.5 py-2 font-bold text-xs rounded-full flex items-center gap-1.5 backdrop-blur-md active:scale-95 transition cursor-pointer ${
+                      isPlaylistSaved(featuredPlaylist.playlistId)
+                        ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
+                    }`}
+                    onClick={(e) => { e.stopPropagation(); handleToggleSave(featuredPlaylist); }}
+                  >
+                    {isPlaylistSaved(featuredPlaylist.playlistId) ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Saved
+                      </>
+                    ) : (
+                      <>+ Save</>
+                    )}
+                  </button>
+                </div>
+              </div>
 
-          {/* Clean Right Thumbnail Art */}
-          <div className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden shadow-2xl border border-white/10 z-10 group-hover:scale-105 transition-transform duration-500 bg-zinc-900">
-            <img 
-              src={featuredPlaylist.thumbnail} 
-              alt={featuredPlaylist.title}
-              className="w-full h-full object-cover"
-              onError={(e) => { e.target.src = '/logo.svg'; }}
-            />
-          </div>
-        </div>
+              {/* Clean Right Thumbnail Art */}
+              <div className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden shadow-2xl border border-white/10 z-10 group-hover:scale-105 transition-transform duration-500 bg-zinc-900">
+                <img 
+                  src={featuredPlaylist.thumbnail} 
+                  alt={featuredPlaylist.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.target.src = '/logo.svg'; }}
+                />
+              </div>
+            </div>
+          )
+        )
       )}
 
-      {/* Desktop Featured Section */}
-      {loadingPlaylists ? (
-        <div className="flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
-          <div className="xl:col-span-2 h-[320px] sm:h-[450px] bg-[#121212] rounded-2xl animate-pulse"></div>
-          <div className="grid grid-cols-2 xl:grid-cols-1 xl:grid-rows-4 gap-3 xl:gap-4 h-auto xl:h-[380px]">
-             {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-[#121212] rounded-xl animate-pulse min-h-[50px]"></div>
-             ))}
+      {/* Desktop Featured Section (Real or Skeleton) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        loadingPlaylists ? (
+          <div className="hidden sm:flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
+            {/* Hero Featured Playlist Skeleton */}
+            <div className="xl:col-span-2 relative h-[340px] sm:h-[450px] rounded-2xl bg-[#141416] border border-white/5 p-6 sm:p-8 md:p-10 flex flex-col justify-end overflow-hidden skeleton-shimmer-card">
+              <div className="w-28 h-3.5 bg-zinc-800/80 rounded mb-3" />
+              <div className="w-3/5 max-w-lg h-9 sm:h-12 bg-zinc-700/80 rounded-lg mb-3" />
+              <div className="w-4/5 max-w-md h-4 bg-zinc-800/70 rounded mb-2" />
+              <div className="w-1/2 max-w-sm h-4 bg-zinc-800/50 rounded mb-6 sm:mb-8" />
+              <div className="flex items-center gap-4">
+                <div className="w-32 h-11 sm:h-12 rounded-full bg-zinc-700/80" />
+                <div className="w-28 h-11 sm:h-12 rounded-full bg-zinc-800/60 border border-white/10" />
+              </div>
+            </div>
+
+            {/* Quick Access Desktop Skeleton */}
+            <div className="grid grid-cols-2 xl:flex xl:flex-col gap-3 xl:gap-4 xl:justify-between h-auto xl:h-[450px]">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex-1 bg-[#121212] rounded-xl p-3 xl:p-4 flex items-center gap-3 xl:gap-4 border border-white/5 skeleton-shimmer-card min-h-[70px] xl:min-h-[90px]">
+                  <div className="w-10 h-10 xl:w-14 xl:h-14 rounded-lg xl:rounded-xl bg-zinc-800/80 shrink-0" />
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <div className="w-24 h-3.5 xl:h-4 bg-zinc-700/80 rounded" />
+                    <div className="w-16 h-2.5 xl:h-3 bg-zinc-800/60 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : (
-        (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        ) : (
           <div className="hidden sm:flex flex-col xl:grid xl:grid-cols-3 gap-6 mb-12">
             {/* Hero Featured Playlist */}
             {featuredPlaylist && (
@@ -913,31 +1035,45 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         )
       )}
 
-      {/* Quick Access Grid Mobile (Sleek Compact 2-Column Spotify Rows) */}
-      {!loadingPlaylists && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
-        <div className="sm:hidden grid grid-cols-2 gap-2.5 mb-8">
-          {quickAccessItems.map((item, index) => (
-            <div 
-              key={index}
-              onClick={() => { 
-                if (item.action) {
-                  item.action();
-                } else if (item.path) {
-                  if (setCurrentView) setCurrentView(item.path.replace('#/', ''));
-                  window.location.hash = item.path;
-                }
-              }}
-              className="bg-[#161618] hover:bg-[#202024] active:bg-[#25252a] rounded-xl p-2 flex items-center gap-3 cursor-pointer transition border border-white/5 shadow-md group h-14"
-            >
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
-                {item.icon}
+      {/* Quick Access Grid Mobile (Real or Skeleton) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+        loadingPlaylists ? (
+          <div className="sm:hidden grid grid-cols-2 gap-2.5 mb-8">
+            {[...Array(4)].map((_, index) => (
+              <div 
+                key={index}
+                className="bg-[#161618] border border-white/5 rounded-xl p-2 flex items-center gap-3 h-14 skeleton-shimmer-card"
+              >
+                <div className="w-10 h-10 rounded-lg bg-zinc-800/80 shrink-0" />
+                <div className="w-20 h-3.5 bg-zinc-800/70 rounded" />
               </div>
-              <div className="flex flex-col min-w-0 flex-1 justify-center">
-                <h3 className="text-white font-bold text-xs truncate leading-tight">{item.title}</h3>
+            ))}
+          </div>
+        ) : (
+          <div className="sm:hidden grid grid-cols-2 gap-2.5 mb-8">
+            {quickAccessItems.map((item, index) => (
+              <div 
+                key={index}
+                onClick={() => { 
+                  if (item.action) {
+                    item.action();
+                  } else if (item.path) {
+                    if (setCurrentView) setCurrentView(item.path.replace('#/', ''));
+                    window.location.hash = item.path;
+                  }
+                }}
+                className="bg-[#161618] hover:bg-[#202024] active:bg-[#25252a] rounded-xl p-2 flex items-center gap-3 cursor-pointer transition border border-white/5 shadow-md group h-14"
+              >
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                  {item.icon}
+                </div>
+                <div className="flex flex-col min-w-0 flex-1 justify-center">
+                  <h3 className="text-white font-bold text-xs truncate leading-tight">{item.title}</h3>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )
       )}
 
       {/* Recently Played Row */}
@@ -954,12 +1090,13 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
       )}
 
-      {/* Made For You Row (Wide Cards) */}
-      {!loadingPlaylists && madeForYouPlaylists.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+      {/* Made For You Row (Wide Cards - Real or Skeleton) */}
+      {(loadingPlaylists || madeForYouPlaylists.length > 0) && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
         <div className="mb-10 sm:mb-12">
           <Carousel
             title="Made For You"
-            items={madeForYouPlaylists}
+            items={loadingPlaylists ? [] : madeForYouPlaylists}
+            isLoading={loadingPlaylists}
             onItemClick={handlePlaylistClick}
             renderSubtitle={(item) => item.author}
             keyExtractor={(item, index) => `${item.playlistId}-${index}`}
@@ -970,12 +1107,13 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
       )}
 
-      {/* Popular Artists Row */}
-      {popularArtists.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'artists') && (
+      {/* Popular Artists Row (Real or Skeleton) */}
+      {(popularArtists.length > 0 || loadingPlaylists) && (activeCategoryFilter === 'all' || activeCategoryFilter === 'artists') && (
         <div className="mb-10 sm:mb-12">
           <Carousel
             title="Popular Artists"
             items={popularArtists}
+            isLoading={popularArtists.length === 0}
             onItemClick={handlePlaylistClick}
             renderSubtitle={() => "Artist"}
             keyExtractor={(item, index) => `${item.playlistId}-${index}`}
@@ -986,67 +1124,95 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
       )}
 
-      {/* Popular Albums - Immersive Grid Redesign */}
-      {!loadingPlaylists && popularAlbumsPlaylists.length > 0 && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
+      {/* Popular Albums - Immersive Grid Redesign (Real or Skeleton) */}
+      {(loadingPlaylists || popularAlbumsPlaylists.length > 0) && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
         <div className="mb-14 sm:mb-16 mt-4 sm:mt-8">
           <div className="flex items-center justify-between mb-5 pl-0.5">
             <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Trending & Popular</h3>
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-5">
-            {popularAlbumsPlaylists.slice(0, visiblePopularCount).map((item, index) => {
-              const outerCover = playlistThumbnailMap[item.playlistId] || item.thumbnail;
-              return (
+            {loadingPlaylists ? (
+              [...Array(6)].map((_, index) => (
                 <div
-                  key={`${item.playlistId}-${index}`}
-                  onClick={() => handlePlaylistClick(item)}
-                  className="group flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] cursor-pointer transition-colors duration-300 border border-white/5"
+                  key={`skeleton-popular-${index}`}
+                  className="flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] border border-white/5"
                 >
-                  <div className="relative w-full aspect-square rounded-lg shadow-lg overflow-hidden mb-3 bg-black border border-white/5">
-                    <img
-                      src={(!outerCover || outerCover === '/logo.svg') ? '/default-cover.svg' : outerCover}
-                      alt={item.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      onError={(e) => {
-                        e.target.src = '/default-cover.svg';
-                      }}
-                      loading="lazy"
-                    />
-                    
-                    {/* Play Button Overlay */}
-                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
-                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1.5px]" />
+                  <div className="w-full aspect-square rounded-lg bg-zinc-800/90 border border-white/5 mb-3 overflow-hidden skeleton-shimmer-card shadow-lg" />
+                  <div className="w-3/4 h-3.5 sm:h-4 bg-zinc-700/80 rounded mb-1.5" />
+                  <div className="w-1/2 h-2.5 sm:h-3 bg-zinc-800/50 rounded" />
+                </div>
+              ))
+            ) : (
+              popularAlbumsPlaylists.slice(0, visiblePopularCount).map((item, index) => {
+                const outerCover = playlistThumbnailMap[item.playlistId] || item.thumbnail;
+                return (
+                  <div
+                    key={`${item.playlistId}-${index}`}
+                    onClick={() => handlePlaylistClick(item)}
+                    className="group flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] cursor-pointer transition-colors duration-300 border border-white/5"
+                  >
+                    <div className="relative w-full aspect-square rounded-lg shadow-lg overflow-hidden mb-3 bg-black border border-white/5">
+                      <img
+                        src={(!outerCover || outerCover === '/logo.svg') ? '/default-cover.svg' : outerCover}
+                        alt={item.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                          e.target.src = '/default-cover.svg';
+                        }}
+                        loading="lazy"
+                      />
+                      
+                      {/* Play Button Overlay */}
+                      <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
+                          <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1.5px]" />
+                        </div>
                       </div>
                     </div>
+
+                    <h4 className="font-bold text-white text-xs sm:text-[15px] truncate mb-1 tracking-tight">
+                      {item.title}
+                    </h4>
+                    <p className="font-medium text-zinc-400 text-[11px] sm:text-[13px] line-clamp-2 leading-snug">
+                      {item.author || item.artist || 'Collection'}
+                    </p>
                   </div>
+                );
+              })
+            )}
 
-                  <h4 className="font-bold text-white text-xs sm:text-[15px] truncate mb-1 tracking-tight">
-                    {item.title}
-                  </h4>
-                  <p className="font-medium text-zinc-400 text-[11px] sm:text-[13px] line-clamp-2 leading-snug">
-                    {item.author || item.artist || 'Collection'}
-                  </p>
+            {loadingMorePopularAlbums && (
+              [...Array(6)].map((_, index) => (
+                <div
+                  key={`skeleton-more-${index}`}
+                  className="flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] border border-white/5"
+                >
+                  <div className="w-full aspect-square rounded-lg bg-zinc-800/90 border border-white/5 mb-3 overflow-hidden skeleton-shimmer-card shadow-lg" />
+                  <div className="w-3/4 h-3.5 sm:h-4 bg-zinc-700/80 rounded mb-1.5" />
+                  <div className="w-1/2 h-2.5 sm:h-3 bg-zinc-800/50 rounded" />
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
 
-          <div className="mt-8 flex justify-center">
-            <button
-              type="button"
-              onClick={handleShowMorePopular}
-              disabled={loadingMorePopularAlbums}
-              className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
-            >
-              {loadingMorePopularAlbums ? (
-                <>
-                  <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
-                  Loading...
-                </>
-              ) : 'Show More'}
-            </button>
-          </div>
+          {!loadingPlaylists && (
+            <div className="mt-8 flex justify-center">
+              <button
+                type="button"
+                onClick={handleShowMorePopular}
+                disabled={loadingMorePopularAlbums}
+                className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+              >
+                {loadingMorePopularAlbums ? (
+                  <>
+                    <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
+                    Loading...
+                  </>
+                ) : 'Show More'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

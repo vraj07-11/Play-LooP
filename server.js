@@ -14,6 +14,160 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 
+function escapeHtml(str) {
+	if (!str) return '';
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+}
+
+const metaSongCache = new Map();
+
+async function getSongDetailsForMeta(trackId) {
+	if (!trackId) return null;
+	if (metaSongCache.has(trackId)) {
+		return metaSongCache.get(trackId);
+	}
+
+	try {
+		if (trackId.startsWith("sc:")) {
+			const scId = trackId.replace(/^sc:/, "");
+			const clientId = await getSoundCloudClientId();
+			if (clientId) {
+				const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
+					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+				});
+				if (trackRes.ok) {
+					const track = await trackRes.json();
+					const details = {
+						title: cleanStr(track.title, "SoundCloud Track"),
+						artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
+						cover: track.artwork_url || track.user?.avatar_url || null
+					};
+					metaSongCache.set(trackId, details);
+					return details;
+				}
+			}
+			return null;
+		}
+
+		const data = await fetchJioSaavn({ __call: "song.getDetails", pids: trackId });
+		let songData = data[trackId] || (data.songs && data.songs[0]);
+		if (songData) {
+			const formatted = formatSong(songData);
+			const details = {
+				title: formatted.title,
+				artist: formatted.artist,
+				cover: formatted.thumbnail
+			};
+			metaSongCache.set(trackId, details);
+			return details;
+		}
+	} catch (e) {
+		console.warn("[Meta] Could not fetch details for trackId:", trackId, e.message);
+	}
+	return null;
+}
+
+async function getHtmlWithMeta(req) {
+	const distIndex = path.join(__dirname, "dist", "index.html");
+	const htmlPath = fs.existsSync(distIndex) ? distIndex : path.join(__dirname, "index.html");
+	let html = fs.readFileSync(htmlPath, "utf8");
+
+	let trackId = req.query.track || req.query.v || req.query.id || (req.params && req.params.id);
+	let title = req.query.title ? decodeURIComponent(req.query.title) : null;
+	let artist = req.query.artist ? decodeURIComponent(req.query.artist) : null;
+	let cover = req.query.cover ? decodeURIComponent(req.query.cover) : null;
+
+	if (trackId && (!title || !artist || !cover)) {
+		const fetched = await getSongDetailsForMeta(trackId);
+		if (fetched) {
+			if (!title) title = fetched.title;
+			if (!artist) artist = fetched.artist;
+			if (!cover) cover = fetched.cover;
+		}
+	}
+
+	if (title || cover || trackId) {
+		const pageTitle = title ? (artist ? `${title} - ${artist} | Play LooP` : `${title} | Play LooP`) : "Play LooP";
+		const desc = title ? (artist ? `Listen to "${title}" by ${artist} on Play LooP.` : `Listen to "${title}" on Play LooP.`) : "Listen to music ad-free on Play LooP.";
+		
+		const host = (req.get && req.get("host")) || "play-loop.onrender.com";
+		const proto = req.protocol === "http" && host.includes("localhost") ? "http" : "https";
+		const sharePath = trackId ? `/track/${encodeURIComponent(trackId)}` : (req.originalUrl || req.url || "/");
+		const fullUrl = `${proto}://${host}${sharePath}`;
+
+		// Mask CDN: image URL points to our own /api/cover?id=... so no third-party CDN is revealed!
+		const img = trackId
+			? `${proto}://${host}/api/cover?id=${encodeURIComponent(trackId)}`
+			: `${proto}://${host}/favicon.svg`;
+
+		html = html
+			.replace(/<title>.*?<\/title>/gi, `<title>${escapeHtml(pageTitle)}</title>`)
+			.replace(/<meta property="og:title" content=".*?" \/>/gi, `<meta property="og:title" content="${escapeHtml(pageTitle)}" />`)
+			.replace(/<meta property="og:description" content=".*?" \/>/gi, `<meta property="og:description" content="${escapeHtml(desc)}" />`)
+			.replace(/<meta property="og:image" content=".*?" \/>/gi, `<meta property="og:image" content="${escapeHtml(img)}" />`)
+			.replace(/<meta property="og:image:secure_url" content=".*?" \/>/gi, `<meta property="og:image:secure_url" content="${escapeHtml(img)}" />`)
+			.replace(/<meta property="og:url" content=".*?" \/>/gi, `<meta property="og:url" content="${escapeHtml(fullUrl)}" />`)
+			.replace(/<meta name="twitter:title" content=".*?" \/>/gi, `<meta name="twitter:title" content="${escapeHtml(pageTitle)}" />`)
+			.replace(/<meta name="twitter:description" content=".*?" \/>/gi, `<meta name="twitter:description" content="${escapeHtml(desc)}" />`)
+			.replace(/<meta name="twitter:image" content=".*?" \/>/gi, `<meta name="twitter:image" content="${escapeHtml(img)}" />`);
+	}
+	return html;
+}
+
+// Masked Cover Proxy Endpoint: hides third-party CDN from all external crawlers & share cards
+app.get(["/api/cover", "/api/cover/:id"], async (req, res) => {
+	const trackId = String(req.query.id || (req.params && req.params.id) || "").trim();
+	if (!trackId) {
+		return res.redirect(302, "/favicon.svg");
+	}
+
+	try {
+		const meta = await getSongDetailsForMeta(trackId);
+		let targetImg = meta?.cover;
+
+		if (!targetImg || targetImg === "/logo.svg" || targetImg === "/default-cover.svg") {
+			return res.redirect(302, "/favicon.svg");
+		}
+
+		targetImg = targetImg.replace("150x150", "500x500").replace("50x50", "500x500");
+
+		const imgRes = await fetch(targetImg, {
+			headers: { "User-Agent": "Mozilla/5.0" }
+		});
+
+		if (!imgRes.ok) {
+			return res.redirect(302, "/favicon.svg");
+		}
+
+		const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+		res.setHeader("Content-Type", contentType);
+		res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+
+		const buffer = Buffer.from(await imgRes.arrayBuffer());
+		return res.send(buffer);
+	} catch (e) {
+		console.error("Cover proxy failed:", e);
+		return res.redirect(302, "/favicon.svg");
+	}
+});
+
+// Serve customized Open Graph tags for clean shared track links (/track/:id or /s/:id)
+app.get(["/", "/track/:id", "/s/:id"], async (req, res, next) => {
+	const trackId = req.query.track || req.query.v || req.query.id || (req.params && req.params.id);
+	if (trackId || req.query.title || req.query.cover) {
+		const html = await getHtmlWithMeta(req);
+		res.setHeader("Content-Type", "text/html; charset=utf-8");
+		res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+		return res.send(html);
+	}
+	next();
+});
+
 // Serve the Vite build if it exists (for Render deployment)
 if (fs.existsSync(path.join(__dirname, "dist"))) {
 	app.use(express.static(path.join(__dirname, "dist"), {
@@ -569,9 +723,157 @@ app.get("/api/audio", async (req, res) => {
 });
 
 app.get("/api/download", async (req, res) => {
-	const videoId = String(req.query.id || "").trim();
+	let videoId = String(req.query.id || "").trim();
 	if (!videoId) return res.status(400).send("Video ID is required");
 
+	// 1. Resolve QUERY: tracks
+	if (videoId.startsWith("QUERY:")) {
+		let query = videoId.replace(/^QUERY:/, "");
+		try { query = decodeURIComponent(query); } catch (e) {}
+
+		try {
+			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "3", p: "1" });
+			if (searchData && searchData.results && searchData.results.length > 0) {
+				videoId = searchData.results[0].id;
+			} else {
+				const scSongs = await searchSoundCloud(query, 3);
+				if (scSongs.length > 0) {
+					videoId = scSongs[0].videoId;
+				}
+			}
+		} catch (e) {}
+	}
+
+	// 2. Handle SoundCloud tracks (starts with sc:)
+	if (videoId.startsWith("sc:")) {
+		try {
+			const scId = videoId.replace(/^sc:/, "");
+			const clientId = await getSoundCloudClientId();
+			if (!clientId) return res.status(502).send("SoundCloud client ID not available");
+
+			const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
+				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+			});
+			if (!trackRes.ok) return res.status(404).send("SoundCloud track not found");
+			const trackData = await trackRes.json();
+
+			const title = cleanStr(trackData.title, "SoundCloud Track");
+			const artist = cleanStr(trackData.user?.username || trackData.user?.full_name, "SoundCloud Artist");
+			const cleanName = `${title.replace(/[^a-z0-9 ]/gi, '')} - ${artist.replace(/[^a-z0-9 ]/gi, '')}`.trim() || "SoundCloud Track";
+
+			const trans = trackData.media?.transcodings || [];
+			if (trans.length === 0) return res.status(404).send("No audio transcodings available");
+
+			// Prefer progressive MP3 stream if available
+			const prog = trans.find(t => t.format?.protocol === 'progressive');
+			if (prog && prog.url) {
+				const streamRes = await fetch(`${prog.url}?client_id=${clientId}`, {
+					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+				});
+				if (streamRes.ok) {
+					const streamData = await streamRes.json();
+					if (streamData.url) {
+						const https = require("node:https");
+						const http = require("node:http");
+						const client = streamData.url.startsWith("https") ? https : http;
+						res.setHeader("Content-Disposition", `attachment; filename="${cleanName}.mp3"`);
+						res.setHeader("Content-Type", "audio/mpeg");
+						return client.get(streamData.url, (proxyRes) => {
+							proxyRes.pipe(res);
+						}).on("error", (e) => {
+							console.error("SoundCloud progressive download proxy error:", e);
+							if (!res.headersSent) res.status(502).send("Download failed");
+						});
+					}
+				}
+			}
+
+			// Assemble HLS fMP4 / AAC segments
+			const hlsTrans = trans.find(t => t.preset === 'aac_160k' && t.format?.protocol === 'hls') ||
+			                 trans.find(t => t.format?.protocol === 'hls') ||
+			                 trans[0];
+
+			if (!hlsTrans || !hlsTrans.url) return res.status(404).send("Stream URL not found");
+
+			const streamRes = await fetch(`${hlsTrans.url}?client_id=${clientId}`, {
+				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+			});
+			if (!streamRes.ok) return res.status(404).send("Could not resolve SoundCloud stream");
+			const streamData = await streamRes.json();
+			const m3u8Url = streamData.url;
+			if (!m3u8Url) return res.status(404).send("SoundCloud playlist not found");
+
+			const m3u8Res = await fetch(m3u8Url);
+			if (!m3u8Res.ok) return res.status(404).send("Could not fetch playlist segments");
+			const m3u8Text = await m3u8Res.text();
+			const lines = m3u8Text.split("\n");
+
+			let initUrl = null;
+			const segmentUrls = [];
+
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (trimmed.startsWith("#EXT-X-MAP:URI=")) {
+					const match = trimmed.match(/URI="([^"]+)"/);
+					if (match) initUrl = match[1];
+				} else if (trimmed && !trimmed.startsWith("#")) {
+					segmentUrls.push(trimmed);
+				}
+			}
+
+			if (segmentUrls.length === 0) {
+				return res.status(404).send("No audio segments found in playlist");
+			}
+
+			const isMp4 = Boolean(initUrl) || (hlsTrans.format?.mime_type || '').includes('mp4');
+			const ext = isMp4 ? 'm4a' : 'mp3';
+			const mimeType = isMp4 ? 'audio/mp4' : 'audio/mpeg';
+
+			res.setHeader("Content-Disposition", `attachment; filename="${cleanName}.${ext}"`);
+			res.setHeader("Content-Type", mimeType);
+
+			if (initUrl) {
+				try {
+					const initRes = await fetch(initUrl);
+					if (initRes.ok) {
+						const initBuf = Buffer.from(await initRes.arrayBuffer());
+						res.write(initBuf);
+					}
+				} catch (initErr) {
+					console.error("Error fetching SoundCloud init segment:", initErr);
+				}
+			}
+
+			const BATCH_SIZE = 4;
+			for (let i = 0; i < segmentUrls.length; i += BATCH_SIZE) {
+				const batch = segmentUrls.slice(i, i + BATCH_SIZE);
+				const buffers = await Promise.all(
+					batch.map(async (url) => {
+						try {
+							const r = await fetch(url);
+							if (r.ok) return Buffer.from(await r.arrayBuffer());
+						} catch (e) {
+							console.error("Error fetching SoundCloud chunk:", e);
+						}
+						return null;
+					})
+				);
+				for (const buf of buffers) {
+					if (buf && buf.length > 0) {
+						res.write(buf);
+					}
+				}
+			}
+
+			return res.end();
+		} catch (scErr) {
+			console.error("[SoundCloud] Download failed:", scErr);
+			if (!res.headersSent) res.status(502).send("SoundCloud download failed");
+			return;
+		}
+	}
+
+	// 3. Handle JioSaavn tracks
 	try {
 		const data = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });
 		let songData = data[videoId] || (data.songs && data.songs[0]);
@@ -602,6 +904,53 @@ app.get("/api/download", async (req, res) => {
 	} catch (error) {
 		console.error("Download endpoint failed:", error);
 		res.status(502).send("Download failed");
+	}
+});
+
+app.get("/api/song", async (req, res) => {
+	const videoId = String(req.query.id || req.query.track || req.query.v || "").trim();
+	if (!videoId) return res.status(400).json({ error: "Track ID is required" });
+
+	if (videoId.startsWith("sc:")) {
+		try {
+			const scId = videoId.replace(/^sc:/, "");
+			const clientId = await getSoundCloudClientId();
+			if (!clientId) return res.status(502).json({ error: "SoundCloud client ID not available" });
+			const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
+				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+			});
+			if (!trackRes.ok) return res.status(404).json({ error: "SoundCloud track not found" });
+			const track = await trackRes.json();
+			const artwork = track.artwork_url || track.user?.avatar_url || "";
+			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/logo.svg";
+
+			return res.json({
+				videoId: `sc:${track.id}`,
+				title: cleanStr(track.title, "SoundCloud Track"),
+				artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
+				thumbnail: getValidImage(highResArt),
+				duration: Math.round((track.duration || 0) / 1000),
+				streamUrl: `/api/audio?id=sc:${track.id}`,
+				source: "soundcloud"
+			});
+		} catch (e) {
+			return res.status(500).json({ error: "Failed to fetch SoundCloud track details" });
+		}
+	}
+
+	try {
+		const data = await fetchJioSaavn({ __call: "song.getDetails", pids: videoId });
+		let songData = data[videoId] || (data.songs && data.songs[0]);
+
+		if (!songData) {
+			return res.status(404).json({ error: "Song not found" });
+		}
+
+		const formatted = formatSong(songData);
+		return res.json(formatted);
+	} catch (error) {
+		console.error("Song details fetch failed:", error);
+		return res.status(500).json({ error: "Failed to fetch song details" });
 	}
 });
 
@@ -1721,13 +2070,11 @@ app.get("/api/import-playlist", async (req, res) => {
 });
 
 // SPA fallback for client-side routing
-app.use((req, res) => {
-	const distIndex = path.join(__dirname, "dist", "index.html");
-	if (fs.existsSync(distIndex)) {
-		res.sendFile(distIndex);
-	} else {
-		res.sendFile(path.join(__dirname, "index.html"));
-	}
+app.use(async (req, res) => {
+	const html = await getHtmlWithMeta(req);
+	res.setHeader("Content-Type", "text/html; charset=utf-8");
+	res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+	return res.send(html);
 });
 
 const server = app.listen(port, "0.0.0.0", () => {

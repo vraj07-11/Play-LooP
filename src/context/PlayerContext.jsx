@@ -217,6 +217,21 @@ export function PlayerProvider({ children }) {
   const upcomingTrackRef = useRef(null);
   const shuffleCycleStartIndexRef = useRef(0);
 
+  const [playbackSpeed, setPlaybackSpeedState] = useState(1);
+  const playbackSpeedRef = useRef(1);
+
+  const setPlaybackSpeed = useCallback((speed) => {
+    playbackSpeedRef.current = speed;
+    setPlaybackSpeedState(speed);
+    if (nativeAudioPlayer.current) {
+      nativeAudioPlayer.current.playbackRate = speed;
+      nativeAudioPlayer.current.defaultPlaybackRate = speed;
+      if ('preservesPitch' in nativeAudioPlayer.current) {
+        nativeAudioPlayer.current.preservesPitch = true;
+      }
+    }
+  }, []);
+
   const setUpcoming = (track) => {
     upcomingTrackRef.current = track;
     setUpcomingTrack(track);
@@ -425,6 +440,7 @@ export function PlayerProvider({ children }) {
     console.log(`[Audio Engine] Playing track (${title}) via native audio stream...`);
     const targetUrl = getAudioUrl(videoId);
     nativeAudioPlayer.current.src = targetUrl;
+    nativeAudioPlayer.current.playbackRate = playbackSpeedRef.current;
     nativeAudioPlayer.current.play().then(() => {
       setIsPlaying(true);
       setPlayerStatus("Playing");
@@ -432,7 +448,21 @@ export function PlayerProvider({ children }) {
         navigator.mediaSession.playbackState = "playing";
       }
     }).catch(e => {
-      console.error("[Audio Engine] Play error:", e);
+      console.warn("[Audio Engine] Play error / Autoplay restricted:", e);
+      // If browser blocked autoplay before user interaction, unlock on first gesture
+      const resumeOnGesture = () => {
+        nativeAudioPlayer.current.play().then(() => {
+          setIsPlaying(true);
+          setPlayerStatus("Playing");
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = "playing";
+          }
+        }).catch(() => {});
+        window.removeEventListener('pointerdown', resumeOnGesture);
+        window.removeEventListener('keydown', resumeOnGesture);
+      };
+      window.addEventListener('pointerdown', resumeOnGesture, { once: true });
+      window.addEventListener('keydown', resumeOnGesture, { once: true });
     });
 
     markTrackSeen(trackObj);
@@ -1067,7 +1097,9 @@ export function PlayerProvider({ children }) {
     refreshUpNext,
     stableShuffledQueue,
     trackHistory,
-    shuffleCycleStartIndex: shuffleCycleStartIndexRef.current
+    shuffleCycleStartIndex: shuffleCycleStartIndexRef.current,
+    playbackSpeed,
+    setPlaybackSpeed
   };
 
   return (

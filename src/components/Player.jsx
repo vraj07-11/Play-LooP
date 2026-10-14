@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart } from 'lucide-react';
+import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart, Share2 } from 'lucide-react';
+import { shareTrack } from '../services/shareService';
 import FullPlayer from './FullPlayer';
 
 export default function Player() {
@@ -426,10 +427,19 @@ export default function Player() {
           </div>
         </div>
         
-        <div className="flex w-1/3 justify-end items-center pr-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex w-1/3 justify-end items-center gap-1 pr-2" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            className={`p-2 rounded-full transition-colors ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}
+            className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+            onClick={() => shareTrack(pendingTrack)}
+            aria-label="Share track"
+            title="Share track"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            className={`p-2 rounded-full transition-colors cursor-pointer ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}
             onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
             aria-label="Toggle right sidebar"
             title="Now Playing View"

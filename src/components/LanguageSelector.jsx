@@ -19,12 +19,30 @@ export default function LanguageSelector({ onComplete }) {
 
   useEffect(() => {
     const saved = localStorage.getItem('preferred_languages');
+    const searchParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash || '';
+    const pathname = window.location.pathname || '';
+    const hasSharedTrack = searchParams.get('track') || searchParams.get('v') || searchParams.get('id') || hash.includes('/track/') || pathname.startsWith('/track/') || pathname.startsWith('/s/');
+
     if (!saved) {
+      if (hasSharedTrack) {
+        // Deep-link from a shared song: Auto-select default languages so music plays immediately
+        const defaultLangs = ['english', 'hindi'];
+        try {
+          localStorage.setItem('preferred_languages', JSON.stringify(defaultLangs));
+        } catch (e) {}
+        onComplete(defaultLangs);
+        return;
+      }
       setIsVisible(true);
       // Auto-select English and Hindi by default just to guide them
       setSelected(['english', 'hindi']);
     } else {
-      onComplete(JSON.parse(saved));
+      try {
+        onComplete(JSON.parse(saved));
+      } catch (e) {
+        onComplete(['english', 'hindi']);
+      }
     }
   }, []);
 

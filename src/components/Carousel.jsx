@@ -10,6 +10,7 @@ export default function Carousel({
   keyExtractor, 
   cardType = 'square', 
   onEndReached,
+  isLoading = false,
   isLoadingMore = false 
 }) {
   const rowRef = useRef(null);
@@ -36,7 +37,54 @@ export default function Carousel({
     }
   };
 
-  if (!items || items.length === 0) return null;
+  const renderSkeletonCard = (type, index) => {
+    if (type === 'wide') {
+      return (
+        <div 
+          key={`loading-wide-${index}`} 
+          className="wide-card relative bg-[#141416] border border-white/5 overflow-hidden skeleton-shimmer-card flex-shrink-0"
+        >
+          <div className="wide-card-overlay flex items-end justify-between p-3 sm:p-4">
+            <div className="wide-card-info flex flex-col gap-1.5 min-w-0 flex-1">
+              <div className="h-4 sm:h-4.5 bg-zinc-700/80 rounded w-2/3" />
+              <div className="h-3 sm:h-3.5 bg-zinc-800/60 rounded w-1/3" />
+            </div>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-zinc-800/80 shrink-0 ml-2" />
+          </div>
+        </div>
+      );
+    }
+    if (type === 'circle') {
+      return (
+        <div 
+          key={`loading-circle-${index}`} 
+          className="flex-none w-[150px] md:w-[170px] flex flex-col items-center gap-3 p-2 relative"
+        >
+          <div className="w-full aspect-square rounded-full shadow-xl bg-zinc-800/90 border border-white/5 overflow-hidden skeleton-shimmer-card" />
+          <div className="w-full px-1 flex flex-col items-center gap-1.5">
+            <div className="h-4 bg-zinc-700/80 rounded w-3/4" />
+            <div className="h-3 bg-zinc-800/50 rounded w-1/2" />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div 
+        key={`loading-square-${index}`} 
+        className="square-card relative flex-shrink-0"
+      >
+        <div className="square-card-art-wrapper">
+          <div className="w-full aspect-square rounded-lg bg-zinc-800/90 border border-white/5 overflow-hidden skeleton-shimmer-card shadow-md" />
+        </div>
+        <div className="square-card-info flex flex-col gap-1.5">
+          <div className="h-4 bg-zinc-700/80 rounded w-5/6" />
+          <div className="h-3 bg-zinc-800/50 rounded w-3/5" />
+        </div>
+      </div>
+    );
+  };
+
+  if ((!items || items.length === 0) && !isLoading) return null;
 
   return (
     <div className="mb-8">
@@ -55,7 +103,7 @@ export default function Carousel({
         </button>
 
         <div ref={rowRef} className="horizontal-scroll-row" onScroll={handleScroll}>
-          {items.map((item, index) => {
+          {(items || []).map((item, index) => {
             if (cardType === 'wide') {
               return (
                 <div 
@@ -182,49 +230,12 @@ export default function Carousel({
             );
           })}
 
+          {isLoading && (!items || items.length === 0) && (
+            [...Array(6)].map((_, idx) => renderSkeletonCard(cardType, idx))
+          )}
+
           {isLoadingMore && (
-            <>
-              {[...Array(2)].map((_, idx) => (
-                cardType === 'wide' ? (
-                  <div 
-                    key={`loading-wide-${idx}`} 
-                    className="skeleton-shimmer-card shrink-0 w-[240px] sm:w-[320px] h-[120px] sm:h-[150px] rounded-lg bg-[#121212] border border-zinc-800/80 p-3 sm:p-4 flex flex-col justify-between relative overflow-hidden shadow-lg animate-pulse"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-md bg-zinc-800/80 shrink-0" />
-                      <div className="flex flex-col gap-2 flex-1 min-w-0">
-                        <div className="h-3.5 sm:h-4 bg-zinc-800/90 rounded-md w-3/4" />
-                        <div className="h-2.5 sm:h-3 bg-zinc-800/50 rounded-md w-1/2" />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-zinc-800/50">
-                      <div className="h-3 bg-zinc-800/60 rounded-md w-1/3" />
-                      <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-zinc-800/80" />
-                    </div>
-                  </div>
-                ) : cardType === 'circle' ? (
-                  <div 
-                    key={`loading-circle-${idx}`} 
-                    className="skeleton-shimmer-card shrink-0 w-[150px] md:w-[170px] flex flex-col items-center gap-3 p-2 relative animate-pulse"
-                  >
-                    <div className="w-full aspect-square bg-zinc-800/90 rounded-full shadow-md" />
-                    <div className="w-full px-1 flex flex-col items-center">
-                      <div className="h-4 bg-zinc-800/90 rounded-sm w-3/4 mb-1.5" />
-                      <div className="h-3 bg-zinc-800/50 rounded-sm w-1/2" />
-                    </div>
-                  </div>
-                ) : (
-                  <div 
-                    key={`loading-square-${idx}`} 
-                    className="skeleton-shimmer-card shrink-0 w-[130px] sm:w-[180px] flex flex-col relative animate-pulse"
-                  >
-                    <div className="w-full aspect-square bg-zinc-800/90 rounded-[8px] mb-3 shadow-md" />
-                    <div className="h-4 bg-zinc-800/90 rounded-sm w-5/6 mb-2" />
-                    <div className="h-3 bg-zinc-800/50 rounded-sm w-3/5" />
-                  </div>
-                )
-              ))}
-            </>
+            [...Array(2)].map((_, idx) => renderSkeletonCard(cardType, idx))
           )}
         </div>
 

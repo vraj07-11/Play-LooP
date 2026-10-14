@@ -14,10 +14,12 @@ import LanguageSelector from './components/LanguageSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import MobileBottomNav from './components/MobileBottomNav';
 import PullToRefresh from './components/PullToRefresh';
+import ShareModal from './components/ShareModal';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
 
 function App() {
+  const { selectAndPlayTrack } = usePlayer();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('home');
   const [visitedViews, setVisitedViews] = useState(() => new Set(['home']));
@@ -31,6 +33,7 @@ function App() {
   const [languagesReady, setLanguagesReady] = useState(false);
   const [transitionDirection, setTransitionDirection] = useState(null);
   const contentRef = useRef(null);
+  const handledDeepLinkRef = useRef(null);
 
   const isSidebarOpenRef = useRef(isSidebarOpen);
   useEffect(() => {
@@ -45,6 +48,77 @@ function App() {
       return next;
     });
   }, [currentView]);
+
+  useEffect(() => {
+    const handleDeepLink = async () => {
+      try {
+        const searchParams = new URLSearchParams(window.location.search);
+        let trackId = searchParams.get('track') || searchParams.get('v') || searchParams.get('id');
+        let title = searchParams.get('title') ? decodeURIComponent(searchParams.get('title')) : '';
+        let artist = searchParams.get('artist') ? decodeURIComponent(searchParams.get('artist')) : '';
+        let cover = searchParams.get('cover') ? decodeURIComponent(searchParams.get('cover')) : '';
+
+        const pathname = window.location.pathname || '';
+        const pathMatch = pathname.match(/^\/(?:track|s)\/([^/?#&]+)/);
+        if (pathMatch && pathMatch[1]) {
+          trackId = decodeURIComponent(pathMatch[1]);
+        }
+
+        const hash = window.location.hash || '';
+        const trackMatch = hash.match(/#\/track\/([^/?#&]+)/);
+        if (trackMatch && trackMatch[1]) {
+          trackId = trackMatch[1];
+        }
+        const searchMatch = hash.match(/[?&]v=([^/?#&]+)/);
+        if (!trackId && searchMatch && searchMatch[1]) {
+          trackId = searchMatch[1];
+        }
+
+        if (!trackId || handledDeepLinkRef.current === trackId) {
+          return;
+        }
+
+        handledDeepLinkRef.current = trackId;
+        setLanguagesReady(true);
+
+        if (title && cover) {
+          selectAndPlayTrack(trackId, title, artist || 'Unknown Artist', cover);
+        }
+
+        try {
+          const res = await fetch(`/api/song?id=${encodeURIComponent(trackId)}`);
+          if (res.ok) {
+            const song = await res.json();
+            if (song && song.videoId) {
+              if (!title || !cover) {
+                selectAndPlayTrack(
+                  song.videoId,
+                  song.title || title || 'Unknown Track',
+                  song.artist || artist || 'Unknown Artist',
+                  song.thumbnail || cover || '/logo.svg'
+                );
+              }
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('[DeepLink] Failed to fetch song details:', fetchErr);
+          if (!title) {
+            selectAndPlayTrack(trackId, 'Shared Track', 'Unknown Artist', '/logo.svg');
+          }
+        }
+      } catch (e) {
+        console.error('[DeepLink] Error handling deep link:', e);
+      }
+    };
+
+    handleDeepLink();
+    window.addEventListener('hashchange', handleDeepLink);
+    window.addEventListener('popstate', handleDeepLink);
+    return () => {
+      window.removeEventListener('hashchange', handleDeepLink);
+      window.removeEventListener('popstate', handleDeepLink);
+    };
+  }, [selectAndPlayTrack]);
 
   useEffect(() => {
     // Prevent refresh when app is focused via a deep link or launch_handler
@@ -63,8 +137,13 @@ function App() {
 
       if (hash.includes('playlist/liked_songs') || hash.includes('liked-songs') || hash.includes('liked_songs')) {
         setCurrentView('home');
+        if (contentRef.current) contentRef.current.scrollTop = 0;
       } else if (hash.includes('playlist/')) {
         setCurrentView('home');
+        if (contentRef.current) contentRef.current.scrollTop = 0;
+      } else if (hash.includes('track/')) {
+        setCurrentView('home');
+        if (contentRef.current) contentRef.current.scrollTop = 0;
       } else if (hash.includes('search')) {
         setCurrentView('search');
       } else if (hash.includes('library')) {
@@ -235,6 +314,7 @@ function App() {
           <MobileBottomNav currentView={currentView} setCurrentView={handleSetCurrentView} swipeHandlers={swipeHandlers} />
         </>
       )}
+      <ShareModal />
     </div>
   );
 }

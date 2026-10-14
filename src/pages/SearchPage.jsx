@@ -422,14 +422,15 @@ export default function SearchPage({ refreshKey = 0 }) {
                     );
                   })
                 ) : (
-                  [...Array(5)].map((_, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] border border-white/5 animate-pulse">
+                  [...Array(8)].map((_, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] border border-white/5 skeleton-shimmer-card">
                       <span className="w-5 text-center text-xs sm:text-sm text-zinc-600 font-bold shrink-0">{idx + 1}</span>
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-zinc-800 shrink-0" />
-                      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                        <div className="w-40 sm:w-48 h-4 sm:h-5 bg-zinc-800 rounded" />
-                        <div className="w-28 sm:w-32 h-3 sm:h-4 bg-zinc-800/60 rounded" />
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-zinc-800/90 border border-white/5 shrink-0" />
+                      <div className="flex-1 flex flex-col gap-1.5 min-w-0 pr-2">
+                        <div className="w-40 sm:w-52 h-4 sm:h-4.5 bg-zinc-700/80 rounded" />
+                        <div className="w-24 sm:w-32 h-3 sm:h-3.5 bg-zinc-800/60 rounded" />
                       </div>
+                      <div className="w-8 h-8 rounded-full bg-zinc-800/50 shrink-0 sm:hidden" />
                     </div>
                   ))
                 )}
@@ -500,14 +501,19 @@ export default function SearchPage({ refreshKey = 0 }) {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
-                  <div className="lg:col-span-3 rounded-2xl bg-zinc-900/60 border border-white/5 animate-pulse min-h-[280px] sm:min-h-[340px] lg:min-h-[380px]" />
+                  {/* Hero Trending Artist Skeleton */}
+                  <div className="lg:col-span-3 rounded-2xl bg-[#141416] border border-white/5 min-h-[280px] sm:min-h-[340px] lg:min-h-[380px] p-6 sm:p-8 flex flex-col justify-end skeleton-shimmer-card shadow-xl">
+                    <div className="w-28 h-5 bg-zinc-800/80 rounded-full mb-3" />
+                    <div className="w-3/4 max-w-sm h-10 sm:h-14 bg-zinc-700/80 rounded-xl" />
+                  </div>
+                  {/* Right 4 Artists Skeleton */}
                   <div className="lg:col-span-2 flex flex-col gap-3 sm:gap-4">
                     {[...Array(4)].map((_, idx) => (
-                      <div key={idx} className="flex-1 bg-zinc-900/60 border border-white/5 rounded-2xl p-3.5 sm:p-4 flex items-center gap-4 sm:gap-5 animate-pulse">
-                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-zinc-800 shrink-0" />
+                      <div key={idx} className="flex-1 bg-zinc-900/80 border border-white/5 rounded-2xl p-3.5 sm:p-4 flex items-center gap-4 sm:gap-5 skeleton-shimmer-card">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-zinc-800/90 border border-white/5 shrink-0" />
                         <div className="flex flex-col gap-2 flex-1 min-w-0">
-                          <div className="w-32 h-5 bg-zinc-800 rounded" />
-                          <div className="w-20 h-3 bg-zinc-800/60 rounded" />
+                          <div className="w-36 h-5 bg-zinc-700/80 rounded" />
+                          <div className="w-20 h-3.5 bg-zinc-800/60 rounded" />
                         </div>
                       </div>
                     ))}
@@ -523,39 +529,52 @@ export default function SearchPage({ refreshKey = 0 }) {
                 <h2 className="text-3xl font-bold text-white tracking-tight">Featured Albums</h2>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
-                {featuredAlbums.map((album, idx) => (
-                  <div 
-                    key={idx}
-                    onClick={() => handleCardClick(album)}
-                    className="group bg-zinc-900/60 hover:bg-zinc-800/80 border border-white/5 hover:border-white/10 rounded-2xl p-3.5 flex flex-col cursor-pointer transition-all duration-300 shadow-md hover:-translate-y-1"
-                  >
-                    <div className="relative w-full aspect-square rounded-xl overflow-hidden mb-3 shadow-lg bg-zinc-800 shrink-0">
-                      <img 
-                        src={album.thumbnail} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                        alt={album.title} 
-                      />
-                      <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-xl transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                          <Play className="w-5 h-5 text-black fill-current translate-x-0.5" />
+                {featuredAlbums.length > 0 ? (
+                  featuredAlbums.map((album, idx) => (
+                    <div 
+                      key={idx}
+                      onClick={() => handleCardClick(album)}
+                      className="group bg-zinc-900/60 hover:bg-zinc-800/80 border border-white/5 hover:border-white/10 rounded-2xl p-3.5 flex flex-col cursor-pointer transition-all duration-300 shadow-md hover:-translate-y-1"
+                    >
+                      <div className="relative w-full aspect-square rounded-xl overflow-hidden mb-3 shadow-lg bg-zinc-800 shrink-0">
+                        <img 
+                          src={album.thumbnail} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                          alt={album.title} 
+                        />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-xl transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                            <Play className="w-5 h-5 text-black fill-current translate-x-0.5" />
+                          </div>
                         </div>
+                        {idx === 0 && (
+                          <span className="absolute top-2 left-2 bg-rose-600/90 backdrop-blur-md text-white font-bold text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider shadow">
+                            Spotlight
+                          </span>
+                        )}
                       </div>
-                      {idx === 0 && (
-                        <span className="absolute top-2 left-2 bg-rose-600/90 backdrop-blur-md text-white font-bold text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider shadow">
-                          Spotlight
+                      <div className="flex flex-col flex-1 justify-between min-w-0">
+                        <h3 className="text-white font-bold text-base truncate group-hover:text-white transition-colors">
+                          {album.title.replace(' Mix', '')}
+                        </h3>
+                        <span className="text-xs text-zinc-400 font-medium tracking-wide mt-1 block">
+                          Album • Play LooP
                         </span>
-                      )}
+                      </div>
                     </div>
-                    <div className="flex flex-col flex-1 justify-between min-w-0">
-                      <h3 className="text-white font-bold text-base truncate group-hover:text-white transition-colors">
-                        {album.title.replace(' Mix', '')}
-                      </h3>
-                      <span className="text-xs text-zinc-400 font-medium tracking-wide mt-1 block">
-                        Album • Play LooP
-                      </span>
+                  ))
+                ) : (
+                  [...Array(5)].map((_, idx) => (
+                    <div 
+                      key={idx}
+                      className="bg-zinc-900/60 border border-white/5 rounded-2xl p-3.5 flex flex-col skeleton-shimmer-card"
+                    >
+                      <div className="w-full aspect-square rounded-xl bg-zinc-800/90 border border-white/5 mb-3" />
+                      <div className="w-3/4 h-4 bg-zinc-700/80 rounded mb-1.5" />
+                      <div className="w-1/2 h-3 bg-zinc-800/50 rounded" />
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className="mt-5 flex justify-center">
                 <button
@@ -656,17 +675,133 @@ export default function SearchPage({ refreshKey = 0 }) {
             </div>
             
             {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[...Array(8)].map((_, idx) => (
-                  <div key={idx} className="bg-[#121212] border border-white/5 rounded-xl p-4 flex items-center gap-4 animate-pulse">
-                    <div className="w-14 h-14 rounded-lg bg-zinc-800 shrink-0" />
-                    <div className="flex-1 flex flex-col gap-2 min-w-0">
-                      <div className="w-3/4 h-4 bg-zinc-800 rounded" />
-                      <div className="w-1/2 h-3 bg-zinc-800/60 rounded" />
+              activeSearchFilter === 'all' ? (
+                <div className="flex flex-col gap-10">
+                  {/* Top Result + Songs Grid Skeleton */}
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+                    {/* Top Result Skeleton */}
+                    <div className="lg:col-span-2 flex flex-col">
+                      <div className="w-28 h-6 bg-zinc-800/80 rounded mb-4" />
+                      <div className="bg-[#141416] border border-white/10 rounded-2xl p-6 flex flex-col justify-between min-h-[220px] shadow-2xl skeleton-shimmer-card">
+                        <div className="flex flex-col gap-4">
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-zinc-800/90 border border-white/5" />
+                          <div className="flex flex-col gap-2">
+                            <div className="w-4/5 h-7 sm:h-8 bg-zinc-700/80 rounded-lg" />
+                            <div className="w-1/2 h-4 bg-zinc-800/60 rounded" />
+                            <div className="w-20 h-5 bg-zinc-800/50 rounded-full mt-2" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Songs Skeleton */}
+                    <div className="lg:col-span-3 flex flex-col">
+                      <div className="w-20 h-6 bg-zinc-800/80 rounded mb-4" />
+                      <div className="flex flex-col gap-1.5">
+                        {[...Array(4)].map((_, idx) => (
+                          <div 
+                            key={idx}
+                            className="flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl bg-[#141416] border border-white/5 skeleton-shimmer-card"
+                          >
+                            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                              <span className="w-5 text-center text-xs font-bold text-zinc-600 shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="w-12 h-12 rounded-lg bg-zinc-800/90 border border-white/5 shrink-0" />
+                              <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                                <div className="w-3/4 max-w-[200px] h-4 bg-zinc-700/80 rounded" />
+                                <div className="w-1/2 max-w-[130px] h-3 bg-zinc-800/60 rounded" />
+                              </div>
+                            </div>
+                            <div className="w-10 h-3 bg-zinc-800/50 rounded hidden sm:block" />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Artists Row Skeleton */}
+                  <div>
+                    <div className="w-24 h-6 bg-zinc-800/80 rounded mb-4" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {[...Array(6)].map((_, idx) => (
+                        <div 
+                          key={idx}
+                          className="bg-[#141416] p-4 rounded-2xl flex flex-col items-center border border-white/5 skeleton-shimmer-card"
+                        >
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-zinc-800/90 border border-white/5 mb-3" />
+                          <div className="w-20 h-4 bg-zinc-700/80 rounded mb-1.5" />
+                          <div className="w-12 h-3 bg-zinc-800/50 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Playlists Row Skeleton */}
+                  <div>
+                    <div className="w-36 h-6 bg-zinc-800/80 rounded mb-4" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {[...Array(6)].map((_, idx) => (
+                        <div 
+                          key={idx}
+                          className="bg-[#141416] p-3.5 rounded-2xl flex flex-col border border-white/5 skeleton-shimmer-card"
+                        >
+                          <div className="w-full aspect-square rounded-xl bg-zinc-800/90 border border-white/5 mb-3" />
+                          <div className="w-3/4 h-3.5 bg-zinc-700/80 rounded mb-1.5" />
+                          <div className="w-1/2 h-2.5 bg-zinc-800/50 rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : activeSearchFilter === 'songs' ? (
+                <div className="flex flex-col gap-1.5">
+                  {[...Array(8)].map((_, idx) => (
+                    <div 
+                      key={idx}
+                      className="flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl bg-[#141416] border border-white/5 skeleton-shimmer-card"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                        <span className="w-5 text-center text-xs font-bold text-zinc-600 shrink-0">
+                          {idx + 1}
+                        </span>
+                        <div className="w-12 h-12 rounded-lg bg-zinc-800/90 border border-white/5 shrink-0" />
+                        <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                          <div className="w-3/4 max-w-[220px] h-4 bg-zinc-700/80 rounded" />
+                          <div className="w-1/2 max-w-[140px] h-3 bg-zinc-800/60 rounded" />
+                        </div>
+                      </div>
+                      <div className="w-10 h-3 bg-zinc-800/50 rounded hidden sm:block" />
+                    </div>
+                  ))}
+                </div>
+              ) : activeSearchFilter === 'artists' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {[...Array(12)].map((_, idx) => (
+                    <div 
+                      key={idx}
+                      className="bg-[#141416] p-4 rounded-2xl flex flex-col items-center border border-white/5 skeleton-shimmer-card"
+                    >
+                      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-zinc-800/90 border border-white/5 mb-3" />
+                      <div className="w-20 h-4 bg-zinc-700/80 rounded mb-1.5" />
+                      <div className="w-12 h-3 bg-zinc-800/50 rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  {[...Array(12)].map((_, idx) => (
+                    <div 
+                      key={idx}
+                      className="bg-[#141416] p-3.5 rounded-2xl flex flex-col border border-white/5 skeleton-shimmer-card"
+                    >
+                      <div className="w-full aspect-square rounded-xl bg-zinc-800/90 border border-white/5 mb-3" />
+                      <div className="w-3/4 h-3.5 bg-zinc-700/80 rounded mb-1.5" />
+                      <div className="w-1/2 h-2.5 bg-zinc-800/50 rounded" />
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (searchResults.songs.length === 0 && searchResults.artists.length === 0 && searchResults.playlists.length === 0) ? (
               <div className="text-center py-20">
                 <Search className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
