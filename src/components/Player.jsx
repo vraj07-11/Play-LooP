@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart, Share2 } from 'lucide-react';
 import { shareTrack } from '../services/shareService';
-import FullPlayer from './FullPlayer';
+
+const FullPlayer = lazy(() => import('./FullPlayer'));
 
 export default function Player() {
   const {
@@ -21,6 +22,7 @@ export default function Player() {
   } = usePlayer();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hasOpenedFullPlayer, setHasOpenedFullPlayer] = useState(false);
   const [isMobileQueueOpen, setIsMobileQueueOpen] = useState(false);
   const [initialShowLyrics, setInitialShowLyrics] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -131,6 +133,7 @@ export default function Player() {
   }, [isExpanded, pendingTrack]);
 
   const openFullPlayer = (showLyricsMode = false) => {
+    setHasOpenedFullPlayer(true);
     if (!isExpanded) {
       setInitialShowLyrics(showLyricsMode);
       const currentState = window.history.state || {};
@@ -681,31 +684,35 @@ export default function Player() {
         </div>
       </div>
 
-      {/* Fullscreen Expanded Player Modal */}
-      <FullPlayer 
-        isOpen={isExpanded}
-        onClose={closeFullPlayer}
-        initialShowLyrics={initialShowLyrics}
-        pendingTrack={pendingTrack}
-        isPlaying={isPlaying}
-        playPause={playPause}
-        currentTitle={currentTitle}
-        playerStatus={playerStatus}
-        progress={progress}
-        currentTime={currentTime}
-        duration={duration}
-        playNextTrack={playNextTrack}
-        playPreviousTrack={playPreviousTrack}
-        seekBy={seekBy}
-        seekToPercent={seekToPercent}
-        isRepeatEnabled={isRepeatEnabled}
-        setIsRepeatEnabled={setIsRepeatEnabled}
-        isShuffleEnabled={isShuffleEnabled}
-        setIsShuffleEnabled={setIsShuffleEnabled}
-        hasPrevious={hasPrevious}
-        hasNext={hasNext}
-        formatTime={formatTime}
-      />
+      {/* Fullscreen Expanded Player Modal (Deferred on initial load) */}
+      {(isExpanded || hasOpenedFullPlayer) && (
+        <Suspense fallback={null}>
+          <FullPlayer 
+            isOpen={isExpanded}
+            onClose={closeFullPlayer}
+            initialShowLyrics={initialShowLyrics}
+            pendingTrack={pendingTrack}
+            isPlaying={isPlaying}
+            playPause={playPause}
+            currentTitle={currentTitle}
+            playerStatus={playerStatus}
+            progress={progress}
+            currentTime={currentTime}
+            duration={duration}
+            playNextTrack={playNextTrack}
+            playPreviousTrack={playPreviousTrack}
+            seekBy={seekBy}
+            seekToPercent={seekToPercent}
+            isRepeatEnabled={isRepeatEnabled}
+            setIsRepeatEnabled={setIsRepeatEnabled}
+            isShuffleEnabled={isShuffleEnabled}
+            setIsShuffleEnabled={setIsShuffleEnabled}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
+            formatTime={formatTime}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

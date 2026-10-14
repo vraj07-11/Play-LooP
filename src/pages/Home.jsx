@@ -947,6 +947,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   src={featuredPlaylist.thumbnail} 
                   alt={featuredPlaylist.title}
                   className="w-full h-full object-cover"
+                  fetchPriority="high"
+                  decoding="async"
                   onError={(e) => { e.target.src = '/logo.svg'; }}
                 />
               </div>
@@ -996,6 +998,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   src={featuredPlaylist.thumbnail} 
                   alt={featuredPlaylist.title}
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  fetchPriority="high"
+                  decoding="async"
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/60 to-transparent"></div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-transparent to-transparent"></div>

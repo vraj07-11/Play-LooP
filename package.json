@@ -2,7 +2,7 @@
   "name": "Play-LooP",
   "version": "1.0.0",
   "description": "",
-  "main": "legacy/pages.js",
+  "main": "server.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -23,14 +23,17 @@
   "homepage": "https://github.com/vraj07-11/Play-LooP#readme",
   "dependencies": {
     "@vitejs/plugin-react": "^6.1.1",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "crypto-js": "^4.2.0",
     "express": "^5.2.1",
     "lucide-react": "^1.47.0",
-    "pdfkit": "^0.20.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "vite": "^8.3.0",
-    "ytmusic-api": "^5.3.1"
+    "vite": "^8.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   }
 }

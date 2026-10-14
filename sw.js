@@ -1,13 +1,7 @@
-const CACHE_NAME = 'play-loop-v4';
+const CACHE_NAME = 'play-loop-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/style.css',
-  '/legacy/pages.js',
-  '/legacy/ui.js',
-  '/legacy/pwa.js',
-  '/legacy/player.js',
-  '/legacy/search.js',
   '/manifest.json',
   '/logo.svg',
   '/favicon.svg',

@@ -2,6 +2,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const crypto = require("node:crypto");
 const CryptoJS = require("crypto-js");
 const dns = require("node:dns");
@@ -13,6 +14,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
+app.use(compression());
 
 function escapeHtml(str) {
 	if (!str) return '';
@@ -168,13 +170,25 @@ app.get(["/", "/track/:id", "/s/:id"], async (req, res, next) => {
 	next();
 });
 
+app.get("/sw.js", (req, res) => {
+	const swDist = path.join(__dirname, "dist", "sw.js");
+	const swPath = fs.existsSync(swDist) ? swDist : path.join(__dirname, "sw.js");
+	res.setHeader("Content-Type", "application/javascript");
+	res.setHeader("Cache-Control", "no-cache");
+	return res.sendFile(swPath);
+});
+
 // Serve the Vite build if it exists (for Render deployment)
 if (fs.existsSync(path.join(__dirname, "dist"))) {
 	app.use(express.static(path.join(__dirname, "dist"), {
-		etag: false,
-		maxAge: 0,
-		setHeaders: (res) => {
-			res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+		etag: true,
+		maxAge: "1d",
+		setHeaders: (res, filePath) => {
+			if (filePath.endsWith("index.html")) {
+				res.setHeader("Cache-Control", "no-cache");
+			} else if (filePath.includes("/assets/")) {
+				res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+			}
 		}
 	}));
 } else {
@@ -977,84 +991,6 @@ if (fs.existsSync(path.join(__dirname, ".env"))) {
 // In-Memory Recommendation Cache (24-Hour TTL)
 const recoCache = new Map();
 const RECO_CACHE_TTL = 24 * 60 * 60 * 1000;
-
-const YTMusic = require("ytmusic-api");
-const ytmusic = new (YTMusic.default || YTMusic)();
-let ytmusicInitialized = false;
-
-async function initYTMusic() {
-	if (!ytmusicInitialized) {
-		await ytmusic.initialize();
-		ytmusicInitialized = true;
-	}
-}
-
-async function fetchYTMusicUpNext(artist, title) {
-	try {
-		await initYTMusic();
-		const query = `${title} ${artist}`.trim();
-		const search = await ytmusic.search(query, "SONG");
-		if (search && search.length > 0 && search[0].videoId) {
-			const upNext = await ytmusic.getUpNexts(search[0].videoId);
-			if (upNext && upNext.length > 0) {
-				return upNext.map(track => ({
-					title: track.title || track.name,
-					artist: typeof track.artists === 'string' ? track.artists : (Array.isArray(track.artists) ? track.artists.map(a => a.name).join(", ") : track.artist || "")
-				})).filter(t => t.title && !(t.title.toLowerCase() === title.toLowerCase() && t.artist.toLowerCase().includes(artist.toLowerCase().split(',')[0])));
-			}
-		}
-	} catch (e) {
-		console.warn("[YTMusic] Recommendation fetch warning:", e.message);
-	}
-	return [];
-}
-
-async function resolveExternalTracksToSaavn(trackList, limit = 10) {
-	if (!Array.isArray(trackList) || trackList.length === 0) return [];
-
-	const candidates = trackList.slice(0, limit);
-	const resolvedPromises = candidates.map(async (item) => {
-		try {
-			// Clean up titles (e.g. remove "(feat. Artist)") which confuse JioSaavn search
-			const cleanTitle = item.title.replace(/\(feat\..*?\)/i, '').replace(/\[.*?\]/g, '').trim();
-			const query = `${cleanTitle} ${item.artist}`.trim();
-			const searchData = await fetchJioSaavn({ __call: "search.getResults", q: query, n: "5", p: "1" });
-			
-			if (searchData && searchData.results && searchData.results.length > 0) {
-				const ytArtist = item.artist.toLowerCase();
-				const ytWords = ytArtist.split(/[\s,]+/).filter(w => w.length > 2);
-				
-				// Try to find a result where the artist matches reasonably well
-				for (const res of searchData.results) {
-					const formatted = formatSong(res);
-					const saavnArtist = formatted.artist.toLowerCase();
-					
-					// If YT artist is short, just check if it's included. Otherwise check word by word.
-					let hasMatch = false;
-					if (ytWords.length === 0) {
-						hasMatch = saavnArtist.includes(ytArtist);
-					} else {
-						hasMatch = ytWords.some(w => saavnArtist.includes(w));
-					}
-					
-					// Also accept if the title is an exact match as a fallback
-					const titleMatch = formatted.title.toLowerCase() === item.title.toLowerCase();
-
-					if (hasMatch || titleMatch) {
-						return formatted;
-					}
-				}
-				// If no strict match found among top 5, we skip it to prevent random Hindi songs
-			}
-		} catch (e) {
-			// Ignore resolution errors
-		}
-		return null;
-	});
-
-	const results = await Promise.all(resolvedPromises);
-	return results.filter(Boolean);
-}
 
 app.get("/api/recommendations", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();

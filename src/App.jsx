@@ -1,22 +1,23 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { usePlayer } from './context/PlayerContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import RightSidebar from './components/RightSidebar';
 import Player from './components/Player';
 import Home from './pages/Home';
-import SearchPage from './pages/SearchPage';
-import DownloadPage from './pages/DownloadPage';
-import PlaceholderPage from './pages/PlaceholderPage';
-import LibraryPage from './pages/LibraryPage';
-import SettingsPage from './pages/SettingsPage';
 import LanguageSelector from './components/LanguageSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import MobileBottomNav from './components/MobileBottomNav';
 import PullToRefresh from './components/PullToRefresh';
-import ShareModal from './components/ShareModal';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+
+const SearchPage = lazy(() => import('./pages/SearchPage'));
+const LibraryPage = lazy(() => import('./pages/LibraryPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const DownloadPage = lazy(() => import('./pages/DownloadPage'));
+const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
+const ShareModal = lazy(() => import('./components/ShareModal'));
 
 function App() {
   const { selectAndPlayTrack } = usePlayer();
@@ -278,33 +279,35 @@ function App() {
                     <Home setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.home} />
                   </div>
 
-                  {visitedViews.has('search') && (
-                    <div className={`w-full min-h-full ${currentView === 'search' ? `block ${slideClass}` : 'hidden'}`}>
-                      <SearchPage refreshKey={pageRefreshKeys.search} />
-                    </div>
-                  )}
+                  <Suspense fallback={<div className="w-full min-h-full" />}>
+                    {visitedViews.has('search') && (
+                      <div className={`w-full min-h-full ${currentView === 'search' ? `block ${slideClass}` : 'hidden'}`}>
+                        <SearchPage refreshKey={pageRefreshKeys.search} />
+                      </div>
+                    )}
 
-                  {visitedViews.has('library') && (
-                    <div className={`w-full min-h-full ${currentView === 'library' ? `block ${slideClass}` : 'hidden'}`}>
-                      <LibraryPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.library} />
-                    </div>
-                  )}
+                    {visitedViews.has('library') && (
+                      <div className={`w-full min-h-full ${currentView === 'library' ? `block ${slideClass}` : 'hidden'}`}>
+                        <LibraryPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.library} />
+                      </div>
+                    )}
 
-                  {visitedViews.has('settings') && (
-                    <div className={`w-full min-h-full ${currentView === 'settings' ? `block ${slideClass}` : 'hidden'}`}>
-                      <SettingsPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.settings} />
-                    </div>
-                  )}
+                    {visitedViews.has('settings') && (
+                      <div className={`w-full min-h-full ${currentView === 'settings' ? `block ${slideClass}` : 'hidden'}`}>
+                        <SettingsPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.settings} />
+                      </div>
+                    )}
 
-                  {(visitedViews.has('download') || visitedViews.has('Download')) && (
-                    <div className={`w-full min-h-full ${currentView === 'download' || currentView === 'Download' ? `block ${slideClass}` : 'hidden'}`}>
-                      <DownloadPage />
-                    </div>
-                  )}
+                    {(visitedViews.has('download') || visitedViews.has('Download')) && (
+                      <div className={`w-full min-h-full ${currentView === 'download' || currentView === 'Download' ? `block ${slideClass}` : 'hidden'}`}>
+                        <DownloadPage />
+                      </div>
+                    )}
 
-                  {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
-                    <PlaceholderPage view={currentView} />
-                  )}
+                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                      <PlaceholderPage view={currentView} />
+                    )}
+                  </Suspense>
                 </ErrorBoundary>
               </div>
             </section>
@@ -314,7 +317,9 @@ function App() {
           <MobileBottomNav currentView={currentView} setCurrentView={handleSetCurrentView} swipeHandlers={swipeHandlers} />
         </>
       )}
-      <ShareModal />
+      <Suspense fallback={null}>
+        <ShareModal />
+      </Suspense>
     </div>
   );
 }
