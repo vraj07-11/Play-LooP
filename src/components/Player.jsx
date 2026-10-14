@@ -308,12 +308,11 @@ export default function Player() {
         >
           <div className="relative shrink-0">
             <img 
-              src={pendingTrack?.thumbnail || '/logo.svg'} 
+              src={(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail} 
               alt="Track thumbnail" 
-              className={`w-14 h-14 rounded-md ${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? 'object-contain p-2 bg-black border border-zinc-900' : 'object-cover'}`}
+              className="w-14 h-14 rounded-md object-cover bg-black border border-white/5 shrink-0"
               onError={(e) => {
-                e.target.src = '/logo.svg';
-                e.target.className = 'w-14 h-14 rounded-md shrink-0 object-contain p-2 bg-black border border-zinc-900';
+                e.target.src = '/default-cover.svg';
               }}
             />
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md flex items-center justify-center">
@@ -462,12 +461,11 @@ export default function Player() {
           style={{ transform: `translateX(${swipeOffset}px)` }}
         >
           <img 
-            src={pendingTrack?.thumbnail || '/logo.svg'} 
+            src={(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail} 
             alt="Track thumbnail" 
-            className={`w-12 h-12 rounded-lg shrink-0 ${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-black border border-zinc-800' : 'object-cover shadow-sm'}`}
+            className="w-12 h-12 rounded-lg shrink-0 object-cover shadow-sm bg-black border border-white/5"
             onError={(e) => {
-              e.target.src = '/logo.svg';
-              e.target.className = 'w-12 h-12 rounded-lg shrink-0 object-contain p-1.5 bg-black border border-zinc-800';
+              e.target.src = '/default-cover.svg';
             }}
           />
           <div className="flex flex-col min-w-0 flex-1 justify-center">
@@ -557,19 +555,19 @@ export default function Player() {
               {/* Large Artwork */}
               <div className="relative w-40 h-40 sm:w-48 sm:h-48 rounded-xl shadow-2xl shrink-0 overflow-hidden ring-1 ring-white/10 group">
                 <img 
-                  src={pendingTrack?.thumbnail || '/logo.svg'} 
+                  src={(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail} 
                   alt="Current" 
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 bg-black"
                   onError={(e) => {
-                    e.target.src = '/logo.svg';
+                    e.target.src = '/default-cover.svg';
                   }}
                 />
               </div>
 
               {/* Details & Main Controls */}
               <div className="flex flex-col items-center w-full min-w-0 justify-center text-center">
-                <span className="text-xl sm:text-2xl font-bold text-white truncate drop-shadow-sm mb-1 w-full px-4">{currentTitle}</span>
-                <span className="text-sm sm:text-base text-white/60 truncate mb-6 font-medium w-full px-4">{pendingTrack?.artist || 'Unknown Artist'}</span>
+                <span className="text-xl sm:text-2xl font-bold text-white truncate drop-shadow-sm mb-1 w-full px-4" title={currentTitle || "Unknown Track"}>{currentTitle || "Unknown Track"}</span>
+                <span className="text-sm sm:text-base text-white/60 truncate mb-6 font-medium w-full px-4" title={pendingTrack?.channelTitle || pendingTrack?.artist || 'Unknown Artist'}>{pendingTrack?.channelTitle || pendingTrack?.artist || 'Unknown Artist'}</span>
 
                 <div className="flex items-center justify-center gap-8 w-full">
                   <button 
@@ -657,10 +655,10 @@ export default function Player() {
                 }}
               >
                 <img 
-                  src={track.thumbnail || '/logo.svg'} 
-                  className="w-12 h-12 rounded-md object-cover shrink-0" 
+                  src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail} 
+                  className="w-12 h-12 rounded-md object-cover shrink-0 bg-black border border-white/5" 
                   onError={(e) => {
-                    e.target.src = '/logo.svg';
+                    e.target.src = '/default-cover.svg';
                   }}
                 />
                 <div className="flex flex-col flex-1 min-w-0">

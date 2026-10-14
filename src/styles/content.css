@@ -306,7 +306,7 @@
   inset: 0;
   border-radius: 8px; /* Smooth corners for modern look */
   overflow: hidden;
-  background-color: rgb(20, 20, 20);
+  background-color: #000000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 2;
   transition: transform 0.4s ease;

@@ -46,7 +46,14 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
       const hash = window.location.hash || '';
       const match = hash.match(/#\/?search\?q=(.+)/);
       if (match) {
-        setQuery(decodeURIComponent(match[1].replace(/\+/g, ' ')));
+        const decoded = decodeURIComponent(match[1].replace(/\+/g, ' '));
+        setQuery(prev => {
+          const input = searchFormRef.current?.querySelector('input');
+          if (prev && (prev.trim() === decoded.trim() || document.activeElement === input)) {
+            return prev;
+          }
+          return decoded;
+        });
       }
     };
     syncQueryFromHash();
@@ -120,10 +127,10 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
       fetchSuggestions(trimmed);
       if (window.location.hash.includes('search')) {
         if (trimmed.length >= 2) {
-          window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
+          window.history.replaceState(null, '', `#/search?q=${encodeURIComponent(trimmed)}`);
           window.dispatchEvent(new CustomEvent('app-search-trigger', { detail: trimmed }));
         } else if (!trimmed) {
-          window.location.hash = '#/search';
+          window.history.replaceState(null, '', '#/search');
         }
       }
     }, 200);
@@ -231,7 +238,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
             onClick={(e) => { e.preventDefault(); setCurrentView('home'); }}
           >
             <span>L</span>
-            <img className="brand-logo" src="/logo.svg" alt="" aria-hidden="true" />
+            <img className="brand-logo" src="/brand-logo.svg" alt="" aria-hidden="true" />
             <span>P</span>
           </a>
         </h1>

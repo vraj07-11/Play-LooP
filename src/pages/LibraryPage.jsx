@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Library, Play, Heart, ArrowUpDown, Check, Download } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 
-export default function LibraryPage({ setCurrentView }) {
+export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
   const [savedPlaylists, setSavedPlaylists] = useState([]);
   const [likedCount, setLikedCount] = useState(0);
   const [sortOption, setSortOption] = useState('recent');
@@ -24,7 +24,7 @@ export default function LibraryPage({ setCurrentView }) {
     fetchSaved();
     window.addEventListener('playloop-saved-playlists-updated', fetchSaved);
     return () => window.removeEventListener('playloop-saved-playlists-updated', fetchSaved);
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -210,14 +210,13 @@ export default function LibraryPage({ setCurrentView }) {
             aria-label={`Playlist: ${item.title}`}
             className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] focus:bg-[#282828] focus:outline-none focus:ring-2 focus:ring-white cursor-pointer transition-colors duration-300"
           >
-            <div className={`relative w-full aspect-square shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-zinc-800 ${item.isArtist ? 'rounded-full' : 'rounded-[2px]'}`}>
+            <div className={`relative w-full aspect-square shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-black border border-white/5 ${item.isArtist ? 'rounded-full' : 'rounded-[2px]'}`}>
               <img
-                src={item.thumbnail || '/logo.svg'}
+                src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail}
                 alt={item.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 onError={(e) => {
-                  e.target.src = '/logo.svg';
-                  e.target.className = `w-full h-full object-contain p-6 bg-black ${item.isArtist ? 'rounded-full' : 'rounded-[2px]'}`;
+                  e.target.src = '/default-cover.svg';
                 }}
                 loading="lazy"
               />

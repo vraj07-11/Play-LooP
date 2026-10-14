@@ -64,11 +64,11 @@ export default function Carousel({
                   onClick={() => onItemClick && onItemClick(item)}
                 >
                   <img 
-                    src={item.thumbnail || '/logo.svg'} 
+                    src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail} 
                     alt={item.title} 
                     className="wide-card-art"
                     onError={(e) => {
-                      e.target.src = '/logo.svg';
+                      e.target.src = '/default-cover.svg';
                     }}
                     loading="lazy"
                   />
@@ -103,14 +103,13 @@ export default function Carousel({
                   className="flex-none w-[150px] md:w-[170px] flex flex-col items-center gap-3 p-2 cursor-pointer group transition-transform hover:-translate-y-1"
                   onClick={() => onItemClick && onItemClick(item)}
                 >
-                  <div className="relative w-full aspect-square rounded-full overflow-hidden shadow-xl bg-zinc-900 border border-zinc-800/40">
+                  <div className="relative w-full aspect-square rounded-full overflow-hidden shadow-xl bg-black border border-white/5">
                     <img 
-                      src={item.thumbnail || '/logo.svg'} 
+                      src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail} 
                       alt={item.title} 
-                      className={`w-full h-full ${(!item.thumbnail || item.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-black' : 'object-cover'} transition-transform duration-500 group-hover:scale-110`}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                       onError={(e) => {
-                        e.target.src = '/logo.svg';
-                        e.target.className = 'w-full h-full object-contain p-6 bg-black';
+                        e.target.src = '/default-cover.svg';
                       }}
                       loading="lazy"
                     />
@@ -149,14 +148,13 @@ export default function Carousel({
                   <div className="square-card-vinyl-container">
                     <div className="square-card-vinyl"></div>
                   </div>
-                  <div className="square-card-art-container">
+                  <div className="square-card-art-container bg-black border border-white/5">
                     <img 
-                      src={item.thumbnail || '/logo.svg'} 
+                      src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail} 
                       alt={item.title} 
-                      className={`square-card-art ${(!item.thumbnail || item.thumbnail === '/logo.svg') ? 'object-contain p-6 bg-black border border-zinc-900' : 'object-cover'}`}
+                      className="square-card-art object-cover"
                       onError={(e) => {
-                        e.target.src = '/logo.svg';
-                        e.target.className = 'square-card-art object-contain p-6 bg-black border border-zinc-900';
+                        e.target.src = '/default-cover.svg';
                       }}
                       loading="lazy"
                     />

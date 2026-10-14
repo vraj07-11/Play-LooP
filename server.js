@@ -93,6 +93,31 @@ function getValidImage(imgUrl) {
 	return url;
 }
 
+const playlistCoverCache = new Map();
+
+async function resolveCleanPlaylistThumbnail(playlistId, rawImage) {
+	const validImg = getValidImage(rawImage);
+	if (!validImg || !validImg.includes('/editorial/')) {
+		return validImg;
+	}
+	if (playlistCoverCache.has(playlistId)) {
+		return playlistCoverCache.get(playlistId);
+	}
+	try {
+		const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: playlistId });
+		if (data && data.list && data.list.length > 0 && data.list[0].image) {
+			const cleanImg = getValidImage(data.list[0].image);
+			if (cleanImg && !cleanImg.includes('/editorial/')) {
+				playlistCoverCache.set(playlistId, cleanImg);
+				return cleanImg;
+			}
+		}
+	} catch (e) {
+		console.warn(`Could not resolve clean cover for playlist ${playlistId}:`, e.message);
+	}
+	return validImg;
+}
+
 function cleanStr(val, fallback = "") {
 	if (!val) return fallback;
 	if (typeof val === "string") {
@@ -290,12 +315,12 @@ app.get("/api/search", async (req, res) => {
 	try {
 		if (isMulti) {
 			const [songsRes, artistsRes, playlistsRes, albumsRes, autoRes, scRes] = await Promise.allSettled([
-				fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" }),
+				fetchJioSaavn({ __call: "search.getResults", q: query, n: "25", p: "1" }),
 				fetchJioSaavn({ __call: "search.getArtistResults", q: query, n: "8", p: "1" }),
 				fetchJioSaavn({ __call: "search.getPlaylistResults", q: query, n: "6", p: "1" }),
 				fetchJioSaavn({ __call: "search.getAlbumResults", q: query, n: "6", p: "1" }),
 				fetchJioSaavn({ __call: "autocomplete.get", query: query }),
-				searchSoundCloud(query, 8)
+				searchSoundCloud(query, 10)
 			]);
 
 			const songsData = songsRes.status === 'fulfilled' && songsRes.value?.results ? songsRes.value.results : [];
@@ -358,15 +383,22 @@ app.get("/api/search", async (req, res) => {
 				}));
 			}
 
+			const playlistsDataClean = await Promise.all(
+				playlistsData.map(async (p) => {
+					const cleanThumb = await resolveCleanPlaylistThumbnail(p.id, p.image);
+					return {
+						playlistId: p.id,
+						title: cleanStr(p.title || p.name, "Playlist"),
+						author: cleanStr(p.more_info?.artist_name || p.subtitle, "Play LooP"),
+						thumbnail: cleanThumb,
+						type: "playlist",
+						count: p.more_info?.song_count ? `${p.more_info.song_count} songs` : "Playlist"
+					};
+				})
+			);
+
 			let playlists = [
-				...playlistsData.map(p => ({
-					playlistId: p.id,
-					title: cleanStr(p.title || p.name, "Playlist"),
-					author: cleanStr(p.more_info?.artist_name || p.subtitle, "Play LooP"),
-					thumbnail: getValidImage(p.image),
-					type: "playlist",
-					count: p.more_info?.song_count ? `${p.more_info.song_count} songs` : "Playlist"
-				})),
+				...playlistsDataClean,
 				...albumsData.map(al => ({
 					playlistId: al.id,
 					title: cleanStr(al.title || al.name, "Album"),
@@ -378,14 +410,19 @@ app.get("/api/search", async (req, res) => {
 			];
 
 			if (playlists.length === 0 && (autoData.playlists?.data || autoData.albums?.data)) {
-				const autoPlaylists = (autoData.playlists?.data || []).map(p => ({
-					playlistId: p.id,
-					title: cleanStr(p.title, "Playlist"),
-					author: cleanStr(p.description || p.subtitle, "Play LooP"),
-					thumbnail: getValidImage(p.image),
-					type: "playlist",
-					count: "Playlist"
-				}));
+				const autoPlaylists = await Promise.all(
+					(autoData.playlists?.data || []).map(async (p) => {
+						const cleanThumb = await resolveCleanPlaylistThumbnail(p.id, p.image);
+						return {
+							playlistId: p.id,
+							title: cleanStr(p.title, "Playlist"),
+							author: cleanStr(p.description || p.subtitle, "Play LooP"),
+							thumbnail: cleanThumb,
+							type: "playlist",
+							count: "Playlist"
+						};
+					})
+				);
 				const autoAlbums = (autoData.albums?.data || []).map(al => ({
 					playlistId: al.id,
 					title: cleanStr(al.title, "Album"),
@@ -421,8 +458,8 @@ app.get("/api/search", async (req, res) => {
 
 		// Single song search fallback with relevance sorting
 		const [saavnData, scSongs] = await Promise.all([
-			fetchJioSaavn({ __call: "search.getResults", q: query, n: "15", p: "1" }).catch(() => null),
-			searchSoundCloud(query, 8)
+			fetchJioSaavn({ __call: "search.getResults", q: query, n: "25", p: "1" }).catch(() => null),
+			searchSoundCloud(query, 10)
 		]);
 
 		let saavnSongs = [];
@@ -1060,7 +1097,7 @@ async function fetchPlaylistsBackground() {
 		// JioSaavn Playlist IDs (Top charts and popular mixes)
 		const categoryPool = [
 			{ id: "947987697", title: "Global Pop" },
-			{ id: "1134543272", title: "India Superhits Top 50" },
+			{ id: "1134543272", title: "Hindi: India Superhits Top 50" },
 			{ id: "47599074", title: "Now Trending" },
 			{ id: "1202559627", title: "Viral Desi Dance Hits" },
 			{ id: "63116930", title: "English 2010s" },
@@ -1068,28 +1105,51 @@ async function fetchPlaylistsBackground() {
 			{ id: "1210453303", title: "Latest Hindi Songs" },
 			{ id: "1167751266", title: "Hindi 1990s" },
 			{ id: "4144832", title: "Punjabi Hit Songs" },
-			{ id: "1214335916", title: "Lofi India Hits" }
+			{ id: "1214335916", title: "Lofi India Hits" },
+			{ id: "1134595537", title: "International : India Superhits Top 50" },
+			{ id: "110858205", title: "Trending Today" },
+			{ id: "902306817", title: "Viral Nation" },
+			{ id: "1199709032", title: "Best of Phonk" },
+			{ id: "410785269", title: "Best of K-Pop" },
+			{ id: "303128179", title: "Best of Pop - English" },
+			{ id: "78211018", title: "Best of Dance - English" },
+			{ id: "158049570", title: "Chill Beats" },
+			{ id: "87109788", title: "Hip Hop Workout" },
+			{ id: "84576159", title: "Best of Hip Hop - English" }
 		];
 
-		const selectedCategories = shuffleArray(categoryPool).slice(0, 10);
+		const selectedCategories = categoryPool;
 
-		const playlists = [];
-		for (const cat of selectedCategories) {
-			try {
-				const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: cat.id });
-				if (data && data.id) {
-					playlists.push({
-						playlistId: data.id,
-						title: cat.title || data.title,
-						author: "Play LooP",
-						thumbnail: getValidImage(data.image),
-						count: parseInt(data.list_count || data.list?.length || "20", 10)
-					});
+		const results = await Promise.all(
+			selectedCategories.map(async (cat) => {
+				try {
+					const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: cat.id });
+					if (data && data.id) {
+						let thumb = getValidImage(data.image);
+						if (thumb && thumb.includes('/editorial/')) {
+							if (data.list && data.list.length > 0 && data.list[0].image) {
+								thumb = getValidImage(data.list[0].image);
+							}
+						}
+						if (thumb && !thumb.includes('/editorial/')) {
+							playlistCoverCache.set(data.id, thumb);
+						}
+						return {
+							playlistId: data.id,
+							title: cat.title || data.title,
+							author: "Play LooP",
+							thumbnail: thumb,
+							count: parseInt(data.list_count || data.list?.length || "20", 10)
+						};
+					}
+				} catch (e) {
+					console.warn(`Failed to fetch playlist ${cat.id}:`, e.message);
 				}
-			} catch (e) {
-				console.warn(`Failed to fetch playlist ${cat.id}:`, e.message);
-			}
-		}
+				return null;
+			})
+		);
+
+		const playlists = results.filter(Boolean);
 
 		playlistsCache.data = playlists;
 		playlistsCache.lastFetched = Date.now();
@@ -1099,6 +1159,9 @@ async function fetchPlaylistsBackground() {
 		playlistsCache.isFetching = false;
 	}
 }
+
+// Prefetch playlists immediately on boot
+fetchPlaylistsBackground();
 
 app.get("/api/playlists", (req, res) => {
 	const now = Date.now();
@@ -1289,12 +1352,20 @@ app.get("/api/playlist", async (req, res) => {
 		}
 
 		const tracks = (data.list || []).map(formatSong);
+		const rawThumb = getValidImage(data.image);
+		const cleanThumb = (rawThumb && rawThumb.includes('/editorial/'))
+			? (tracks[0]?.thumbnail || rawThumb)
+			: (rawThumb || tracks[0]?.thumbnail || "/logo.svg");
+
+		if (cleanThumb && !cleanThumb.includes('/editorial/')) {
+			playlistCoverCache.set(playlistId, cleanThumb);
+		}
 
 		return res.json({
 			playlistId: data.id,
 			title: data.title || "Featured Playlist",
 			description: data.subtitle || "Curated collection",
-			thumbnail: getValidImage(data.image) || tracks[0]?.thumbnail || "/logo.svg",
+			thumbnail: cleanThumb,
 			tracks
 		});
 	} catch (error) {
@@ -1594,11 +1665,15 @@ app.get("/api/import-playlist", async (req, res) => {
 			if (data && (data.list || data.songs)) {
 				const list = data.list || data.songs;
 				const tracks = list.map(s => formatSong(s));
+				const rawThumb = getValidImage(data.image);
+				const cleanThumb = (rawThumb && rawThumb.includes('/editorial/'))
+					? (tracks[0]?.thumbnail || rawThumb)
+					: (rawThumb || tracks[0]?.thumbnail || "/logo.svg");
 				return res.json({
 					source: 'jiosaavn',
 					title: data.title || data.name || "JioSaavn Playlist",
 					author: data.subtitle || data.header_desc || "JioSaavn",
-					thumbnail: getValidImage(data.image) || tracks[0]?.thumbnail || "/logo.svg",
+					thumbnail: cleanThumb,
 					tracks
 				});
 			}

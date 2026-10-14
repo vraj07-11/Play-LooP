@@ -201,7 +201,7 @@ export default function FullPlayer({
   }, []);
 
   // HD Thumbnail resolution handling with fallback
-  const [imgSrc, setImgSrc] = useState('/logo.svg');
+  const [imgSrc, setImgSrc] = useState('/default-cover.svg');
   const [fallbackIndex, setFallbackIndex] = useState(0);
 
   useEffect(() => {
@@ -222,12 +222,12 @@ export default function FullPlayer({
       candidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
-    } else if (rawThumb && rawThumb !== '/logo.svg') {
+    } else if (rawThumb && rawThumb !== '/logo.svg' && rawThumb !== '/default-cover.svg') {
       candidates.push(rawThumb.replace(/hqdefault|mqdefault|default|sddefault/g, 'maxresdefault'));
       candidates.push(rawThumb.replace(/hqdefault|mqdefault|default/g, 'sddefault'));
       candidates.push(rawThumb);
     }
-    candidates.push('/logo.svg');
+    candidates.push('/default-cover.svg');
 
     setFallbackIndex(0);
     setImgSrc(candidates[0]);
@@ -246,12 +246,12 @@ export default function FullPlayer({
       candidates.push(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`);
       candidates.push(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
-    } else if (rawThumb && rawThumb !== '/logo.svg') {
+    } else if (rawThumb && rawThumb !== '/logo.svg' && rawThumb !== '/default-cover.svg') {
       candidates.push(rawThumb.replace(/hqdefault|mqdefault|default|sddefault/g, 'maxresdefault'));
       candidates.push(rawThumb.replace(/hqdefault|mqdefault|default/g, 'sddefault'));
       candidates.push(rawThumb);
     }
-    candidates.push('/logo.svg');
+    candidates.push('/default-cover.svg');
 
     const nextIndex = fallbackIndex + 1;
     if (nextIndex < candidates.length) {
@@ -319,7 +319,7 @@ export default function FullPlayer({
 
   if (!pendingTrack) return null;
 
-  const isDefaultLogo = !imgSrc || imgSrc === '/logo.svg';
+  const isDefaultLogo = !imgSrc || imgSrc === '/logo.svg' || imgSrc === '/default-cover.svg';
 
   const renderLyricsContent = (listRef) => {
     if (isLyricsLoading) {
@@ -559,7 +559,7 @@ export default function FullPlayer({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-500 ${isOpen ? 'animate-slide-up' : 'animate-slide-down'} select-none overflow-y-auto md:overflow-hidden overscroll-none`}
+      className={`fixed inset-0 z-50 flex flex-col justify-between bg-zinc-950 text-white transition-all duration-500 ${isOpen ? 'animate-slide-up' : 'animate-slide-down'} select-none overflow-x-hidden overflow-y-auto md:overflow-hidden overscroll-none`}
       role="dialog"
       aria-modal="true"
       aria-label="Expanded Music Player"
@@ -579,7 +579,7 @@ export default function FullPlayer({
       </div>
 
       {/* Header */}
-      <header className="flex items-center justify-between px-8 sm:px-10 pt-6 pb-2 shrink-0">
+      <header className="flex items-center justify-between px-6 sm:px-10 pt-6 pb-2 shrink-0 w-full max-w-full">
         <button
           type="button"
           onClick={onClose}
@@ -603,19 +603,19 @@ export default function FullPlayer({
 
       {/* Floating Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/80 text-zinc-100 text-[13px] tracking-wide font-medium px-5 py-1.5 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-xl border border-white/10 animate-fade-in pointer-events-none whitespace-nowrap w-max">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/80 text-zinc-100 text-[13px] tracking-wide font-medium px-5 py-1.5 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-xl border border-white/10 animate-fade-in pointer-events-none whitespace-nowrap max-w-[90vw] truncate">
           {toastMessage}
         </div>
       )}
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col md:flex-row items-center md:items-stretch justify-center px-8 sm:px-10 pt-4 pb-12 sm:pb-16 md:pb-14 mx-auto w-full h-full min-h-0 transition-all duration-500 ease-in-out ${showLyrics
+      <main className={`flex-1 flex flex-col md:flex-row items-center md:items-stretch justify-center px-4 sm:px-8 md:px-10 pt-4 pb-12 sm:pb-16 md:pb-14 mx-auto w-full h-full min-h-0 min-w-0 max-w-full transition-all duration-500 ease-in-out ${showLyrics
         ? 'max-w-lg md:max-w-5xl lg:max-w-6xl md:gap-12 lg:gap-20'
         : 'max-w-lg md:gap-0'
         }`}>
 
         {/* Left Side: Art & Controls */}
-        <div className={`w-full flex flex-col items-center justify-center transition-all duration-500 ease-in-out shrink-0 ${showLyrics
+        <div className={`w-full max-w-full min-w-0 flex flex-col items-center justify-center transition-all duration-500 ease-in-out shrink-0 ${showLyrics
           ? 'md:max-w-[360px] lg:max-w-[400px]'
           : 'md:max-w-[400px] lg:max-w-[440px]'
           }`}>
@@ -645,14 +645,12 @@ export default function FullPlayer({
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none"
                 />
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black relative pointer-events-none">
-                  <div className="absolute inset-0 bg-white/5 blur-2xl rounded-full scale-75 pointer-events-none" />
+                <div className="w-full h-full flex flex-col items-center justify-center bg-black relative pointer-events-none">
                   <img
-                    src="/logo.svg"
+                    src="/default-cover.svg"
                     alt="Play LooP"
-                    className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)] mb-3 transition-transform duration-500 group-hover:scale-110"
+                    className="w-full h-full object-cover"
                   />
-                  <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Play LooP</span>
                 </div>
               )}
 
@@ -738,7 +736,7 @@ export default function FullPlayer({
               <div className="relative w-12 h-12 sm:w-14 sm:h-14">
                 <div className={`absolute inset-0 rounded-full bg-white/20 blur-md ${isPlaying ? 'animate-pulse' : ''}`} />
                 <img 
-                  src={!isDefaultLogo ? imgSrc : '/logo.svg'} 
+                  src={!isDefaultLogo ? imgSrc : '/default-cover.svg'} 
                   alt="Track Cover" 
                   className={`relative w-full h-full rounded-full object-cover shadow-[0_0_15px_rgba(0,0,0,0.6)] border-2 border-white/20 ${isPlaying ? 'animate-spin' : ''}`} 
                   style={{ animationDuration: '8s', animationTimingFunction: 'linear' }}
@@ -748,17 +746,23 @@ export default function FullPlayer({
           </div>
 
           {/* Track Info (Centered & Minimalistic) */}
-          <div className="w-full flex flex-col items-center justify-center mb-6 select-none relative z-20 text-center px-4">
-            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight line-clamp-1 mb-1.5 drop-shadow-md">
+          <div className="w-full max-w-full min-w-0 flex flex-col items-center justify-center mb-6 select-none relative z-20 text-center px-4">
+            <h2 
+              className="w-full max-w-full text-2xl sm:text-3xl font-bold text-white tracking-tight truncate mb-1.5 drop-shadow-md"
+              title={currentTitle || "Unknown Track"}
+            >
               {currentTitle || "Unknown Track"}
             </h2>
-            <p className="text-zinc-300 text-sm sm:text-base font-medium truncate opacity-90 drop-shadow-sm">
+            <p 
+              className="w-full max-w-full text-zinc-300 text-sm sm:text-base font-medium truncate opacity-90 drop-shadow-sm"
+              title={pendingTrack?.channelTitle || pendingTrack?.artist || "Play LooP"}
+            >
               {pendingTrack?.channelTitle || pendingTrack?.artist || "Play LooP"}
             </p>
           </div>
 
           {/* Scrubbing / Progress Bar */}
-          <div className="w-full flex flex-col gap-2.5 mb-4 relative z-20 px-2 sm:px-4">
+          <div className="w-full max-w-full min-w-0 flex flex-col gap-2.5 mb-4 relative z-20 px-2 sm:px-4">
             <input
               className="progress-bar flex-1 cursor-pointer outline-none h-1.5 hover:h-2 transition-all rounded-full bg-white/20"
               style={{ '--progress': `${progress || 0}%` }}
@@ -836,7 +840,7 @@ export default function FullPlayer({
           </div>
 
           {/* Secondary Action Buttons Row (Icons Only, Minimalist) */}
-          <div className="w-full flex items-center justify-center gap-6 sm:gap-8 select-none relative z-20 shrink-0">
+          <div className="w-full max-w-[340px] sm:max-w-[400px] flex items-center justify-between px-1 sm:px-2 select-none relative z-20 shrink-0 mx-auto">
             {/* Like */}
             <button
               type="button"

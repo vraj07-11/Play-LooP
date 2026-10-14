@@ -51,16 +51,17 @@ export async function fetchMoreDynamicPlaylists(count = 5) {
   const keywords = getRandomKeywords(count);
   const promises = keywords.map(async (keyword) => {
     try {
-      const res = await fetchApi(`/api/search?q=${encodeURIComponent(keyword)}`);
-      const songs = await res.json();
-      const thumbnail = songs && songs.length > 0 ? songs[0].thumbnail : "/logo.svg";
-      return {
-        playlistId: `QUERY:${keyword}`,
-        title: `${keyword} Mix`,
-        author: "Play LooP",
-        thumbnail: thumbnail,
-        count: 30
-      };
+      const details = await fetchPlaylistDetails(`QUERY:${keyword}`, 1);
+      if (details) {
+        return {
+          playlistId: `QUERY:${keyword}`,
+          title: details.title || `${keyword} Mix`,
+          author: "Play LooP",
+          thumbnail: details.thumbnail || "/default-cover.svg",
+          count: details.tracks?.length || 30
+        };
+      }
+      return null;
     } catch (e) {
       return null;
     }
@@ -75,113 +76,141 @@ export const DEFAULT_PLAYLISTS = [
     playlistId: "947987697",
     title: "Global Pop",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/GlobalPop_20260608125844_500x500.jpg",
-    count: 30
+    thumbnail: "https://c.saavncdn.com/773/Heartless-English-2026-20260521060358-500x500.jpg",
+    count: 50
   },
   {
     playlistId: "1134543272",
-    title: "India Superhits Top 50",
+    title: "Hindi: India Superhits Top 50",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/Hindi-IndiaSuperhitsTop50_20260911054516_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/786/Casa-Tupka-Anthemo-Hindi-2026-20260917173352-500x500.jpg",
     count: 50
   },
   {
     playlistId: "47599074",
     title: "Now Trending",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/NowTrending_20260423085344_500x500.jpg",
-    count: 30
+    thumbnail: "https://c.saavncdn.com/238/Bairan-Unknown-2026-20260223182954-500x500.jpg",
+    count: 40
   },
   {
     playlistId: "1202559627",
     title: "Viral Desi Dance Hits",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/ViralDesiDanceHits_20260723071136_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/784/Uyi-Amma-From-Azaad-Hindi-2025-20250106040010-500x500.jpg",
     count: 40
   },
   {
     playlistId: "63116930",
     title: "English 2010s",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/charts_English2010s_178363_20240408065247_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/728/My-World-2-0-English-2010-20250315014144-500x500.jpg",
     count: 50
   },
   {
     playlistId: "48189087",
     title: "English Viral Hits",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/EnglishViralHits_20260902085244_500x500.jpg",
-    count: 30
+    thumbnail: "https://c.saavncdn.com/676/Dua-Lipa-Live-from-the-Royal-Albert-Hall-English-2024-20241204143122-500x500.jpg",
+    count: 40
   },
   {
     playlistId: "1210453303",
     title: "Latest Hindi Songs",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/LatestHindiSongs_20260326041941_500x500.jpg",
-    count: 30
+    thumbnail: "https://c.saavncdn.com/758/Samjho-Na-From-The-Vvaan-Hindi-2026-20260904111123-500x500.jpg",
+    count: 40
   },
   {
     playlistId: "1167751266",
     title: "Hindi 1990s",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/charts_Hindi1990s_136920_20240408061858_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/474/Main-Khiladi-Tu-Anari-Original-Motion-Picture-Soundtrack-Hindi-1994-20250912131553-500x500.jpg",
     count: 50
   },
   {
     playlistId: "4144832",
     title: "Punjabi Hit Songs",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/PunjabiHitSongs_20260710115246_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/918/AUJLA-SZN-1-Punjabi-2026-20260930131343-500x500.jpg",
     count: 50
   },
   {
     playlistId: "1214335916",
     title: "Lofi India Hits",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/LofiIndiaHits_20240307035844_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/465/Yeh-Vaada-Raha-Lofi-Flip-Hindi-2023-20230712053408-500x500.jpg",
     count: 40
   },
   {
-    playlistId: "107584484",
-    title: "Romantic Hindi Hits",
+    playlistId: "1134595537",
+    title: "International : India Superhits Top 50",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/HindiRomanticHits_20260715091230_500x500.jpg",
-    count: 45
-  },
-  {
-    playlistId: "8042456",
-    title: "EDM Party Anthems",
-    author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/EDMPartyAnthems_20260810101530_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/075/Jamaican-Bam-Bam-English-2026-20260309165945-500x500.jpg",
     count: 50
   },
   {
-    playlistId: "115784920",
-    title: "Workout Motivation",
+    playlistId: "110858205",
+    title: "Trending Today",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/WorkoutMotivation_20260512061200_500x500.jpg",
+    thumbnail: "https://c.saavncdn.com/741/hate-that-i-made-you-love-me-English-2026-20260529103543-500x500.jpg",
+    count: 50
+  },
+  {
+    playlistId: "902306817",
+    title: "Viral Nation",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/786/Casa-Tupka-Anthemo-Hindi-2026-20260917173352-500x500.jpg",
     count: 40
   },
   {
-    playlistId: "98273641",
-    title: "Chillhop Beats",
+    playlistId: "1199709032",
+    title: "Best of Phonk",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/ChillhopBeats_20260405081000_500x500.jpg",
-    count: 35
+    thumbnail: "https://c.saavncdn.com/023/Killers-From-The-Northside-English-2021-20211019215330-500x500.jpg",
+    count: 40
   },
   {
-    playlistId: "88471029",
-    title: "Best of 2000s Pop",
+    playlistId: "410785269",
+    title: "Best of K-Pop",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/charts_English2000s_178363_20240408065247_500x500.jpg",
-    count: 50
+    thumbnail: "https://c.saavncdn.com/223/Dynamite-English-2021-20211124055845-500x500.jpg",
+    count: 40
   },
   {
-    playlistId: "77492018",
-    title: "Acoustic Sunset",
+    playlistId: "303128179",
+    title: "Best of Pop - English",
     author: "Play LooP",
-    thumbnail: "https://c.saavncdn.com/editorial/AcousticSunset_20260310052000_500x500.jpg",
-    count: 30
+    thumbnail: "https://c.saavncdn.com/111/Espresso-English-2024-20240412064803-500x500.jpg",
+    count: 40
+  },
+  {
+    playlistId: "78211018",
+    title: "Best of Dance - English",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/665/Future-Nostalgia-English-2020-20260306223201-500x500.jpg",
+    count: 40
+  },
+  {
+    playlistId: "158049570",
+    title: "Chill Beats",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/246/Dracula-Remix-English-2026-20260203071441-500x500.jpg",
+    count: 40
+  },
+  {
+    playlistId: "87109788",
+    title: "Hip Hop Workout",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/035/HABIBTI-FOMO-English-2026-20261002063545-500x500.jpg",
+    count: 40
+  },
+  {
+    playlistId: "84576159",
+    title: "Best of Hip Hop - English",
+    author: "Play LooP",
+    thumbnail: "https://c.saavncdn.com/087/The-Massacre-English-2005-20250422032513-500x500.jpg",
+    count: 40
   }
 ];
 
@@ -198,21 +227,42 @@ export async function fetchRecommendedPlaylists() {
   }
 }
 
+const playlistDetailsCache = new Map();
+
+export function getCachedPlaylistThumbnail(playlistId) {
+  if (!playlistId) return null;
+  const cached = playlistDetailsCache.get(`${playlistId}:1`);
+  return cached?.thumbnail || null;
+}
+
+export function cachePlaylistThumbnail(playlistId, thumbnail) {
+  if (!playlistId || !thumbnail) return;
+  const existing = playlistDetailsCache.get(`${playlistId}:1`) || {};
+  playlistDetailsCache.set(`${playlistId}:1`, { ...existing, playlistId, thumbnail });
+}
+
 export async function fetchPlaylistDetails(playlistId, page = 1) {
+  const cacheKey = `${playlistId}:${page}`;
+  if (playlistDetailsCache.has(cacheKey)) {
+    return playlistDetailsCache.get(cacheKey);
+  }
+
   // Check if it's an imported or locally saved playlist with tracks stored in localStorage
   try {
     const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
     const localMatch = saved.find(p => String(p.playlistId) === String(playlistId));
     if (localMatch && Array.isArray(localMatch.tracks) && localMatch.tracks.length > 0) {
-      return {
+      const result = {
         playlistId: localMatch.playlistId,
         title: localMatch.title,
         author: localMatch.author || 'Imported Playlist',
-        thumbnail: localMatch.thumbnail || '/logo.svg',
+        thumbnail: (!localMatch.thumbnail || localMatch.thumbnail === '/logo.svg') ? '/default-cover.svg' : localMatch.thumbnail,
         description: localMatch.description || `Collection containing ${localMatch.tracks.length} tracks.`,
         count: localMatch.tracks.length,
         tracks: localMatch.tracks
       };
+      if (page === 1) playlistDetailsCache.set(cacheKey, result);
+      return result;
     }
   } catch (err) {
     console.error("Error checking local saved playlists:", err);
@@ -221,7 +271,11 @@ export async function fetchPlaylistDetails(playlistId, page = 1) {
   try {
     const res = await fetchApi(`/api/playlist?id=${encodeURIComponent(playlistId)}&page=${page}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+    if (data && data.playlistId) {
+      playlistDetailsCache.set(cacheKey, data);
+    }
+    return data;
   } catch (err) {
     console.error("fetchPlaylistDetails error:", err);
     return null;

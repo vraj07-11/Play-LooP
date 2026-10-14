@@ -4,7 +4,7 @@ import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlayli
 import Carousel from '../components/Carousel';
 import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
 
-export default function Home({ setCurrentView }) {
+export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [greeting, setGreeting] = useState('');
   const [playlists, setPlaylists] = useState([]);
   const [loadingPlaylists, setLoadingPlaylists] = useState(true);
@@ -17,6 +17,15 @@ export default function Home({ setCurrentView }) {
   const [loadingMoreMadeForYou, setLoadingMoreMadeForYou] = useState(false);
   const [loadingMorePopularAlbums, setLoadingMorePopularAlbums] = useState(false);
   const [visiblePopularCount, setVisiblePopularCount] = useState(6);
+  const [playlistThumbnailMap, setPlaylistThumbnailMap] = useState({});
+
+  const featuredPlaylist = playlists.length > 0 ? playlists[0] : (DEFAULT_PLAYLISTS[0] || null);
+  const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : DEFAULT_PLAYLISTS.slice(1, 6)), ...extraMadeForYou];
+  
+  const initialPopular = playlists.length >= 16 
+    ? playlists.slice(6, 16) 
+    : [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx).slice(0, 10);
+  const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
   const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen } = usePlayer();
 
@@ -82,6 +91,9 @@ export default function Home({ setCurrentView }) {
     else setGreeting("Good evening");
 
     let isMounted = true;
+    if (refreshKey > 0) {
+      setLoadingPlaylists(true);
+    }
     fetchRecommendedPlaylists()
       .then((data) => {
         if (isMounted) {
@@ -107,7 +119,7 @@ export default function Home({ setCurrentView }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [refreshKey]);
 
   const handleOpenLikedSongs = useCallback(() => {
     try {
@@ -151,6 +163,12 @@ export default function Home({ setCurrentView }) {
             const details = await fetchPlaylistDetails(id, 1);
             if (details) {
               setSelectedPlaylist(details);
+              if (details.playlistId && details.thumbnail) {
+                setPlaylistThumbnailMap(prev => ({
+                  ...prev,
+                  [details.playlistId]: details.thumbnail
+                }));
+              }
               checkIfSaved(details.playlistId);
               if (details.tracks && (details.tracks.length < 30 || String(details.playlistId).startsWith('imported_'))) {
                 setHasMorePlaylist(false);
@@ -345,8 +363,33 @@ export default function Home({ setCurrentView }) {
 
   const handlePlaylistClick = async (playlist) => {
     if (!playlist || !playlist.playlistId) return;
+    fetchPlaylistDetails(playlist.playlistId, 1).then(details => {
+      if (details && details.thumbnail) {
+        setPlaylistThumbnailMap(prev => ({
+          ...prev,
+          [playlist.playlistId]: details.thumbnail
+        }));
+      }
+    }).catch(() => {});
     window.location.hash = `#/playlist/${playlist.playlistId}`;
   };
+
+  useEffect(() => {
+    if (!popularAlbumsPlaylists || popularAlbumsPlaylists.length === 0) return;
+    const visibleItems = popularAlbumsPlaylists.slice(0, visiblePopularCount);
+    visibleItems.forEach((item) => {
+      if (!item || !item.playlistId) return;
+      if (playlistThumbnailMap[item.playlistId]) return;
+      fetchPlaylistDetails(item.playlistId, 1).then((details) => {
+        if (details && details.thumbnail && details.thumbnail !== item.thumbnail) {
+          setPlaylistThumbnailMap(prev => ({
+            ...prev,
+            [item.playlistId]: details.thumbnail
+          }));
+        }
+      }).catch(() => {});
+    });
+  }, [popularAlbumsPlaylists, visiblePopularCount, playlistThumbnailMap]);
 
   const handleBackToHome = () => {
     if (setCurrentView) {
@@ -427,22 +470,20 @@ export default function Home({ setCurrentView }) {
         {/* Playlist Header */}
         <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-6 md:gap-8 mb-8">
           {selectedPlaylist.isLikedPlaylist ? (
-            <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-[#141414] border border-zinc-800 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(0,0,0,0.7)] relative overflow-hidden group select-none mx-auto md:mx-0">
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/30 via-transparent to-black pointer-events-none" />
+            <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-black border border-white/10 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(0,0,0,0.7)] relative overflow-hidden group select-none mx-auto md:mx-0">
               <img
-                src="/logo.svg"
+                src="/default-cover.svg"
                 alt="Play LooP Logo"
-                className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.35)] group-hover:scale-105 transition-transform duration-500"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
             </div>
           ) : (
             <img
-              src={selectedPlaylist.thumbnail || '/logo.svg'}
+              src={(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? '/default-cover.svg' : selectedPlaylist.thumbnail}
               alt={selectedPlaylist.title}
-              className={`shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] mx-auto md:mx-0 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full object-cover' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl'} ${(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? 'object-contain p-8 bg-zinc-900 border border-zinc-800' : 'object-cover'}`}
+              className={`shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] mx-auto md:mx-0 bg-black border border-white/10 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full object-cover' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl object-cover'}`}
               onError={(e) => {
-                e.target.src = '/logo.svg';
-                e.target.className = `shrink-0 mx-auto md:mx-0 object-contain p-8 bg-zinc-900 border border-zinc-800 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl'}`;
+                e.target.src = '/default-cover.svg';
               }}
             />
           )}
@@ -599,12 +640,11 @@ export default function Home({ setCurrentView }) {
                     
                     <div className="flex items-center gap-4 min-w-0 pr-4">
                       <img
-                        src={track.thumbnail || selectedPlaylist.thumbnail || '/logo.svg'}
+                        src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail}
                         alt={track.title}
-                        className={`w-10 h-10 md:w-12 md:h-12 rounded shrink-0 ${(!track.thumbnail || track.thumbnail === '/logo.svg') ? 'object-contain p-1.5 bg-zinc-900' : 'object-cover'}`}
+                        className="w-10 h-10 md:w-12 md:h-12 rounded shrink-0 object-cover bg-black border border-white/5"
                         onError={(e) => {
-                          e.target.src = '/logo.svg';
-                          e.target.className = 'w-10 h-10 md:w-12 md:h-12 rounded shrink-0 object-contain p-1.5 bg-zinc-900';
+                          e.target.src = '/default-cover.svg';
                         }}
                         loading="lazy"
                       />
@@ -666,14 +706,6 @@ export default function Home({ setCurrentView }) {
       </div>
     );
   }
-
-  const featuredPlaylist = playlists.length > 0 ? playlists[0] : (DEFAULT_PLAYLISTS[0] || null);
-  const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : DEFAULT_PLAYLISTS.slice(1, 6)), ...extraMadeForYou];
-  
-  const initialPopular = playlists.length >= 16 
-    ? playlists.slice(6, 16) 
-    : [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx).slice(0, 10);
-  const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
   const isAppDownloaded = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone);
 
@@ -962,20 +994,21 @@ export default function Home({ setCurrentView }) {
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-5">
-            {popularAlbumsPlaylists.slice(0, visiblePopularCount).map((item, index) => (
+            {popularAlbumsPlaylists.slice(0, visiblePopularCount).map((item, index) => {
+              const outerCover = playlistThumbnailMap[item.playlistId] || item.thumbnail;
+              return (
                 <div
                   key={`${item.playlistId}-${index}`}
                   onClick={() => handlePlaylistClick(item)}
                   className="group flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] cursor-pointer transition-colors duration-300 border border-white/5"
                 >
-                  <div className="relative w-full aspect-square rounded-lg shadow-lg overflow-hidden mb-3 bg-zinc-800">
+                  <div className="relative w-full aspect-square rounded-lg shadow-lg overflow-hidden mb-3 bg-black border border-white/5">
                     <img
-                      src={item.thumbnail || '/logo.svg'}
+                      src={(!outerCover || outerCover === '/logo.svg') ? '/default-cover.svg' : outerCover}
                       alt={item.title}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       onError={(e) => {
-                        e.target.src = '/logo.svg';
-                        e.target.className = 'w-full h-full object-contain p-6 bg-black';
+                        e.target.src = '/default-cover.svg';
                       }}
                       loading="lazy"
                     />
@@ -995,7 +1028,8 @@ export default function Home({ setCurrentView }) {
                     {item.author || item.artist || 'Collection'}
                   </p>
                 </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-8 flex justify-center">

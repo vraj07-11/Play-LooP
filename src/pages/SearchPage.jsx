@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
-import { Search, Play, Music, Mic2, Disc3, Radio, X } from 'lucide-react';
+import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 
 const DEFAULT_POPULAR_SONGS = [
   {
@@ -36,15 +36,17 @@ const DEFAULT_POPULAR_SONGS = [
   }
 ];
 
-export default function SearchPage() {
+export default function SearchPage({ refreshKey = 0 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searchResults, setSearchResults] = useState({ songs: [], artists: [], playlists: [], topResult: null });
   const [activeSearchFilter, setActiveSearchFilter] = useState('all');
+  const [isSongsExpanded, setIsSongsExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const { selectAndPlayTrack, playPlaylist } = usePlayer();
   const mainScrollRef = useRef(null);
+  const mobileInputRef = useRef(null);
 
   const [popularArtists, setPopularArtists] = useState([]);
   const [popularSongsData, setPopularSongsData] = useState(DEFAULT_POPULAR_SONGS);
@@ -83,11 +85,38 @@ export default function SearchPage() {
     }
   };
 
+  const scrollToTop = () => {
+    const containers = [
+      mainScrollRef.current,
+      document.querySelector('.app-content'),
+      document.querySelector('main'),
+      document.documentElement,
+      document.body
+    ];
+    
+    const applyScroll = () => {
+      containers.forEach(el => {
+        if (el && typeof el.scrollTop === 'number') {
+          el.scrollTop = 0;
+        }
+      });
+      window.scrollTo(0, 0);
+    };
+
+    applyScroll();
+    requestAnimationFrame(applyScroll);
+    setTimeout(applyScroll, 30);
+    setTimeout(applyScroll, 100);
+  };
+
   useEffect(() => {
-    if (mainScrollRef.current) {
-      mainScrollRef.current.scrollTop = 0;
-    }
+    setIsSongsExpanded(false);
+    scrollToTop();
   }, [query]);
+
+  useEffect(() => {
+    scrollToTop();
+  }, [activeSearchFilter]);
 
   useEffect(() => {
     let isMounted = true;
@@ -113,7 +142,7 @@ export default function SearchPage() {
       .catch(e => console.error("Failed to fetch popular artists:", e));
 
     return () => { isMounted = false; };
-  }, []);
+  }, [refreshKey]);
 
   const handleLoadMoreSongs = async () => {
     const nextCount = visibleSongCount + 5;
@@ -152,14 +181,14 @@ export default function SearchPage() {
       setResults([]);
       setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
       setLoading(false);
-      window.location.hash = '#/search';
+      window.history.replaceState(null, '', '#/search');
       return;
     }
 
     setLoading(true);
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
-      window.location.hash = `#/search?q=${encodeURIComponent(trimmed)}`;
+      window.history.replaceState(null, '', `#/search?q=${encodeURIComponent(trimmed)}`);
       performSearch(trimmed);
     }, 250);
   };
@@ -172,7 +201,13 @@ export default function SearchPage() {
         return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
       })();
 
-      setQuery(q);
+      setQuery(prev => {
+        if (prev && (prev.trim() === q.trim() || document.activeElement === mobileInputRef.current)) {
+          return prev;
+        }
+        return q;
+      });
+
       if (q) {
         setLoading(true);
         performSearch(q);
@@ -238,6 +273,7 @@ export default function SearchPage() {
 
   const performSearch = async (searchTerm) => {
     setLoading(true);
+    setIsSongsExpanded(false);
     try {
       const response = await fetchApi(`/api/search?q=${encodeURIComponent(searchTerm)}&type=all`);
       if (response.ok) {
@@ -304,6 +340,7 @@ export default function SearchPage() {
           <div className="relative flex items-center">
             <Search className="absolute left-4 w-5 h-5 text-zinc-400 pointer-events-none" />
             <input
+              ref={mobileInputRef}
               type="text"
               placeholder="What do you want to play? (Songs, Artists, Albums)"
               value={query}
@@ -603,7 +640,10 @@ export default function SearchPage() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setActiveSearchFilter(cat.id)}
+                  onClick={() => {
+                    setActiveSearchFilter(cat.id);
+                    scrollToTop();
+                  }}
                   className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     activeSearchFilter === cat.id
                       ? 'bg-white text-black shadow-md scale-105'
@@ -640,14 +680,14 @@ export default function SearchPage() {
                 {activeSearchFilter === 'all' && (
                   <>
                     {/* Top Result + Songs Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
                       
                       {/* Top Result Card */}
                       {searchResults.topResult && (
                         <div className="lg:col-span-2 flex flex-col">
                           <h3 className="text-xl font-bold text-white mb-4">Top Result</h3>
                           <div 
-                            className="bg-[#141416] hover:bg-[#1c1c20] border border-white/10 rounded-2xl p-6 flex flex-col justify-between cursor-pointer transition-all duration-300 group relative shadow-2xl flex-1 min-h-[220px]"
+                            className="bg-[#141416] hover:bg-[#1c1c20] border border-white/10 rounded-2xl p-6 flex flex-col justify-between cursor-pointer transition-all duration-300 group relative shadow-2xl min-h-[220px]"
                             onClick={() => {
                               if (searchResults.topResult.videoId) {
                                 selectAndPlayTrack(searchResults.topResult.videoId, searchResults.topResult.title, searchResults.topResult.artist, searchResults.topResult.thumbnail);
@@ -660,8 +700,8 @@ export default function SearchPage() {
                               <img 
                                 src={searchResults.topResult.thumbnail} 
                                 alt={searchResults.topResult.title}
-                                className={`shadow-2xl object-cover ${searchResults.topResult.isArtist ? 'w-24 h-24 sm:w-28 sm:h-28 rounded-full' : 'w-24 h-24 sm:w-28 sm:h-28 rounded-xl'}`}
-                                onError={(e) => { e.target.src = '/logo.svg'; }}
+                                className={`shadow-2xl object-cover bg-black ${searchResults.topResult.isArtist ? 'w-24 h-24 sm:w-28 sm:h-28 rounded-full' : 'w-24 h-24 sm:w-28 sm:h-28 rounded-xl'}`}
+                                onError={(e) => { e.target.src = '/default-cover.svg'; }}
                               />
                               <div>
                                 <h4 className="text-2xl sm:text-3xl font-black text-white tracking-tight line-clamp-2 leading-tight group-hover:text-white transition-colors">
@@ -683,10 +723,21 @@ export default function SearchPage() {
                         </div>
                       )}
 
-                      {/* Top Songs */}
+                      {/* Songs Section */}
                       {searchResults.songs.length > 0 && (
                         <div className={`${searchResults.topResult ? 'lg:col-span-3' : 'lg:col-span-5'} flex flex-col`}>
-                          <h3 className="text-xl font-bold text-white mb-4">Songs</h3>
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xl font-bold text-white">Songs</h3>
+                            {searchResults.songs.length > 4 && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveSearchFilter('songs')}
+                                className="text-xs font-semibold text-zinc-400 hover:text-white transition-colors flex items-center gap-1 cursor-pointer py-1 px-2.5 rounded-full hover:bg-zinc-800 border border-transparent hover:border-white/10"
+                              >
+                                See All ({searchResults.songs.length}) →
+                              </button>
+                            )}
+                          </div>
                           <div className="flex flex-col gap-1.5">
                             {searchResults.songs.slice(0, 4).map((song, idx) => (
                               <div 
@@ -695,8 +746,11 @@ export default function SearchPage() {
                                 onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
                               >
                                 <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
-                                    <img src={song.thumbnail} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                                  <span className="w-5 text-center text-xs font-bold text-zinc-500 shrink-0">
+                                    {idx + 1}
+                                  </span>
+                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
+                                    <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                       <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
                                     </div>
@@ -712,6 +766,21 @@ export default function SearchPage() {
                               </div>
                             ))}
                           </div>
+
+                          {searchResults.songs.length > 4 && (
+                            <div className="mt-3.5 flex justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveSearchFilter('songs');
+                                  scrollToTop();
+                                }}
+                                className="px-5 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-zinc-300 hover:text-white transition-all shadow-md hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+                              >
+                                See All {searchResults.songs.length} Songs →
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -727,8 +796,8 @@ export default function SearchPage() {
                               className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
                               onClick={() => handleCardClick(artist)}
                             >
-                              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
-                                <img src={artist.thumbnail} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                              <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                <img src={artist.thumbnail || '/default-cover.svg'} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
                               </div>
                               <h4 className="font-bold text-white text-sm sm:text-base truncate w-full">{artist.title}</h4>
                               <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
@@ -749,8 +818,8 @@ export default function SearchPage() {
                               className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
                               onClick={() => handleCardClick(pl)}
                             >
-                              <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
-                                <img src={pl.thumbnail} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                              <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                <img src={pl.thumbnail || '/default-cover.svg'} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
                                 <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                   <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
                                     <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
@@ -770,31 +839,113 @@ export default function SearchPage() {
                 {/* SONGS TAB */}
                 {activeSearchFilter === 'songs' && (
                   searchResults.songs.length > 0 ? (
-                    <div className="flex flex-col gap-1.5">
-                      {searchResults.songs.map((song, idx) => (
-                        <div 
-                          key={song.videoId || idx}
-                          className="flex items-center justify-between gap-4 p-3 rounded-xl bg-[#141416] hover:bg-[#202024] border border-white/5 cursor-pointer transition-all group"
-                          onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
-                        >
-                          <div className="flex items-center gap-4 min-w-0 flex-1">
-                            <span className="w-6 text-center text-xs font-bold text-zinc-500 shrink-0">{idx + 1}</span>
-                            <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
-                              <img src={song.thumbnail} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/logo.svg'; }} />
-                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
-                              </div>
-                            </div>
-                            <div className="flex flex-col min-w-0 flex-1">
-                              <h4 className="text-white font-bold text-base truncate">{song.title}</h4>
-                              <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
-                            </div>
-                          </div>
-                          <span className="text-xs text-zinc-500 font-mono">
-                            {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
-                          </span>
+                    <div className="flex flex-col gap-10">
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                            All Songs <span className="text-sm font-semibold text-zinc-400 font-mono">({searchResults.songs.length})</span>
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSearchFilter('all');
+                              scrollToTop();
+                            }}
+                            className="text-xs sm:text-sm font-semibold text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer py-1.5 px-3.5 rounded-full hover:bg-zinc-800 border border-transparent hover:border-white/10"
+                          >
+                            <ChevronUp className="w-4 h-4" /> Show Less
+                          </button>
                         </div>
-                      ))}
+                        <div className="flex flex-col gap-1.5">
+                          {searchResults.songs.map((song, idx) => (
+                            <div 
+                              key={song.videoId || idx}
+                              className="flex items-center justify-between gap-4 p-3 rounded-xl bg-[#141416] hover:bg-[#202024] border border-white/5 cursor-pointer transition-all group"
+                              onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                            >
+                              <div className="flex items-center gap-4 min-w-0 flex-1">
+                                <span className="w-6 text-center text-xs font-bold text-zinc-500 shrink-0">{idx + 1}</span>
+                                <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
+                                  <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                  </div>
+                                </div>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <h4 className="text-white font-bold text-base truncate">{song.title}</h4>
+                                  <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
+                                </div>
+                              </div>
+                              <span className="text-xs text-zinc-500 font-mono">
+                                {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Bottom Show Less / Back Button */}
+                        <div className="mt-6 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveSearchFilter('all');
+                              scrollToTop();
+                            }}
+                            className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/90 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-zinc-300 hover:text-white transition-all shadow-md hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+                          >
+                            <ChevronUp className="w-4 h-4" /> Show Less (Overview)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Artists Section Preserved at End of Songs Tab */}
+                      {searchResults.artists.length > 0 && (
+                        <div>
+                          <h3 className="text-xl font-bold text-white mb-4">Artists</h3>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {searchResults.artists.map((artist, idx) => (
+                              <div 
+                                key={idx}
+                                className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
+                                onClick={() => handleCardClick(artist)}
+                              >
+                                <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                  <img src={artist.thumbnail || '/default-cover.svg'} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                </div>
+                                <h4 className="font-bold text-white text-sm sm:text-base truncate w-full">{artist.title}</h4>
+                                <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Playlists & Albums Preserved at End of Songs Tab */}
+                      {searchResults.playlists.length > 0 && (
+                        <div>
+                          <h3 className="text-xl font-bold text-white mb-4">Playlists & Albums</h3>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {searchResults.playlists.map((pl, idx) => (
+                              <div 
+                                key={idx}
+                                className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
+                                onClick={() => handleCardClick(pl)}
+                              >
+                                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                  <img src={pl.thumbnail || '/default-cover.svg'} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
+                                      <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                                    </div>
+                                  </div>
+                                </div>
+                                <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
+                                <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-16 bg-[#141416]/50 rounded-2xl border border-white/5 p-6">
@@ -822,8 +973,8 @@ export default function SearchPage() {
                           className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
                           onClick={() => handleCardClick(artist)}
                         >
-                          <div className="relative w-28 h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
-                            <img src={artist.thumbnail} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                          <div className="relative w-28 h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                            <img src={artist.thumbnail || '/default-cover.svg'} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
                           </div>
                           <h4 className="font-bold text-white text-base truncate w-full">{artist.title}</h4>
                           <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
@@ -856,8 +1007,8 @@ export default function SearchPage() {
                           className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
                           onClick={() => handleCardClick(pl)}
                         >
-                          <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-zinc-800 shrink-0">
-                            <img src={pl.thumbnail} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/logo.svg'; }} />
+                          <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                            <img src={pl.thumbnail || '/default-cover.svg'} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
                             <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
                                 <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />

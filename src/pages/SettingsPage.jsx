@@ -17,7 +17,7 @@ const AVAILABLE_LANGUAGES = [
   { id: 'kannada', label: 'Kannada' }
 ];
 
-export default function SettingsPage({ setCurrentView }) {
+export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
   const [activeTab, setActiveTab] = useState('link'); // 'link' | 'file'
   const [playlistLink, setPlaylistLink] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -57,7 +57,7 @@ export default function SettingsPage({ setCurrentView }) {
         }, 100);
       }
     }
-  }, []);
+  }, [refreshKey]);
 
   const toggleLanguage = (langId) => {
     const id = langId.toLowerCase();
@@ -103,7 +103,7 @@ export default function SettingsPage({ setCurrentView }) {
         setPreviewPlaylist({
           title: data.title || (data.source === 'soundcloud' ? 'SoundCloud Playlist' : 'JioSaavn Playlist'),
           author: data.author || (data.source === 'soundcloud' ? 'SoundCloud' : 'JioSaavn'),
-          thumbnail: data.thumbnail || '/logo.svg',
+          thumbnail: data.thumbnail || '/default-cover.svg',
           tracks: data.tracks
         });
         setIsProcessing(false);
@@ -170,7 +170,7 @@ export default function SettingsPage({ setCurrentView }) {
               videoId: `QUERY:${encodeURIComponent(songQuery)}`,
               title: trackTitle,
               artist: trackArtist,
-              thumbnail: data.thumbnail || '/logo.svg',
+              thumbnail: data.thumbnail || '/default-cover.svg',
               duration: 180,
               isImportedQuery: true
             });
@@ -184,7 +184,7 @@ export default function SettingsPage({ setCurrentView }) {
         setPreviewPlaylist({
           title: data.title || 'Imported Playlist',
           author: `${data.source.toUpperCase()} Import`,
-          thumbnail: data.thumbnail || matchedTracks[0]?.thumbnail || '/logo.svg',
+          thumbnail: data.thumbnail || matchedTracks[0]?.thumbnail || '/default-cover.svg',
           tracks: matchedTracks,
           totalExtracted: total
         });
@@ -273,7 +273,7 @@ export default function SettingsPage({ setCurrentView }) {
               videoId: `QUERY:${encodeURIComponent(songQuery)}`,
               title: trackTitle,
               artist: trackArtist,
-              thumbnail: '/logo.svg',
+              thumbnail: '/default-cover.svg',
               duration: 180,
               isImportedQuery: true
             });
@@ -287,7 +287,7 @@ export default function SettingsPage({ setCurrentView }) {
         setPreviewPlaylist({
           title: fileNameTitle || 'File Playlist Import',
           author: 'File Import',
-          thumbnail: matchedTracks[0]?.thumbnail || '/logo.svg',
+          thumbnail: matchedTracks[0]?.thumbnail || '/default-cover.svg',
           tracks: matchedTracks
         });
       } catch (err) {
@@ -437,7 +437,7 @@ export default function SettingsPage({ setCurrentView }) {
             <label className="border border-dashed border-zinc-700 hover:border-zinc-500 bg-black/30 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition">
               <Upload className="w-8 h-8 text-zinc-400 mb-2" />
               <p className="text-sm font-medium text-white mb-1">Upload a playlist file</p>
-              <p className="text-xs text-zinc-400">Select a .json or .csv file from your computer</p>
+              <p className="text-xs text-zinc-400 text-center">Select a .json or .csv file from your device</p>
               <input
                 type="file"
                 accept=".json,.csv"
@@ -483,9 +483,9 @@ export default function SettingsPage({ setCurrentView }) {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-3">
                 <img
-                  src={previewPlaylist.thumbnail || '/logo.svg'}
+                  src={(!previewPlaylist.thumbnail || previewPlaylist.thumbnail === '/logo.svg') ? '/default-cover.svg' : previewPlaylist.thumbnail}
                   alt={previewPlaylist.title}
-                  className="w-12 h-12 rounded-lg object-cover shrink-0"
+                  className="w-12 h-12 rounded-lg object-cover shrink-0 bg-black border border-white/5"
                 />
                 <div>
                   <h4 className="text-base font-medium text-white">{previewPlaylist.title}</h4>
@@ -561,7 +561,7 @@ export default function SettingsPage({ setCurrentView }) {
               {previewPlaylist.tracks.map((track, idx) => (
                 <div key={track.videoId || idx} className="flex items-center gap-3 p-2 rounded-md bg-zinc-900/60 border border-zinc-800/60 text-xs">
                   <span className="text-zinc-500 w-5 text-center">{idx + 1}</span>
-                  <img src={track.thumbnail || '/logo.svg'} alt={track.title} className="w-8 h-8 rounded object-cover shrink-0" />
+                  <img src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail} alt={track.title} className="w-8 h-8 rounded object-cover shrink-0 bg-black border border-white/5" />
                   <div className="min-w-0 flex-1">
                     <p className="text-white font-medium truncate">{track.title}</p>
                     <p className="text-zinc-400 text-[11px] truncate">{track.artist}</p>
@@ -588,10 +588,10 @@ export default function SettingsPage({ setCurrentView }) {
                 key={lang.id}
                 type="button"
                 onClick={() => toggleLanguage(lang.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition border cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border cursor-pointer ${
                   isSelected
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 font-semibold'
-                    : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-400 hover:text-white'
+                    ? 'bg-white text-black border-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.15)]'
+                    : 'bg-zinc-900/90 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 hover:bg-zinc-800/60'
                 }`}
               >
                 {isSelected ? `✓ ${lang.label}` : `+ ${lang.label}`}

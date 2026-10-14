@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { usePlayer } from './context/PlayerContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -13,12 +13,21 @@ import SettingsPage from './pages/SettingsPage';
 import LanguageSelector from './components/LanguageSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import MobileBottomNav from './components/MobileBottomNav';
+import PullToRefresh from './components/PullToRefresh';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
+import { usePullToRefresh } from './hooks/usePullToRefresh';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('home');
-  const [homeKey, setHomeKey] = useState(0);
+  const [visitedViews, setVisitedViews] = useState(() => new Set(['home']));
+  const [pageRefreshKeys, setPageRefreshKeys] = useState({
+    home: 0,
+    search: 0,
+    library: 0,
+    settings: 0,
+    download: 0
+  });
   const [languagesReady, setLanguagesReady] = useState(false);
   const [transitionDirection, setTransitionDirection] = useState(null);
   const contentRef = useRef(null);
@@ -27,6 +36,15 @@ function App() {
   useEffect(() => {
     isSidebarOpenRef.current = isSidebarOpen;
   }, [isSidebarOpen]);
+
+  useEffect(() => {
+    setVisitedViews(prev => {
+      if (prev.has(currentView)) return prev;
+      const next = new Set(prev);
+      next.add(currentView);
+      return next;
+    });
+  }, [currentView]);
 
   useEffect(() => {
     // Prevent refresh when app is focused via a deep link or launch_handler
@@ -91,7 +109,6 @@ function App() {
     }
 
     if (view === 'home') {
-      setHomeKey((prev) => prev + 1);
       window.location.hash = '#/home';
       setCurrentView('home');
       return;
@@ -109,6 +126,21 @@ function App() {
     setCurrentView(view);
   };
 
+  const handleRefreshCurrentPage = useCallback(async () => {
+    const key = (currentView === 'liked-songs' || currentView === 'liked') ? 'home' : currentView;
+    setPageRefreshKeys(prev => ({
+      ...prev,
+      [key]: (prev[key] || 0) + 1
+    }));
+  }, [currentView]);
+
+  const { pullDistance, isRefreshing } = usePullToRefresh({
+    containerRef: contentRef,
+    onRefresh: handleRefreshCurrentPage,
+    threshold: 65,
+    enabled: languagesReady
+  });
+
   const { getTabIndex, swipeHandlers } = useSwipeTabs({
     currentView,
     onNavigate: handleSetCurrentView,
@@ -120,6 +152,21 @@ function App() {
     const nextState = typeof openState === 'function' ? openState(isSidebarOpen) : openState;
     setIsSidebarOpen(nextState);
   };
+
+  const slideClass = transitionDirection === 'forward' 
+    ? 'mobile-tab-slide-forward' 
+    : transitionDirection === 'backward' 
+    ? 'mobile-tab-slide-backward' 
+    : '';
+
+  useEffect(() => {
+    if (transitionDirection) {
+      const timer = setTimeout(() => {
+        setTransitionDirection(null);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [transitionDirection, currentView]);
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden select-none">
@@ -136,28 +183,46 @@ function App() {
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} />
             <section 
               ref={contentRef}
-              className="app-content select-none touch-pan-y" 
+              className="app-content select-none touch-pan-y relative" 
               aria-live="polite"
               {...swipeHandlers}
             >
-              <div 
-                key={currentView}
-                className={`w-full min-h-full ${
-                  transitionDirection === 'forward'
-                    ? 'mobile-tab-slide-forward'
-                    : transitionDirection === 'backward'
-                    ? 'mobile-tab-slide-backward'
-                    : ''
-                }`}
-              >
+              <PullToRefresh
+                pullDistance={pullDistance}
+                isRefreshing={isRefreshing}
+                threshold={65}
+                currentView={currentView}
+              />
+              <div className="w-full min-h-full overflow-hidden">
                 <ErrorBoundary>
-                  {(currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked') && (
-                    <Home key={homeKey} setCurrentView={handleSetCurrentView} />
+                  <div className={`w-full min-h-full ${currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked' ? `block ${slideClass}` : 'hidden'}`}>
+                    <Home setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.home} />
+                  </div>
+
+                  {visitedViews.has('search') && (
+                    <div className={`w-full min-h-full ${currentView === 'search' ? `block ${slideClass}` : 'hidden'}`}>
+                      <SearchPage refreshKey={pageRefreshKeys.search} />
+                    </div>
                   )}
-                  {currentView === 'library' && <LibraryPage setCurrentView={handleSetCurrentView} />}
-                  {currentView === 'settings' && <SettingsPage setCurrentView={handleSetCurrentView} />}
-                  {currentView === 'search' && <SearchPage />}
-                  {(currentView === 'download' || currentView === 'Download') && <DownloadPage />}
+
+                  {visitedViews.has('library') && (
+                    <div className={`w-full min-h-full ${currentView === 'library' ? `block ${slideClass}` : 'hidden'}`}>
+                      <LibraryPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.library} />
+                    </div>
+                  )}
+
+                  {visitedViews.has('settings') && (
+                    <div className={`w-full min-h-full ${currentView === 'settings' ? `block ${slideClass}` : 'hidden'}`}>
+                      <SettingsPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.settings} />
+                    </div>
+                  )}
+
+                  {(visitedViews.has('download') || visitedViews.has('Download')) && (
+                    <div className={`w-full min-h-full ${currentView === 'download' || currentView === 'Download' ? `block ${slideClass}` : 'hidden'}`}>
+                      <DownloadPage />
+                    </div>
+                  )}
+
                   {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
                     <PlaceholderPage view={currentView} />
                   )}

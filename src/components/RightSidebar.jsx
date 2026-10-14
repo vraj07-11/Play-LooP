@@ -70,14 +70,13 @@ export default function RightSidebar() {
         <h3 className="text-xl font-bold text-white mb-6">Now Playing</h3>
         {nowPlayingTrack ? (
           <div className="bg-[#181818] rounded-xl p-4 border border-zinc-800/60 shadow-lg">
-            <div className="relative aspect-square w-full rounded-lg overflow-hidden mb-4 bg-zinc-900 shadow-md">
+            <div className="relative aspect-square w-full rounded-lg overflow-hidden mb-4 bg-black border border-white/5 shadow-md">
               <img 
-                src={nowPlayingTrack.thumbnail || '/logo.svg'} 
+                src={(!nowPlayingTrack.thumbnail || nowPlayingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : nowPlayingTrack.thumbnail} 
                 alt={nowPlayingTrack.title}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  e.target.src = '/logo.svg';
-                  e.target.className = 'w-full h-full object-contain p-4 bg-zinc-900';
+                  e.target.src = '/default-cover.svg';
                 }}
               />
               <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center">
@@ -132,12 +131,11 @@ export default function RightSidebar() {
                   <Play className="w-3 h-3 fill-current" />
                 </span>
                 <img 
-                  src={track.thumbnail || '/logo.svg'} 
+                  src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail} 
                   alt={track.title}
-                  className="w-10 h-10 rounded shrink-0 object-cover bg-zinc-900"
+                  className="w-10 h-10 rounded shrink-0 object-cover bg-black border border-white/5"
                   onError={(e) => {
-                    e.target.src = '/logo.svg';
-                    e.target.className = 'w-10 h-10 rounded shrink-0 object-contain p-1 bg-zinc-900';
+                    e.target.src = '/default-cover.svg';
                   }}
                 />
                 <div className="flex-1 min-w-0">
