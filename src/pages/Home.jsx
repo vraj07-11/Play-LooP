@@ -16,15 +16,45 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [extraPopularAlbums, setExtraPopularAlbums] = useState([]);
   const [loadingMoreMadeForYou, setLoadingMoreMadeForYou] = useState(false);
   const [loadingMorePopularAlbums, setLoadingMorePopularAlbums] = useState(false);
-  const [visiblePopularCount, setVisiblePopularCount] = useState(6);
+  const getGridCols = useCallback(() => {
+    if (typeof window === 'undefined') return 6;
+    const w = window.innerWidth;
+    if (w >= 1280) return 6;
+    if (w >= 1024) return 5;
+    if (w >= 768) return 4;
+    if (w >= 640) return 3;
+    return 2;
+  }, []);
+
+  const [gridCols, setGridCols] = useState(getGridCols);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setGridCols(getGridCols());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [getGridCols]);
+
+  const batchSize = gridCols <= 2 ? 4 : gridCols;
+  const [visiblePopularCount, setVisiblePopularCount] = useState(() => {
+    const initialCols = typeof window !== 'undefined' ? (
+      window.innerWidth >= 1280 ? 6 :
+      window.innerWidth >= 1024 ? 5 :
+      window.innerWidth >= 768 ? 4 :
+      window.innerWidth >= 640 ? 3 : 2
+    ) : 6;
+    return initialCols <= 2 ? 4 : initialCols;
+  });
+
   const [playlistThumbnailMap, setPlaylistThumbnailMap] = useState({});
 
   const featuredPlaylist = playlists.length > 0 ? playlists[0] : (DEFAULT_PLAYLISTS[0] || null);
   const madeForYouPlaylists = [...(playlists.length > 1 ? playlists.slice(1, 6) : DEFAULT_PLAYLISTS.slice(1, 6)), ...extraMadeForYou];
   
-  const initialPopular = playlists.length >= 16 
-    ? playlists.slice(6, 16) 
-    : [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx).slice(0, 10);
+  const initialPopular = playlists.length > 6 
+    ? [...playlists.slice(6), ...DEFAULT_PLAYLISTS].filter((item, idx, self) => self.findIndex(t => t.playlistId === item.playlistId) === idx)
+    : DEFAULT_PLAYLISTS;
   const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
   const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen } = usePlayer();
@@ -305,17 +335,26 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     if (loadingMorePopularAlbums) return;
     setLoadingMorePopularAlbums(true);
     try {
-      const more = await fetchMoreDynamicPlaylists(6);
-      setExtraPopularAlbums(prev => [...prev, ...more]);
+      const currentAvailable = popularAlbumsPlaylists.length;
+      const targetCount = visiblePopularCount + batchSize;
+      
+      if (currentAvailable < targetCount) {
+        const needed = targetCount - currentAvailable;
+        const more = await fetchMoreDynamicPlaylists(needed);
+        setExtraPopularAlbums(prev => [...prev, ...more]);
+      } else {
+        await new Promise(r => setTimeout(r, 300));
+      }
+      setVisiblePopularCount(prev => prev + batchSize);
     } catch (err) {
       console.error(err);
+      setVisiblePopularCount(prev => prev + batchSize);
     } finally {
       setLoadingMorePopularAlbums(false);
     }
   };
 
   const handleShowMorePopular = () => {
-    setVisiblePopularCount(prev => prev + 6);
     loadMorePopularAlbums();
   };
 
@@ -1133,7 +1172,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
           
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-5">
             {loadingPlaylists ? (
-              [...Array(6)].map((_, index) => (
+              [...Array(batchSize)].map((_, index) => (
                 <div
                   key={`skeleton-popular-${index}`}
                   className="flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] border border-white/5"
@@ -1183,7 +1222,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             )}
 
             {loadingMorePopularAlbums && (
-              [...Array(6)].map((_, index) => (
+              [...Array(batchSize)].map((_, index) => (
                 <div
                   key={`skeleton-more-${index}`}
                   className="flex flex-col p-2.5 sm:p-3.5 rounded-xl bg-[#141416] border border-white/5"

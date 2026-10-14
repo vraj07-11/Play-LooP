@@ -48,7 +48,7 @@ function getRandomKeywords(count) {
 }
 
 export async function fetchMoreDynamicPlaylists(count = 5) {
-  const keywords = getRandomKeywords(count);
+  const keywords = getRandomKeywords(count + 3);
   const promises = keywords.map(async (keyword) => {
     try {
       const details = await fetchPlaylistDetails(`QUERY:${keyword}`, 1);
@@ -68,7 +68,16 @@ export async function fetchMoreDynamicPlaylists(count = 5) {
   });
   
   const results = await Promise.all(promises);
-  return results.filter(Boolean);
+  const valid = results.filter(Boolean);
+
+  if (valid.length < count) {
+    const fallbacks = DEFAULT_PLAYLISTS.filter(p => !valid.some(v => v.playlistId === p.playlistId));
+    while (valid.length < count && fallbacks.length > 0) {
+      valid.push(fallbacks.shift());
+    }
+  }
+
+  return valid.slice(0, count);
 }
 
 export const DEFAULT_PLAYLISTS = [

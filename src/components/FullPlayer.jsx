@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check, FastForward } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { getAudioUrl } from '../services/api';
 import { shareTrack } from '../services/shareService';
@@ -28,7 +28,7 @@ export default function FullPlayer({
   hasNext,
   formatTime
 }) {
-  const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime, setTrackQueue, setIsRightSidebarOpen, setPlaybackSpeed } = usePlayer();
+  const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime, setTrackQueue, setIsRightSidebarOpen } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(initialShowLyrics);
   const [coverAnim, setCoverAnim] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -168,84 +168,6 @@ export default function FullPlayer({
   const isTouchRef = useRef(false);
   const [doubleTapFeedback, setDoubleTapFeedback] = useState(null);
 
-  // 2x Hold-to-speed up state & refs (like Instagram Reels)
-  const [isHoldingSpeed, setIsHoldingSpeed] = useState(false);
-  const isHoldingSpeedRef = useRef(false);
-  const longPressTimerRef = useRef(null);
-  const wasPausedBeforeHoldRef = useRef(false);
-
-  const startHoldSpeed = () => {
-    if (isHoldingSpeedRef.current) return;
-    isHoldingSpeedRef.current = true;
-    setIsHoldingSpeed(true);
-
-    if (typeof setPlaybackSpeed === 'function') {
-      setPlaybackSpeed(2.0);
-    }
-
-    if (!isPlaying) {
-      wasPausedBeforeHoldRef.current = true;
-      if (typeof playPause === 'function') {
-        playPause();
-      }
-    } else {
-      wasPausedBeforeHoldRef.current = false;
-    }
-
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      try { navigator.vibrate(35); } catch (e) {}
-    }
-  };
-
-  const endHoldSpeed = () => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    if (isHoldingSpeedRef.current) {
-      isHoldingSpeedRef.current = false;
-      setIsHoldingSpeed(false);
-
-      if (typeof setPlaybackSpeed === 'function') {
-        setPlaybackSpeed(1.0);
-      }
-
-      if (wasPausedBeforeHoldRef.current) {
-        wasPausedBeforeHoldRef.current = false;
-        if (typeof playPause === 'function') {
-          playPause();
-        }
-      }
-
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        try { navigator.vibrate(15); } catch (e) {}
-      }
-    }
-  };
-
-  // Reset 2x speed when player closes or unmounts
-  useEffect(() => {
-    if (!isOpen) {
-      endHoldSpeed();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleGlobalRelease = () => {
-      if (isHoldingSpeedRef.current) {
-        endHoldSpeed();
-      }
-    };
-    window.addEventListener('pointerup', handleGlobalRelease);
-    window.addEventListener('touchend', handleGlobalRelease);
-    window.addEventListener('mouseup', handleGlobalRelease);
-    return () => {
-      window.removeEventListener('pointerup', handleGlobalRelease);
-      window.removeEventListener('touchend', handleGlobalRelease);
-      window.removeEventListener('mouseup', handleGlobalRelease);
-      endHoldSpeed();
-    };
-  }, []);
 
   // Reset animation when track changes
   useEffect(() => {
@@ -518,23 +440,11 @@ export default function FullPlayer({
       touchStartY.current = e.touches[0].clientY;
       touchStartX.current = e.touches[0].clientX;
       isSwipingRef.current = false;
-
-      // Start long-press timer for 2x speed (Instagram Reels style)
-      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = setTimeout(() => {
-        if (!isSwipingRef.current) {
-          startHoldSpeed();
-        }
-      }, 200);
     }
   };
 
   const handleTouchEndCover = (e) => {
-    const wasHolding = isHoldingSpeedRef.current;
-    endHoldSpeed();
-
-    // Only process tap/double-tap if user was NOT holding 2x speed and didn't swipe
-    if (!wasHolding && !isSwipingRef.current && touchStartX.current !== null && e.changedTouches && e.changedTouches[0]) {
+    if (!isSwipingRef.current && touchStartX.current !== null && e.changedTouches && e.changedTouches[0]) {
       const clientX = e.changedTouches[0].clientX;
       const clientY = e.changedTouches[0].clientY;
       handleCoverTap(clientX, clientY, e.currentTarget);
@@ -545,35 +455,14 @@ export default function FullPlayer({
   };
 
   const handleTouchCancelCover = () => {
-    endHoldSpeed();
     touchStartY.current = null;
     touchStartX.current = null;
     isSwipingRef.current = false;
   };
 
-  const handleMouseDownCover = (e) => {
-    if (e.button !== 0 || isTouchRef.current) return;
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressTimerRef.current = setTimeout(() => {
-      startHoldSpeed();
-    }, 200);
-  };
-
-  const handleMouseUpCover = () => {
-    if (isTouchRef.current) return;
-    endHoldSpeed();
-  };
-
-  const handleMouseLeaveCover = () => {
-    endHoldSpeed();
-  };
-
   const handleClickCover = (e) => {
     if (isTouchRef.current) {
       isTouchRef.current = false;
-      return;
-    }
-    if (isHoldingSpeedRef.current) {
       return;
     }
     handleCoverTap(e.clientX, e.clientY, e.currentTarget);
@@ -586,14 +475,6 @@ export default function FullPlayer({
 
       if (Math.abs(deltaY) > 15 || Math.abs(deltaX) > 15) {
         isSwipingRef.current = true;
-        // User is swiping, cancel 2x hold immediately
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-        if (isHoldingSpeedRef.current) {
-          endHoldSpeed();
-        }
       }
 
       // Vertical swipe DOWN to close full player
@@ -744,24 +625,14 @@ export default function FullPlayer({
               onTouchMove={handleTouchMoveCover}
               onTouchEnd={handleTouchEndCover}
               onTouchCancel={handleTouchCancelCover}
-              onMouseDown={handleMouseDownCover}
-              onMouseUp={handleMouseUpCover}
-              onMouseLeave={handleMouseLeaveCover}
               onClick={handleClickCover}
               onWheel={handleWheelCover}
-              title="Double tap: Left (-10s), Middle (Like), Right (+10s) | Hold: 2x Speed"
-              className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 touch-none transition-all duration-300 ease-out transform ${coverAnim} ${isHoldingSpeed ? 'scale-[0.98] ring-2 ring-white/35 shadow-[0_0_35px_rgba(255,255,255,0.25)]' : ''} ${showLyrics
+              title="Double tap: Left (-10s), Middle (Like), Right (+10s)"
+              className={`absolute inset-0 w-full h-full rounded-2xl overflow-hidden border border-white/10 group flex items-center justify-center bg-zinc-950 touch-none transition-all duration-300 ease-out transform ${coverAnim} ${showLyrics
                 ? '-translate-y-full opacity-0 pointer-events-none scale-95 md:translate-y-0 md:opacity-100 md:pointer-events-auto md:scale-100'
                 : 'translate-y-0 opacity-100 pointer-events-auto scale-100 z-10'
                 }`}
             >
-              {/* Instagram Reels-Style 2X Speed Overlay Indicator */}
-              {isHoldingSpeed && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-black/85 backdrop-blur-xl border border-white/25 shadow-[0_0_25px_rgba(255,255,255,0.35)] text-white pointer-events-none animate-in fade-in zoom-in-95 duration-150">
-                  <FastForward className="w-4 h-4 text-emerald-400 fill-emerald-400 animate-pulse" />
-                  <span className="text-[11px] sm:text-xs font-black tracking-widest text-white drop-shadow">2X SPEED</span>
-                </div>
-              )}
               {!isDefaultLogo ? (
                 <img
                   src={imgSrc}

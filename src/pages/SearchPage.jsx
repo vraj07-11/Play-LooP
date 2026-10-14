@@ -3,39 +3,6 @@ import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
 import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 
-const DEFAULT_POPULAR_SONGS = [
-  {
-    videoId: "oemj5iht",
-    title: "Chikiri Chikiri",
-    artist: "A.R. Rahman, Mohit Chauhan",
-    thumbnail: "https://c.saavncdn.com/129/A-R-Rahman-Tollywood-Superhits-Telugu-2026-20260106191102-500x500.jpg"
-  },
-  {
-    videoId: "qbQ0IFxj",
-    title: "Yeshanagula",
-    artist: "Anirudh Ravichander",
-    thumbnail: "https://c.saavncdn.com/218/Yeshanagula-From-The-Paradise-Telugu-Telugu-2026-20260829173806-500x500.jpg"
-  },
-  {
-    videoId: "1134543272",
-    title: "India Superhits Top Track",
-    artist: "Arijit Singh, Pritam",
-    thumbnail: "https://c.saavncdn.com/editorial/Hindi-IndiaSuperhitsTop50_20260911054516_500x500.jpg"
-  },
-  {
-    videoId: "947987697",
-    title: "Global Pop Hit",
-    artist: "The Weeknd, Dua Lipa",
-    thumbnail: "https://c.saavncdn.com/editorial/GlobalPop_20260608125844_500x500.jpg"
-  },
-  {
-    videoId: "47599074",
-    title: "Now Trending Anthem",
-    artist: "Badshah, Yo Yo Honey Singh",
-    thumbnail: "https://c.saavncdn.com/editorial/NowTrending_20260423085344_500x500.jpg"
-  }
-];
-
 export default function SearchPage({ refreshKey = 0 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -49,7 +16,8 @@ export default function SearchPage({ refreshKey = 0 }) {
   const mobileInputRef = useRef(null);
 
   const [popularArtists, setPopularArtists] = useState([]);
-  const [popularSongsData, setPopularSongsData] = useState(DEFAULT_POPULAR_SONGS);
+  const [popularSongsData, setPopularSongsData] = useState([]);
+  const [loadingSongs, setLoadingSongs] = useState(true);
   const [visibleSongCount, setVisibleSongCount] = useState(5);
   const [loadingMoreSongs, setLoadingMoreSongs] = useState(false);
   
@@ -120,17 +88,28 @@ export default function SearchPage({ refreshKey = 0 }) {
 
   useEffect(() => {
     let isMounted = true;
+    setLoadingSongs(true);
     const prefStr = localStorage.getItem('preferred_languages');
     const langs = prefStr ? JSON.parse(prefStr) : [];
     
     // Fetch popular songs strictly by preferred languages
     fetchPopularSongs(langs)
       .then(songsData => {
-        if (isMounted && Array.isArray(songsData) && songsData.length > 0) {
-          setPopularSongsData(songsData);
+        if (isMounted) {
+          if (Array.isArray(songsData) && songsData.length > 0) {
+            setPopularSongsData(songsData);
+          } else {
+            setPopularSongsData([]);
+          }
+          setLoadingSongs(false);
         }
       })
-      .catch(e => console.error("Failed to fetch popular songs:", e));
+      .catch(e => {
+        console.error("Failed to fetch popular songs:", e);
+        if (isMounted) {
+          setLoadingSongs(false);
+        }
+      });
 
     // Fetch popular artists independently
     fetchPopularArtists(langs)
@@ -388,7 +367,19 @@ export default function SearchPage({ refreshKey = 0 }) {
                 <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Popular Songs</h2>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {popularSongsData.length > 0 ? (
+                {loadingSongs ? (
+                  [...Array(6)].map((_, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] border border-white/5 skeleton-shimmer-card">
+                      <span className="w-5 text-center text-xs sm:text-sm text-zinc-600 font-bold shrink-0">{idx + 1}</span>
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-zinc-800/90 border border-white/5 shrink-0" />
+                      <div className="flex-1 flex flex-col gap-1.5 min-w-0 pr-2">
+                        <div className="w-40 sm:w-52 h-4 sm:h-4.5 bg-zinc-700/80 rounded" />
+                        <div className="w-24 sm:w-32 h-3 sm:h-3.5 bg-zinc-800/60 rounded" />
+                      </div>
+                      <div className="w-8 h-8 rounded-full bg-zinc-800/50 shrink-0 sm:hidden" />
+                    </div>
+                  ))
+                ) : popularSongsData.length > 0 ? (
                   popularSongsData.slice(0, visibleSongCount).map((song, idx) => {
                     const title = song.title || song.name || "Unknown track";
                     const artist = typeof song.artist === 'string' ? song.artist : (song.artist?.name || song.artists || "Unknown artist");
@@ -421,38 +412,28 @@ export default function SearchPage({ refreshKey = 0 }) {
                       </div>
                     );
                   })
-                ) : (
-                  [...Array(8)].map((_, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] border border-white/5 skeleton-shimmer-card">
-                      <span className="w-5 text-center text-xs sm:text-sm text-zinc-600 font-bold shrink-0">{idx + 1}</span>
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-zinc-800/90 border border-white/5 shrink-0" />
-                      <div className="flex-1 flex flex-col gap-1.5 min-w-0 pr-2">
-                        <div className="w-40 sm:w-52 h-4 sm:h-4.5 bg-zinc-700/80 rounded" />
-                        <div className="w-24 sm:w-32 h-3 sm:h-3.5 bg-zinc-800/60 rounded" />
-                      </div>
-                      <div className="w-8 h-8 rounded-full bg-zinc-800/50 shrink-0 sm:hidden" />
-                    </div>
-                  ))
-                )}
+                ) : null}
               </div>
 
-              <div className="mt-5 flex justify-center">
-                <button
-                  type="button"
-                  onClick={handleLoadMoreSongs}
-                  disabled={loadingMoreSongs}
-                  className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-                >
-                  {loadingMoreSongs ? (
-                    <>
-                      <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    <>Show More</>
-                  )}
-                </button>
-              </div>
+              {!loadingSongs && popularSongsData.length > visibleSongCount && (
+                <div className="mt-5 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={handleLoadMoreSongs}
+                    disabled={loadingMoreSongs}
+                    className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    {loadingMoreSongs ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>Show More</>
+                    )}
+                  </button>
+                </div>
+              )}
             </section>
 
             {/* 2. Trending Artists */}
