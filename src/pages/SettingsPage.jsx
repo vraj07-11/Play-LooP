@@ -1,6 +1,7 @@
-  import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, Link, FileText, Upload, CheckCircle, AlertCircle, Trash2, Check, RefreshCw } from 'lucide-react';
 import { fetchApi } from '../services/api';
+import { usePlayer } from '../context/PlayerContext';
 
 const AVAILABLE_LANGUAGES = [
   { id: 'english', label: 'English' },
@@ -18,6 +19,7 @@ const AVAILABLE_LANGUAGES = [
 ];
 
 export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
+  const { crossfadeDuration = 0, setCrossfadeDuration } = usePlayer() || {};
   const [activeTab, setActiveTab] = useState('link'); // 'link' | 'file'
   const [playlistLink, setPlaylistLink] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -27,6 +29,33 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [savedPlaylistId, setSavedPlaylistId] = useState('');
   const [showUnmatched, setShowUnmatched] = useState(false);
+
+  const [lastNonZeroDuration, setLastNonZeroDuration] = useState(() => {
+    return crossfadeDuration > 0 ? crossfadeDuration : 4;
+  });
+
+  const isCrossfadeEnabled = crossfadeDuration > 0;
+
+  const handleToggleCrossfade = () => {
+    if (isCrossfadeEnabled) {
+      if (typeof setCrossfadeDuration === 'function') {
+        setCrossfadeDuration(0);
+      }
+    } else {
+      const targetDuration = lastNonZeroDuration > 0 ? lastNonZeroDuration : 4;
+      if (typeof setCrossfadeDuration === 'function') {
+        setCrossfadeDuration(targetDuration);
+      }
+    }
+  };
+
+  const handleCrossfadeChange = (val) => {
+    const num = Math.max(1, Math.min(12, Number(val) || 1));
+    setLastNonZeroDuration(num);
+    if (typeof setCrossfadeDuration === 'function') {
+      setCrossfadeDuration(num);
+    }
+  };
 
   // Preferred Languages State
   const [selectedLangs, setSelectedLangs] = useState([]);
@@ -619,6 +648,64 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
             <option value="96">Normal (96 kbps Data Saver)</option>
           </select>
         </div>
+      </div>
+
+      {/* --- AUDIO CROSSFADE CARD --- */}
+      <div className="page-card space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-medium text-white mb-1">Audio Crossfade</h3>
+            <p className="text-xs text-zinc-400">
+              Allows consecutive songs to blend into each other without gaps or silence.
+            </p>
+          </div>
+          {/* On/Off Switch Button */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isCrossfadeEnabled}
+            aria-label="Toggle Audio Crossfade"
+            onClick={handleToggleCrossfade}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-white/20 ${
+              isCrossfadeEnabled ? 'bg-white' : 'bg-zinc-800'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full shadow-md ring-0 transition duration-200 ease-in-out ${
+                isCrossfadeEnabled ? 'translate-x-5 bg-black' : 'translate-x-0 bg-zinc-400'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Slider & End Display - Only shown when On */}
+        {isCrossfadeEnabled && (
+          <div className="pt-2 border-t border-zinc-800/60 space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1 flex items-center">
+                <input
+                  type="range"
+                  min="1"
+                  max="12"
+                  step="1"
+                  value={crossfadeDuration || lastNonZeroDuration}
+                  onChange={(e) => handleCrossfadeChange(Number(e.target.value))}
+                  style={{
+                    background: `linear-gradient(to right, #ffffff ${Math.round((((crossfadeDuration || lastNonZeroDuration) - 1) / 11) * 100)}%, #27272a ${Math.round((((crossfadeDuration || lastNonZeroDuration) - 1) / 11) * 100)}%)`
+                  }}
+                  className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-white"
+                />
+              </div>
+              <span className="text-xs font-semibold font-mono text-white bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-700/60 shrink-0 min-w-[44px] text-center select-none shadow-sm">
+                {crossfadeDuration || lastNonZeroDuration}s
+              </span>
+            </div>
+            <div className="flex justify-between text-[11px] text-zinc-500 font-mono select-none px-0.5">
+              <span>1s</span>
+              <span>12s</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* --- DATA & STORAGE CARD --- */}
