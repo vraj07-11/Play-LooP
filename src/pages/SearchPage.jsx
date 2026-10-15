@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchApi, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
+import { fetchApi, fetchPlaylistDetails, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
 import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
 
 export default function SearchPage({ refreshKey = 0 }) {
@@ -10,6 +10,9 @@ export default function SearchPage({ refreshKey = 0 }) {
   const [activeSearchFilter, setActiveSearchFilter] = useState('all');
   const [isSongsExpanded, setIsSongsExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [visiblePlaylistsCount, setVisiblePlaylistsCount] = useState(6);
+  const [visibleArtistsCount, setVisibleArtistsCount] = useState(6);
+  const [playlistThumbnailMap, setPlaylistThumbnailMap] = useState({});
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const { selectAndPlayTrack, playPlaylist } = usePlayer();
   const mainScrollRef = useRef(null);
@@ -85,6 +88,26 @@ export default function SearchPage({ refreshKey = 0 }) {
   useEffect(() => {
     scrollToTop();
   }, [activeSearchFilter]);
+
+  // Asynchronously resolve clean non-watermarked covers for visible playlists
+  useEffect(() => {
+    if (!searchResults.playlists || searchResults.playlists.length === 0) return;
+    const visiblePlaylists = searchResults.playlists.slice(0, visiblePlaylistsCount);
+    visiblePlaylists.forEach((pl) => {
+      if (!pl || !pl.playlistId) return;
+      if (playlistThumbnailMap[pl.playlistId]) return;
+      if (pl.thumbnail && pl.thumbnail.includes('/editorial/')) {
+        fetchPlaylistDetails(pl.playlistId, 1).then((details) => {
+          if (details && details.thumbnail && !details.thumbnail.includes('/editorial/')) {
+            setPlaylistThumbnailMap(prev => ({
+              ...prev,
+              [pl.playlistId]: details.thumbnail
+            }));
+          }
+        }).catch(() => {});
+      }
+    });
+  }, [searchResults.playlists, visiblePlaylistsCount, playlistThumbnailMap]);
 
   useEffect(() => {
     let isMounted = true;
@@ -253,6 +276,8 @@ export default function SearchPage({ refreshKey = 0 }) {
   const performSearch = async (searchTerm) => {
     setLoading(true);
     setIsSongsExpanded(false);
+    setVisiblePlaylistsCount(6);
+    setVisibleArtistsCount(6);
     try {
       const response = await fetchApi(`/api/search?q=${encodeURIComponent(searchTerm)}&type=all`);
       if (response.ok) {
@@ -906,7 +931,7 @@ export default function SearchPage({ refreshKey = 0 }) {
                       <div>
                         <h3 className="text-xl font-bold text-white mb-4">Artists</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                          {searchResults.artists.map((artist, idx) => (
+                          {searchResults.artists.slice(0, visibleArtistsCount).map((artist, idx) => (
                             <div 
                               key={idx}
                               className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
@@ -920,6 +945,18 @@ export default function SearchPage({ refreshKey = 0 }) {
                             </div>
                           ))}
                         </div>
+                        {searchResults.artists.length > visibleArtistsCount && (
+                          <div className="flex justify-center mt-4">
+                            <button
+                              type="button"
+                              onClick={() => setVisibleArtistsCount(prev => prev + 6)}
+                              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                              <span>Load More Artists</span>
+                              <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -928,25 +965,40 @@ export default function SearchPage({ refreshKey = 0 }) {
                       <div>
                         <h3 className="text-xl font-bold text-white mb-4">Playlists & Albums</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                          {searchResults.playlists.map((pl, idx) => (
-                            <div 
-                              key={idx}
-                              className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
-                              onClick={() => handleCardClick(pl)}
-                            >
-                              <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
-                                <img src={pl.thumbnail || '/default-cover.svg'} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
-                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
-                                    <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                          {searchResults.playlists.slice(0, visiblePlaylistsCount).map((pl, idx) => {
+                            const cover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail || '/default-cover.svg';
+                            return (
+                              <div 
+                                key={idx}
+                                className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
+                                onClick={() => handleCardClick(pl)}
+                              >
+                                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                  <img src={cover} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
+                                      <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                                    </div>
                                   </div>
                                 </div>
+                                <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
+                                <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
                               </div>
-                              <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
-                              <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
+                        {searchResults.playlists.length > visiblePlaylistsCount && (
+                          <div className="flex justify-center mt-4">
+                            <button
+                              type="button"
+                              onClick={() => setVisiblePlaylistsCount(prev => prev + 6)}
+                              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                              <span>Load More Playlists</span>
+                              <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -1019,7 +1071,7 @@ export default function SearchPage({ refreshKey = 0 }) {
                         <div>
                           <h3 className="text-xl font-bold text-white mb-4">Artists</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                            {searchResults.artists.map((artist, idx) => (
+                            {searchResults.artists.slice(0, visibleArtistsCount).map((artist, idx) => (
                               <div 
                                 key={idx}
                                 className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
@@ -1033,6 +1085,18 @@ export default function SearchPage({ refreshKey = 0 }) {
                               </div>
                             ))}
                           </div>
+                          {searchResults.artists.length > visibleArtistsCount && (
+                            <div className="flex justify-center mt-4">
+                              <button
+                                type="button"
+                                onClick={() => setVisibleArtistsCount(prev => prev + 6)}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                              >
+                                <span>Load More Artists</span>
+                                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1041,25 +1105,40 @@ export default function SearchPage({ refreshKey = 0 }) {
                         <div>
                           <h3 className="text-xl font-bold text-white mb-4">Playlists & Albums</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                            {searchResults.playlists.map((pl, idx) => (
-                              <div 
-                                key={idx}
-                                className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
-                                onClick={() => handleCardClick(pl)}
-                              >
-                                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
-                                  <img src={pl.thumbnail || '/default-cover.svg'} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
-                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
-                                      <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                            {searchResults.playlists.slice(0, visiblePlaylistsCount).map((pl, idx) => {
+                              const cover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail || '/default-cover.svg';
+                              return (
+                                <div 
+                                  key={idx}
+                                  className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
+                                  onClick={() => handleCardClick(pl)}
+                                >
+                                  <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                    <img src={cover} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
+                                        <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                                      </div>
                                     </div>
                                   </div>
+                                  <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
+                                  <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
                                 </div>
-                                <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
-                                <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
+                          {searchResults.playlists.length > visiblePlaylistsCount && (
+                            <div className="flex justify-center mt-4">
+                              <button
+                                type="button"
+                                onClick={() => setVisiblePlaylistsCount(prev => prev + 6)}
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                              >
+                                <span>Load More Playlists</span>
+                                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1082,20 +1161,34 @@ export default function SearchPage({ refreshKey = 0 }) {
                 {/* ARTISTS TAB */}
                 {activeSearchFilter === 'artists' && (
                   searchResults.artists.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {searchResults.artists.map((artist, idx) => (
-                        <div 
-                          key={idx}
-                          className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
-                          onClick={() => handleCardClick(artist)}
-                        >
-                          <div className="relative w-28 h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
-                            <img src={artist.thumbnail || '/default-cover.svg'} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                    <div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {searchResults.artists.slice(0, visibleArtistsCount).map((artist, idx) => (
+                          <div 
+                            key={idx}
+                            className="group bg-[#141416] hover:bg-[#202024] p-4 rounded-2xl flex flex-col items-center text-center cursor-pointer transition-all duration-300 border border-white/5"
+                            onClick={() => handleCardClick(artist)}
+                          >
+                            <div className="relative w-28 h-28 rounded-full overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                              <img src={artist.thumbnail || '/default-cover.svg'} alt={artist.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                            </div>
+                            <h4 className="font-bold text-white text-base truncate w-full">{artist.title}</h4>
+                            <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
                           </div>
-                          <h4 className="font-bold text-white text-base truncate w-full">{artist.title}</h4>
-                          <span className="text-xs text-zinc-400 font-medium mt-1">Artist</span>
+                        ))}
+                      </div>
+                      {searchResults.artists.length > visibleArtistsCount && (
+                        <div className="flex justify-center mt-6">
+                          <button
+                            type="button"
+                            onClick={() => setVisibleArtistsCount(prev => prev + 6)}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <span>Load More Artists</span>
+                            <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                          </button>
                         </div>
-                      ))}
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-16 bg-[#141416]/50 rounded-2xl border border-white/5 p-6">
@@ -1116,25 +1209,42 @@ export default function SearchPage({ refreshKey = 0 }) {
                 {/* PLAYLISTS TAB */}
                 {activeSearchFilter === 'playlists' && (
                   searchResults.playlists.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {searchResults.playlists.map((pl, idx) => (
-                        <div 
-                          key={idx}
-                          className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
-                          onClick={() => handleCardClick(pl)}
-                        >
-                          <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
-                            <img src={pl.thumbnail || '/default-cover.svg'} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
-                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
-                                <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                    <div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {searchResults.playlists.slice(0, visiblePlaylistsCount).map((pl, idx) => {
+                          const cover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail || '/default-cover.svg';
+                          return (
+                            <div 
+                              key={idx}
+                              className="group bg-[#141416] hover:bg-[#202024] p-3.5 rounded-2xl flex flex-col cursor-pointer transition-all duration-300 border border-white/5"
+                              onClick={() => handleCardClick(pl)}
+                            >
+                              <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-xl mb-3 bg-black border border-white/5 shrink-0">
+                                <img src={cover} alt={pl.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-xl">
+                                    <Play className="w-4 h-4 text-black fill-current translate-x-0.5" />
+                                  </div>
+                                </div>
                               </div>
+                              <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
+                              <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
                             </div>
-                          </div>
-                          <h4 className="font-bold text-white text-sm truncate">{pl.title}</h4>
-                          <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.author || 'Collection'}</p>
+                          );
+                        })}
+                      </div>
+                      {searchResults.playlists.length > visiblePlaylistsCount && (
+                        <div className="flex justify-center mt-6">
+                          <button
+                            type="button"
+                            onClick={() => setVisiblePlaylistsCount(prev => prev + 6)}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <span>Load More Playlists</span>
+                            <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                          </button>
                         </div>
-                      ))}
+                      )}
                     </div>
                   ) : (
                     <div className="text-center py-16 bg-[#141416]/50 rounded-2xl border border-white/5 p-6">

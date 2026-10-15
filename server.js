@@ -243,7 +243,7 @@ async function fetchJioSaavn(callParams) {
 }
 
 function getValidImage(imgUrl) {
-	if (!imgUrl) return "/logo.svg";
+	if (!imgUrl || typeof imgUrl !== "string" || !imgUrl.startsWith("http")) return "/logo.svg";
 	const url = String(imgUrl).replace("150x150", "500x500");
 	if (
 		url.includes("default_images") || 
@@ -273,8 +273,10 @@ async function resolveCleanPlaylistThumbnail(playlistId, rawImage) {
 	}
 	try {
 		const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: playlistId });
-		if (data && data.list && data.list.length > 0 && data.list[0].image) {
-			const cleanImg = getValidImage(data.list[0].image);
+		const tracks = data?.songs || data?.list || [];
+		const cleanTrack = tracks.find(t => t?.image && !String(t.image).includes('/editorial/')) || tracks[0];
+		if (cleanTrack?.image) {
+			const cleanImg = getValidImage(cleanTrack.image);
 			if (cleanImg && !cleanImg.includes('/editorial/')) {
 				playlistCoverCache.set(playlistId, cleanImg);
 				return cleanImg;
@@ -288,21 +290,33 @@ async function resolveCleanPlaylistThumbnail(playlistId, rawImage) {
 
 function cleanStr(val, fallback = "") {
 	if (!val) return fallback;
+	const decodeEntities = (s) => {
+		return String(s)
+			.replace(/&quot;/g, '"')
+			.replace(/&amp;/g, '&')
+			.replace(/&#039;/g, "'")
+			.replace(/&apos;/g, "'")
+			.replace(/&lt;/g, '<')
+			.replace(/&gt;/g, '>')
+			.replace(/&nbsp;/g, ' ')
+			.replace(/&copy;/g, '©');
+	};
 	if (typeof val === "string") {
-		return val.replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+		return decodeEntities(val).trim();
 	}
 	if (Array.isArray(val)) {
 		const str = val.map(v => typeof v === 'string' ? v : (v?.name || v?.title || '')).filter(Boolean).join(', ');
-		return str ? str.replace(/&quot;/g, '"').replace(/&amp;/g, '&') : fallback;
+		return str ? decodeEntities(str).trim() : fallback;
 	}
 	if (typeof val === "object") {
 		const str = val.name || val.title || val.description || fallback;
-		return String(str).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+		return decodeEntities(str).trim();
 	}
-	return String(val).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+	return decodeEntities(val).trim();
 }
 
 function formatSong(song, quality = "320") {
+	if (!song) return null;
 	const encUrl = song.encrypted_media_url || song.more_info?.encrypted_media_url;
 	const decUrl = encUrl ? decryptSaavnUrl(encUrl) : null;
 	
@@ -320,13 +334,19 @@ function formatSong(song, quality = "320") {
 	let artistName = "Various Artists";
 	if (song.more_info?.primary_artists) {
 		artistName = song.more_info.primary_artists;
+	} else if (song.primary_artists) {
+		artistName = song.primary_artists;
 	} else if (song.subtitle) {
 		artistName = song.subtitle;
+	} else if (song.singers) {
+		artistName = song.singers;
 	}
+
+	const songTitle = song.title || song.song || song.name;
 
 	return {
 		videoId: song.id,
-		title: cleanStr(song.title, "Unknown Track"),
+		title: cleanStr(songTitle, "Unknown Track"),
 		artist: cleanStr(artistName, "Various Artists"),
 		thumbnail: getValidImage(song.image),
 		duration: parseInt(song.more_info?.duration || song.duration || 0, 10),
@@ -346,26 +366,30 @@ async function getSoundCloudClientId() {
 
 	try {
 		const htmlRes = await fetch("https://soundcloud.com", {
-			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+			signal: AbortSignal.timeout(1200)
 		});
 		const html = await htmlRes.text();
 		
 		const scriptMatches = [...html.matchAll(/<script [^>]*src="([^"]+)"/g)];
 		const scriptUrls = scriptMatches.map(m => m[1]).filter(url => url.startsWith("http"));
 
-		for (const url of scriptUrls) {
-			const jsRes = await fetch(url, {
-				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-			});
-			const jsText = await jsRes.text();
-			const match = jsText.match(/client_id["']?[:=]["']?([a-zA-Z0-9]{32})/);
-			if (match && match[1]) {
-				scClientIdCache = { id: match[1], fetchedAt: now };
-				return match[1];
-			}
+		for (const url of scriptUrls.slice(0, 3)) {
+			try {
+				const jsRes = await fetch(url, {
+					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+					signal: AbortSignal.timeout(1000)
+				});
+				const jsText = await jsRes.text();
+				const match = jsText.match(/client_id["']?[:=]["']?([a-zA-Z0-9]{32})/);
+				if (match && match[1]) {
+					scClientIdCache = { id: match[1], fetchedAt: now };
+					return match[1];
+				}
+			} catch (_) {}
 		}
 	} catch (e) {
-		console.error("[SoundCloud] Error fetching client ID:", e);
+		// Silent timeout fallback to static id
 	}
 	return scClientIdCache.id || "dkevB9EsY4jIoSm8RfddPNUKyn6hurXF";
 }
@@ -377,7 +401,8 @@ async function searchSoundCloud(query, limit = 8) {
 
 		const url = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${clientId}&limit=${limit}`;
 		const res = await fetch(url, {
-			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
+			headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+			signal: AbortSignal.timeout(1200)
 		});
 		if (!res.ok) return [];
 		const data = await res.json();
@@ -466,6 +491,36 @@ function computeRelevanceScore(song, queryLower) {
 	return score;
 }
 
+function isRedundantArtist(candidateName, existingNames) {
+	if (!candidateName) return true;
+	const c = candidateName.trim().toLowerCase();
+	const cNorm = c.replace(/[^a-z0-9]/g, "");
+	if (!cNorm) return true;
+
+	for (const ex of existingNames) {
+		const e = ex.trim().toLowerCase();
+		const eNorm = e.replace(/[^a-z0-9]/g, "");
+
+		// Exact or normalized match
+		if (cNorm === eNorm) return true;
+
+		// Candidate contains existing full name (e.g. "Pritam & Arijit Singh" contains "Arijit Singh", "Yellow Coldplay" contains "Coldplay")
+		if (c.includes(e) || cNorm.includes(eNorm)) return true;
+
+		// Existing contains candidate and candidate is just 1 word (e.g. "Arijit" when "Arijit Singh" exists)
+		const exWords = e.split(/\s+/);
+		if (exWords.length > 1 && exWords[0] === c) return true;
+
+		// Typos or slight variations (e.g. "Arijit Sing" vs "Arijit Singh")
+		if (Math.abs(cNorm.length - eNorm.length) <= 1 && (cNorm.startsWith(eNorm.slice(0, -1)) || eNorm.startsWith(cNorm.slice(0, -1)))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+const playlistDetailsMemoryCache = new Map();
+
 // --- API Endpoints ---
 
 app.get("/api/health", (req, res) => {
@@ -484,11 +539,14 @@ app.get("/api/search", async (req, res) => {
 		if (isMulti) {
 			const [songsRes, artistsRes, playlistsRes, albumsRes, autoRes, scRes] = await Promise.allSettled([
 				fetchJioSaavn({ __call: "search.getResults", q: query, n: "25", p: "1" }),
-				fetchJioSaavn({ __call: "search.getArtistResults", q: query, n: "8", p: "1" }),
-				fetchJioSaavn({ __call: "search.getPlaylistResults", q: query, n: "6", p: "1" }),
-				fetchJioSaavn({ __call: "search.getAlbumResults", q: query, n: "6", p: "1" }),
+				fetchJioSaavn({ __call: "search.getArtistResults", q: query, n: "20", p: "1" }),
+				fetchJioSaavn({ __call: "search.getPlaylistResults", q: query, n: "18", p: "1" }),
+				fetchJioSaavn({ __call: "search.getAlbumResults", q: query, n: "18", p: "1" }),
 				fetchJioSaavn({ __call: "autocomplete.get", query: query }),
-				searchSoundCloud(query, 10)
+				Promise.race([
+					searchSoundCloud(query, 10),
+					new Promise(resolve => setTimeout(() => resolve([]), 1200))
+				])
 			]);
 
 			const songsData = songsRes.status === 'fulfilled' && songsRes.value?.results ? songsRes.value.results : [];
@@ -498,12 +556,12 @@ app.get("/api/search", async (req, res) => {
 			const autoData = autoRes.status === 'fulfilled' && autoRes.value ? autoRes.value : {};
 			const scSongs = scRes.status === 'fulfilled' && Array.isArray(scRes.value) ? scRes.value : [];
 
-			let saavnSongs = songsData.map(s => formatSong(s));
+			let saavnSongs = songsData.map(s => formatSong(s)).filter(Boolean);
 			if (saavnSongs.length === 0 && autoData.songs?.data) {
 				saavnSongs = autoData.songs.data.map(s => ({
 					videoId: s.id,
-					title: cleanStr(s.title, "Unknown Track"),
-					artist: cleanStr(s.more_info?.primary_artists || s.description, "Play LooP"),
+					title: cleanStr(s.title || s.song, "Unknown Track"),
+					artist: cleanStr(s.more_info?.primary_artists || s.primary_artists || s.description, "Play LooP"),
 					thumbnail: getValidImage(s.image),
 					duration: 180
 				}));
@@ -529,15 +587,89 @@ app.get("/api/search", async (req, res) => {
 				}
 			}
 
-			let artists = artistsData.map(a => ({
-				playlistId: `ARTIST:${a.id}`,
-				title: cleanStr(a.name || a.title, "Artist"),
-				artist: "Verified Artist",
-				thumbnail: getValidImage(a.image),
-				type: "artist",
-				description: cleanStr(a.role || a.description, "Artist"),
-				isArtist: true
-			}));
+			// Extract authentic creators from top matching songs
+			const songArtists = [];
+			for (const s of songsData.slice(0, 8)) {
+				if (s.primary_artists && s.primary_artists_id) {
+					const names = String(s.primary_artists).split(",").map(n => n.trim());
+					const ids = String(s.primary_artists_id).split(",").map(id => id.trim());
+					names.forEach((name, idx) => {
+						if (name && ids[idx]) {
+							songArtists.push({ id: ids[idx], name, image: s.image, role: "Artist" });
+						}
+					});
+				}
+				if (s.featured_artists && s.featured_artists_id) {
+					const names = String(s.featured_artists).split(",").map(n => n.trim());
+					const ids = String(s.featured_artists_id).split(",").map(id => id.trim());
+					names.forEach((name, idx) => {
+						if (name && ids[idx]) {
+							songArtists.push({ id: ids[idx], name, image: s.image, role: "Artist" });
+						}
+					});
+				}
+				if (s.more_info?.artistMap?.primary_artists && Array.isArray(s.more_info.artistMap.primary_artists)) {
+					for (const pa of s.more_info.artistMap.primary_artists) {
+						if (pa.id && pa.name) {
+							songArtists.push({ id: pa.id, name: pa.name, image: pa.image || s.image, role: "Artist" });
+						}
+					}
+				}
+			}
+
+			// Clean and organize direct artists from search
+			const directMatches = [];
+			const otherRawArtists = [];
+
+			for (const a of artistsData) {
+				const aName = cleanStr(a.name || a.title, "").trim();
+				if (!aName || aName.length > 40 || aName.includes(";") || aName.includes("|") || /\btribute\b/i.test(aName)) {
+					continue;
+				}
+				const aLower = aName.toLowerCase();
+				if (aLower === queryLower || aLower.startsWith(queryLower)) {
+					directMatches.push(a);
+				} else {
+					otherRawArtists.push(a);
+				}
+			}
+
+			// Priority pool: Direct close matches first, then verified song artists, then other artists
+			const candidatePool = [
+				...(directMatches.length > 0 ? [directMatches[0]] : []),
+				...songArtists,
+				...(directMatches.slice(1)),
+				...otherRawArtists
+			];
+
+			const distinctArtists = [];
+			const seenArtistNames = [];
+			const seenArtistIds = new Set();
+
+			for (const a of candidatePool) {
+				const aId = a.artistid || a.id;
+				const aName = cleanStr(a.name || a.title, "").trim();
+				if (!aId || !aName) continue;
+				if (seenArtistIds.has(String(aId))) continue;
+				if (aName.length > 35 || aName.includes(";") || aName.includes("|") || /\btribute\b/i.test(aName)) continue;
+
+				if (isRedundantArtist(aName, seenArtistNames)) continue;
+
+				seenArtistIds.add(String(aId));
+				seenArtistNames.push(aName);
+				distinctArtists.push({
+					playlistId: `ARTIST:${aId}`,
+					title: aName,
+					artist: "Verified Artist",
+					thumbnail: getValidImage(a.image),
+					type: "artist",
+					description: cleanStr(a.role || a.description, "Artist"),
+					isArtist: true
+				});
+				if (distinctArtists.length >= 18) break;
+			}
+
+			let artists = distinctArtists;
 
 			if (artists.length === 0 && autoData.artists?.data) {
 				artists = autoData.artists.data.map(a => ({
@@ -551,54 +683,89 @@ app.get("/api/search", async (req, res) => {
 				}));
 			}
 
+			const filteredPlaylists = playlistsData.filter(p => {
+				const count = parseInt(p.count || p.numsongs || p.more_info?.song_count || "0", 10);
+				const pId = p.listid || p.id;
+				const title = p.listname || p.title || p.name;
+				if (!pId || !title) return false;
+				if (p.count !== undefined || p.numsongs !== undefined || p.more_info?.song_count !== undefined) {
+					return count > 0;
+				}
+				return true;
+			});
+
 			const playlistsDataClean = await Promise.all(
-				playlistsData.map(async (p) => {
-					const cleanThumb = await resolveCleanPlaylistThumbnail(p.id, p.image);
+				filteredPlaylists.map(async (p, idx) => {
+					const pId = p.listid || p.id;
+					let cleanThumb = playlistCoverCache.get(pId) || getValidImage(p.image);
+					// For top visible items, if image is an editorial graphic with JioSaavn logo watermark, resolve clean album art
+					if (idx < 6 && cleanThumb && cleanThumb.includes('/editorial/')) {
+						try {
+							cleanThumb = await Promise.race([
+								resolveCleanPlaylistThumbnail(pId, cleanThumb),
+								new Promise(resolve => setTimeout(() => resolve(cleanThumb), 1200))
+							]);
+						} catch (_) {}
+					}
+					const songCount = p.count || p.numsongs || p.more_info?.song_count;
 					return {
-						playlistId: p.id,
-						title: cleanStr(p.title || p.name, "Playlist"),
-						author: cleanStr(p.more_info?.artist_name || p.subtitle, "Play LooP"),
+						playlistId: pId,
+						title: cleanStr(p.listname || p.title || p.name, "Playlist"),
+						author: cleanStr(p.artist_name || (p.firstname ? `${p.firstname} ${p.lastname || ''}`.trim() : null) || p.more_info?.artist_name || p.subtitle, "Play LooP"),
 						thumbnail: cleanThumb,
 						type: "playlist",
-						count: p.more_info?.song_count ? `${p.more_info.song_count} songs` : "Playlist"
+						count: songCount ? `${songCount} songs` : "Playlist"
 					};
 				})
 			);
 
+			const albumsDataClean = albumsData
+				.filter(al => {
+					const alId = al.albumid || al.id;
+					const title = al.title || al.name;
+					return Boolean(alId && title);
+				})
+				.map(al => {
+					const alId = al.albumid || al.id;
+					return {
+						playlistId: alId,
+						title: cleanStr(al.title || al.name, "Album"),
+						author: cleanStr(al.primary_artists || al.music || al.artist || al.subtitle, "Album"),
+						thumbnail: getValidImage(al.image),
+						type: "album",
+						count: "Album"
+					};
+				});
+
 			let playlists = [
 				...playlistsDataClean,
-				...albumsData.map(al => ({
-					playlistId: al.id,
-					title: cleanStr(al.title || al.name, "Album"),
-					author: cleanStr(al.music || al.artist || al.subtitle, "Album"),
-					thumbnail: getValidImage(al.image),
-					type: "album",
-					count: "Album"
-				}))
+				...albumsDataClean
 			];
 
 			if (playlists.length === 0 && (autoData.playlists?.data || autoData.albums?.data)) {
-				const autoPlaylists = await Promise.all(
-					(autoData.playlists?.data || []).map(async (p) => {
-						const cleanThumb = await resolveCleanPlaylistThumbnail(p.id, p.image);
-						return {
-							playlistId: p.id,
-							title: cleanStr(p.title, "Playlist"),
-							author: cleanStr(p.description || p.subtitle, "Play LooP"),
-							thumbnail: cleanThumb,
-							type: "playlist",
-							count: "Playlist"
-						};
-					})
-				);
-				const autoAlbums = (autoData.albums?.data || []).map(al => ({
-					playlistId: al.id,
-					title: cleanStr(al.title, "Album"),
-					author: cleanStr(al.description || al.subtitle, "Album"),
-					thumbnail: getValidImage(al.image),
-					type: "album",
-					count: "Album"
-				}));
+				const autoPlaylists = (autoData.playlists?.data || []).map((p) => {
+					const pId = p.listid || p.id;
+					const cleanThumb = playlistCoverCache.get(pId) || getValidImage(p.image);
+					return {
+						playlistId: pId,
+						title: cleanStr(p.title || p.name, "Playlist"),
+						author: cleanStr(p.description || p.subtitle, "Play LooP"),
+						thumbnail: cleanThumb,
+						type: "playlist",
+						count: "Playlist"
+					};
+				});
+				const autoAlbums = (autoData.albums?.data || []).map(al => {
+					const alId = al.albumid || al.id;
+					return {
+						playlistId: alId,
+						title: cleanStr(al.title || al.name, "Album"),
+						author: cleanStr(al.description || al.subtitle, "Album"),
+						thumbnail: getValidImage(al.image),
+						type: "album",
+						count: "Album"
+					};
+				});
 				playlists = [...autoPlaylists, ...autoAlbums];
 			}
 
@@ -1077,8 +1244,9 @@ app.get("/api/recommendations", async (req, res) => {
 		const fetchPromises = selectedPids.map(async (pid) => {
 			try {
 				const chartData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid, n: "50" });
-				if (chartData && Array.isArray(chartData.list)) {
-					return chartData.list.map(formatSong);
+				const chartList = chartData?.songs || chartData?.list;
+				if (chartData && Array.isArray(chartList)) {
+					return chartList.map(formatSong);
 				}
 			} catch(e) {}
 			return [];
@@ -1181,9 +1349,10 @@ app.get("/api/trending-artists", async (req, res) => {
 				// 2. Fetch playlist details
 				const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid });
 				const langCounts = {};
+				const plList = playlistData?.songs || playlistData?.list;
 				
-				if (playlistData && playlistData.list) {
-					playlistData.list.forEach(song => {
+				if (playlistData && plList) {
+					plList.forEach(song => {
 						const artists = song.more_info?.artistMap?.primary_artists || [];
 						artists.forEach(a => {
 							if (a.id && a.name && !a.name.toLowerCase().includes("various")) {
@@ -1277,8 +1446,9 @@ app.get("/api/popular-songs", async (req, res) => {
 						for (const id of selectedPids) {
 							try {
 								const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: id });
-								if (playlistData && playlistData.list) {
-									songs.push(...playlistData.list.map(formatSong));
+								const plSongs = playlistData?.songs || playlistData?.list;
+								if (playlistData && plSongs) {
+									songs.push(...plSongs.map(formatSong));
 								}
 							} catch (e) {}
 						}
@@ -1289,8 +1459,9 @@ app.get("/api/popular-songs", async (req, res) => {
 						
 						if (pid) {
 							const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid });
-							if (playlistData && playlistData.list) {
-								songs = playlistData.list.map(formatSong);
+							const plSongs = playlistData?.songs || playlistData?.list;
+							if (playlistData && plSongs) {
+								songs = plSongs.map(formatSong);
 							}
 						}
 					}
@@ -1299,9 +1470,11 @@ app.get("/api/popular-songs", async (req, res) => {
 						// Fallback to searching top hits playlist for this language
 						const searchPlaylists = await fetchJioSaavn({ __call: "search.getPlaylistResults", q: `top ${lang} hits`, n: "1", p: "1" });
 						if (searchPlaylists && searchPlaylists.results && searchPlaylists.results.length > 0) {
-							const plData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: searchPlaylists.results[0].id });
-							if (plData && plData.list) {
-								songs = plData.list.map(formatSong);
+							const targetPlId = searchPlaylists.results[0].listid || searchPlaylists.results[0].id;
+							const plData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: targetPlId });
+							const plSongs = plData?.songs || plData?.list;
+							if (plData && plSongs) {
+								songs = plSongs.map(formatSong);
 							}
 						}
 					}
@@ -1409,22 +1582,24 @@ async function fetchPlaylistsBackground() {
 			selectedCategories.map(async (cat) => {
 				try {
 					const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: cat.id });
-					if (data && data.id) {
+					const plId = data?.id || data?.listid || cat.id;
+					if (data && plId) {
 						let thumb = getValidImage(data.image);
+						const tracks = data.songs || data.list || [];
 						if (thumb && thumb.includes('/editorial/')) {
-							if (data.list && data.list.length > 0 && data.list[0].image) {
-								thumb = getValidImage(data.list[0].image);
+							if (tracks.length > 0 && tracks[0].image) {
+								thumb = getValidImage(tracks[0].image);
 							}
 						}
 						if (thumb && !thumb.includes('/editorial/')) {
-							playlistCoverCache.set(data.id, thumb);
+							playlistCoverCache.set(plId, thumb);
 						}
 						return {
-							playlistId: data.id,
-							title: cat.title || data.title,
+							playlistId: plId,
+							title: cleanStr(cat.title || data.title || data.listname, "Playlist"),
 							author: "Play LooP",
 							thumbnail: thumb,
-							count: parseInt(data.list_count || data.list?.length || "20", 10)
+							count: parseInt(data.list_count || data.count || tracks.length || "20", 10)
 						};
 					}
 				} catch (e) {
@@ -1465,6 +1640,14 @@ app.get("/api/playlists", (req, res) => {
 app.get("/api/playlist", async (req, res) => {
 	const playlistId = String(req.query.id || "").trim();
 	if (!playlistId) return res.status(400).json({ error: "Playlist ID is required" });
+
+	const pageStr = String(req.query.page || "1");
+	if (pageStr === "1" && !playlistId.startsWith("ARTIST:") && !playlistId.startsWith("QUERY:") && playlistDetailsMemoryCache.has(playlistId)) {
+		const cached = playlistDetailsMemoryCache.get(playlistId);
+		if (Date.now() - cached.timestamp < 10 * 60 * 1000) {
+			return res.json(cached.data);
+		}
+	}
 
 	try {
 		if (playlistId.startsWith("ARTIST:")) {
@@ -1631,12 +1814,49 @@ app.get("/api/playlist", async (req, res) => {
 			});
 		}
 
-		const data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: playlistId });
-		if (!data || !data.id) {
+		let data = await fetchJioSaavn({ __call: "playlist.getDetails", listid: playlistId });
+		let rawTracks = data?.songs || data?.list || [];
+		let resolvedTitle = data?.title || data?.listname || data?.name;
+		let resolvedId = data?.id || data?.listid || playlistId;
+
+		// If playlist not found, has no title, or has 0 songs, check if it is an album!
+		if (!data || !resolvedTitle || rawTracks.length === 0) {
+			try {
+				const albumData = await fetchJioSaavn({ __call: "content.getAlbumDetails", albumid: playlistId });
+				if (albumData && (albumData.albumid || albumData.id || albumData.title) && (albumData.songs?.length > 0 || albumData.list?.length > 0)) {
+					data = albumData;
+					rawTracks = albumData.songs || albumData.list || [];
+					resolvedTitle = albumData.title || albumData.name;
+					resolvedId = albumData.albumid || albumData.id || playlistId;
+				}
+			} catch (albumErr) {
+				console.warn("Album fallback failed:", albumErr.message);
+			}
+		}
+
+		let tracks = rawTracks.map(s => formatSong(s)).filter(Boolean);
+
+		// If still 0 tracks, fallback to searching songs by the playlist title so it is NEVER completely empty!
+		if (tracks.length === 0 && resolvedTitle) {
+			try {
+				const fallbackSearch = await fetchJioSaavn({
+					__call: "search.getResults",
+					q: cleanStr(resolvedTitle),
+					p: 1,
+					n: 25
+				});
+				if (fallbackSearch?.results?.length > 0) {
+					tracks = fallbackSearch.results.map(s => formatSong(s)).filter(Boolean);
+				}
+			} catch (searchErr) {
+				console.warn("Fallback song search failed for playlist:", searchErr.message);
+			}
+		}
+
+		if (!data || (!resolvedId && !resolvedTitle)) {
 			throw new Error("Playlist not found");
 		}
 
-		const tracks = (data.list || []).map(formatSong);
 		const rawThumb = getValidImage(data.image);
 		const cleanThumb = (rawThumb && rawThumb.includes('/editorial/'))
 			? (tracks[0]?.thumbnail || rawThumb)
@@ -1646,13 +1866,23 @@ app.get("/api/playlist", async (req, res) => {
 			playlistCoverCache.set(playlistId, cleanThumb);
 		}
 
-		return res.json({
-			playlistId: data.id,
-			title: data.title || "Featured Playlist",
-			description: data.subtitle || "Curated collection",
+		const responsePayload = {
+			playlistId: resolvedId,
+			title: cleanStr(resolvedTitle, "Featured Playlist"),
+			description: cleanStr(data.subtitle || data.description || (data.firstname ? `By ${data.firstname} ${data.lastname || ''}`.trim() : null), "Curated collection"),
 			thumbnail: cleanThumb,
 			tracks
-		});
+		};
+
+		if (pageStr === "1") {
+			playlistDetailsMemoryCache.set(playlistId, { timestamp: Date.now(), data: responsePayload });
+			if (playlistDetailsMemoryCache.size > 250) {
+				const oldestKey = playlistDetailsMemoryCache.keys().next().value;
+				playlistDetailsMemoryCache.delete(oldestKey);
+			}
+		}
+
+		return res.json(responsePayload);
 	} catch (error) {
 		console.error("Playlist details failed:", error.stack || error);
 		res.status(502).json({ error: "Failed to fetch playlist details", details: error.message });
