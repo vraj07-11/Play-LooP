@@ -149,10 +149,11 @@ export function PlayerProvider({ children }) {
     if (windowArr[3]) ids.push(windowArr[3].videoId);
     ids.forEach(id => {
       const track = windowArr.find(t => t && t.videoId === id);
-      const src = track?.thumbnail || '/logo.svg';
+      const rawSrc = track?.thumbnail;
+      const src = (!rawSrc || rawSrc === '/logo.svg') ? '/default-cover.svg' : rawSrc;
       const img = new Image();
       img.onload = () => setPreloadedCovers(prev => ({ ...prev, [id]: src }));
-      img.onerror = () => setPreloadedCovers(prev => ({ ...prev, [id]: '/logo.svg' }));
+      img.onerror = () => setPreloadedCovers(prev => ({ ...prev, [id]: '/default-cover.svg' }));
       img.src = src;
     });
   }, []);
@@ -397,7 +398,7 @@ export function PlayerProvider({ children }) {
           artist: artist || "Play LooP",
           album: "Play LooP",
           artwork: [
-            { src: thumbnail || '/logo.svg', sizes: "512x512", type: "image/jpeg" }
+            { src: (!thumbnail || thumbnail === '/logo.svg') ? '/default-cover.svg' : thumbnail, sizes: "512x512", type: "image/jpeg" }
           ]
         });
         navigator.mediaSession.playbackState = "playing";

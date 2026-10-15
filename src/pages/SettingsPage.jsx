@@ -351,7 +351,7 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
       {/* --- IMPORT PLAYLISTS CARD --- */}
       <div id="import-section" className="page-card space-y-6">
         <div className="flex items-center gap-3">
-          <img src="/logo.svg" alt="Play LooP Logo" className="w-8 h-8 shrink-0" />
+          <img src="/brand-logo.svg" alt="Play LooP Logo" className="w-8 h-8 shrink-0" />
           <div>
             <h3 className="text-xl font-semibold text-white">Import Playlists</h3>
             <p className="text-xs text-zinc-400">Bring music from Spotify, YT Music, SoundCloud, JioSaavn, or local JSON/CSV files</p>

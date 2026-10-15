@@ -96,7 +96,7 @@ function App() {
                   song.videoId,
                   song.title || title || 'Unknown Track',
                   song.artist || artist || 'Unknown Artist',
-                  song.thumbnail || cover || '/logo.svg'
+                  song.thumbnail || cover || '/default-cover.svg'
                 );
               }
             }
@@ -104,7 +104,7 @@ function App() {
         } catch (fetchErr) {
           console.warn('[DeepLink] Failed to fetch song details:', fetchErr);
           if (!title) {
-            selectAndPlayTrack(trackId, 'Shared Track', 'Unknown Artist', '/logo.svg');
+            selectAndPlayTrack(trackId, 'Shared Track', 'Unknown Artist', '/default-cover.svg');
           }
         }
       } catch (e) {

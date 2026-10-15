@@ -87,7 +87,7 @@ export default function DownloadPage() {
 
       <div className="flex flex-col items-start gap-4 p-6 bg-zinc-900/80 rounded-2xl border border-zinc-800 max-w-2xl shadow-xl">
         <div className="flex items-center gap-3">
-          <img src="/logo.svg" alt="Play LooP Logo" className="w-12 h-12 shrink-0" />
+          <img src="/brand-logo.svg" alt="Play LooP Logo" className="w-12 h-12 shrink-0" />
           <div>
             <h3 className="text-xl font-semibold text-white">Install Play LooP App</h3>
             <p className="text-xs text-zinc-400">Web App & Progressive Web App (PWA)</p>

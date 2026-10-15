@@ -307,7 +307,67 @@ export async function fetchPopularSongs(languages = []) {
   return [];
 }
 
-export async function fetchPopularArtists(languages = [], limit = 5) {
+const LANGUAGE_FALLBACK_ARTISTS = {
+  punjabi: [
+    { playlistId: "ARTIST:468245", title: "Diljit Dosanjh", thumbnail: "https://c.saavncdn.com/artists/Diljit_Dosanjh_004_20221004165507_500x500.jpg", followers: "38.9M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:458889", title: "Sidhu Moose Wala", thumbnail: "https://c.saavncdn.com/artists/Sidhu_Moose_Wala_005_20220601053154_500x500.jpg", followers: "31.2M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:568603", title: "Karan Aujla", thumbnail: "https://c.saavncdn.com/artists/Karan_Aujla_002_20230818074614_500x500.jpg", followers: "29.5M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:456070", title: "Guru Randhawa", thumbnail: "https://c.saavncdn.com/artists/Guru_Randhawa_003_20210212065842_500x500.jpg", followers: "34.1M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:486770", title: "B Praak", thumbnail: "https://c.saavncdn.com/artists/B_Praak_002_20210202151610_500x500.jpg", followers: "25.8M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:685088", title: "AP Dhillon", thumbnail: "https://c.saavncdn.com/artists/AP_Dhillon_002_20211015093753_500x500.jpg", followers: "22.4M Listeners", author: "Artist", isArtist: true }
+  ],
+  hindi: [
+    { playlistId: "ARTIST:459320", title: "Arijit Singh", thumbnail: "https://c.saavncdn.com/artists/Arijit_Singh_004_20241118063717_500x500.jpg", followers: "92.4M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:464932", title: "Shreya Ghoshal", thumbnail: "https://c.saavncdn.com/artists/Shreya_Ghoshal_005_20231024140026_500x500.jpg", followers: "51.1M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:456323", title: "Pritam", thumbnail: "https://c.saavncdn.com/artists/Pritam_Chakraborty-20170711073326_500x500.jpg", followers: "52.3M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:456269", title: "A.R. Rahman", thumbnail: "https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_500x500.jpg", followers: "49.8M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:456338", title: "Sonu Nigam", thumbnail: "https://c.saavncdn.com/artists/Sonu_Nigam_003_20201016080340_500x500.jpg", followers: "33.7M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455120", title: "Alka Yagnik", thumbnail: "https://c.saavncdn.com/artists/Alka_Yagnik_002_20220314192930_500x500.jpg", followers: "63.3M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455142", title: "Kumar Sanu", thumbnail: "https://c.saavncdn.com/artists/Kumar_Sanu_002_20210202151610_500x500.jpg", followers: "44.9M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455127", title: "Udit Narayan", thumbnail: "https://c.saavncdn.com/artists/Udit_Narayan_002_20210202151909_500x500.jpg", followers: "41.6M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455582", title: "Atif Aslam", thumbnail: "https://c.saavncdn.com/artists/Atif_Aslam_002_20200226074154_500x500.jpg", followers: "46.4M Listeners", author: "Artist", isArtist: true }
+  ],
+  english: [
+    { playlistId: "ARTIST:615155", title: "The Weeknd", thumbnail: "https://c.saavncdn.com/artists/The_Weeknd_002_20241003071400_500x500.jpg", followers: "108.5M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:565990", title: "Taylor Swift", thumbnail: "https://c.saavncdn.com/artists/Taylor_Swift_003_20200226074119_500x500.jpg", followers: "98.2M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:512453", title: "Drake", thumbnail: "https://c.saavncdn.com/artists/Drake_006_20260520062317_500x500.jpg", followers: "84.1M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:1274170", title: "Dua Lipa", thumbnail: "https://c.saavncdn.com/artists/Dua_Lipa_004_20231120090922_500x500.jpg", followers: "68.2M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:1918741", title: "Billie Eilish", thumbnail: "https://c.saavncdn.com/artists/Billie_Eilish_20190211151539_500x500.jpg", followers: "89.6M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:568565", title: "Justin Bieber", thumbnail: "https://c.saavncdn.com/artists/Justin_Bieber_005_20201127112218_500x500.jpg", followers: "74.5M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:578407", title: "Ed Sheeran", thumbnail: "https://c.saavncdn.com/artists/Ed_Sheeran_500x500.jpg", followers: "82.1M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:485063", title: "Bruno Mars", thumbnail: "https://c.saavncdn.com/artists/Bruno_Mars_002_20210305105232_500x500.jpg", followers: "85.3M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:465365", title: "Coldplay", thumbnail: "https://c.saavncdn.com/artists/Coldplay_002_20211015093753_500x500.jpg", followers: "78.0M Listeners", author: "Artist", isArtist: true }
+  ],
+  tamil: [
+    { playlistId: "ARTIST:459633", title: "Anirudh Ravichander", thumbnail: "https://c.saavncdn.com/artists/Anirudh_Ravichander_004_20231019124430_500x500.jpg", followers: "41.5M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:456269", title: "A.R. Rahman", thumbnail: "https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_500x500.jpg", followers: "49.8M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:568561", title: "Sid Sriram", thumbnail: "https://c.saavncdn.com/artists/Sid_Sriram_003_20210212065842_500x500.jpg", followers: "28.4M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455132", title: "Yuvan Shankar Raja", thumbnail: "https://c.saavncdn.com/artists/Yuvan_Shankar_Raja_002_20210202151610_500x500.jpg", followers: "24.1M Listeners", author: "Artist", isArtist: true }
+  ],
+  telugu: [
+    { playlistId: "ARTIST:568561", title: "Sid Sriram", thumbnail: "https://c.saavncdn.com/artists/Sid_Sriram_003_20210212065842_500x500.jpg", followers: "28.4M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:456269", title: "A.R. Rahman", thumbnail: "https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_500x500.jpg", followers: "49.8M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455132", title: "Devi Sri Prasad", thumbnail: "https://c.saavncdn.com/artists/Devi_Sri_Prasad_002_20210202151610_500x500.jpg", followers: "26.8M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455798", title: "S. Thaman", thumbnail: "https://c.saavncdn.com/artists/S_Thaman_002_20210202151610_500x500.jpg", followers: "23.5M Listeners", author: "Artist", isArtist: true }
+  ],
+  gujarati: [
+    { playlistId: "ARTIST:456323", title: "Sachin-Jigar", thumbnail: "https://c.saavncdn.com/artists/Sachin-Jigar_002_20210202151610_500x500.jpg", followers: "18.2M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:468245", title: "Aditya Gadhvi", thumbnail: "https://c.saavncdn.com/artists/Aditya_Gadhvi_002_20231019124430_500x500.jpg", followers: "14.5M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:459320", title: "Kinjal Dave", thumbnail: "https://c.saavncdn.com/artists/Kinjal_Dave_002_20210202151610_500x500.jpg", followers: "12.8M Listeners", author: "Artist", isArtist: true }
+  ],
+  marathi: [
+    { playlistId: "ARTIST:456269", title: "Ajay-Atul", thumbnail: "https://c.saavncdn.com/artists/Ajay-Atul_002_20210202151610_500x500.jpg", followers: "21.4M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455120", title: "Alka Yagnik", thumbnail: "https://c.saavncdn.com/artists/Alka_Yagnik_002_20220314192930_500x500.jpg", followers: "63.3M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455109", title: "Lata Mangeshkar", thumbnail: "https://c.saavncdn.com/artists/Lata_Mangeshkar_003_20220206103608_500x500.jpg", followers: "35.2M Listeners", author: "Artist", isArtist: true }
+  ],
+  spanish: [
+    { playlistId: "ARTIST:2029479", title: "Bad Bunny", thumbnail: "https://c.saavncdn.com/artists/Bad_Bunny_001_20250207055513_500x500.jpg", followers: "76.8M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455131", title: "Shakira", thumbnail: "https://c.saavncdn.com/artists/Shakira_002_20210202151610_500x500.jpg", followers: "55.3M Listeners", author: "Artist", isArtist: true },
+    { playlistId: "ARTIST:455133", title: "Rosalía", thumbnail: "https://c.saavncdn.com/artists/Rosalia_002_20210202151610_500x500.jpg", followers: "32.1M Listeners", author: "Artist", isArtist: true }
+  ]
+};
+
+export async function fetchPopularArtists(languages = [], limit = 10) {
   try {
     const langQuery = languages.length > 0 ? `languages=${languages.join(',')}` : '';
     const limitQuery = `limit=${limit}`;
@@ -323,66 +383,23 @@ export async function fetchPopularArtists(languages = [], limit = 5) {
     console.error("Failed to fetch real-time trending artists:", err);
   }
   
-  return [
-    {
-      "playlistId": "ARTIST:459320",
-      "title": "Arijit Singh",
-      "thumbnail": "https://c.saavncdn.com/artists/Arijit_Singh_004_20241118063717_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:615155",
-      "title": "The Weeknd",
-      "thumbnail": "https://c.saavncdn.com/artists/The_Weeknd_002_20241003071400_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:565990",
-      "title": "Taylor Swift",
-      "thumbnail": "https://c.saavncdn.com/artists/Taylor_Swift_003_20200226074119_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:2029479",
-      "title": "Bad Bunny",
-      "thumbnail": "https://c.saavncdn.com/artists/Bad_Bunny_001_20250207055513_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:512453",
-      "title": "Drake",
-      "thumbnail": "https://c.saavncdn.com/artists/Drake_006_20260520062317_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:456323",
-      "title": "Pritam",
-      "thumbnail": "https://c.saavncdn.com/artists/Pritam_Chakraborty-20170711073326_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:456269",
-      "title": "A.R. Rahman",
-      "thumbnail": "https://c.saavncdn.com/artists/AR_Rahman_002_20210120084455_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:1274170",
-      "title": "Dua Lipa",
-      "thumbnail": "https://c.saavncdn.com/artists/Dua_Lipa_004_20231120090922_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:1918741",
-      "title": "Billie Eilish",
-      "thumbnail": "https://c.saavncdn.com/artists/Billie_Eilish_20190211151539_500x500.jpg",
-      "author": "Artist"
-    },
-    {
-      "playlistId": "ARTIST:568565",
-      "title": "Justin Bieber",
-      "thumbnail": "https://c.saavncdn.com/artists/Justin_Bieber_005_20201127112218_500x500.jpg",
-      "author": "Artist"
+  // Strict language-based fallback with fair round-robin interleaving
+  const targetLangs = languages.length > 0 ? languages.map(l => l.toLowerCase()) : ['english', 'hindi'];
+  const pool = [];
+  const maxLen = Math.max(...targetLangs.map(l => (LANGUAGE_FALLBACK_ARTISTS[l] || []).length), 0);
+
+  for (let i = 0; i < maxLen; i++) {
+    for (const lang of targetLangs) {
+      const artist = LANGUAGE_FALLBACK_ARTISTS[lang]?.[i];
+      if (artist && !pool.some(a => a.playlistId === artist.playlistId)) {
+        pool.push(artist);
+      }
     }
-  ];
+  }
+
+  if (pool.length === 0) {
+    pool.push(...LANGUAGE_FALLBACK_ARTISTS.hindi, ...LANGUAGE_FALLBACK_ARTISTS.english);
+  }
+
+  return pool.slice(0, limit);
 }

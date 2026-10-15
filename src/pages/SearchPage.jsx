@@ -96,9 +96,9 @@ export default function SearchPage({ refreshKey = 0 }) {
     visiblePlaylists.forEach((pl) => {
       if (!pl || !pl.playlistId) return;
       if (playlistThumbnailMap[pl.playlistId]) return;
-      if (pl.thumbnail && pl.thumbnail.includes('/editorial/')) {
+      if (pl.thumbnail && (pl.thumbnail.includes('/editorial/') || pl.thumbnail === '/logo.svg' || pl.thumbnail === '/default-cover.svg')) {
         fetchPlaylistDetails(pl.playlistId, 1).then((details) => {
-          if (details && details.thumbnail && !details.thumbnail.includes('/editorial/')) {
+          if (details && details.thumbnail && !details.thumbnail.includes('/editorial/') && details.thumbnail !== '/logo.svg' && details.thumbnail !== '/default-cover.svg') {
             setPlaylistThumbnailMap(prev => ({
               ...prev,
               [pl.playlistId]: details.thumbnail
@@ -262,7 +262,8 @@ export default function SearchPage({ refreshKey = 0 }) {
           if (track) {
             const title = track.title || track.name || "Unknown track";
             const artist = typeof track.artist === 'string' ? track.artist : (track.artist?.name || track.artists || "Unknown artist");
-            const thumbnail = track.thumbnail || track.thumbnails?.find((item) => item?.url)?.url || '/logo.svg';
+            const rawThumb = track.thumbnail || track.thumbnails?.find((item) => item?.url)?.url;
+            const thumbnail = (!rawThumb || rawThumb === '/logo.svg') ? '/default-cover.svg' : rawThumb;
             selectAndPlayTrack(track.videoId, title, artist, thumbnail);
           }
         }
@@ -408,7 +409,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                   popularSongsData.slice(0, visibleSongCount).map((song, idx) => {
                     const title = song.title || song.name || "Unknown track";
                     const artist = typeof song.artist === 'string' ? song.artist : (song.artist?.name || song.artists || "Unknown artist");
-                    const thumbnail = song.thumbnail || song.thumbnails?.find((item) => item?.url)?.url || '/logo.svg';
+                    const rawThumb = song.thumbnail || song.thumbnails?.find((item) => item?.url)?.url;
+                    const thumbnail = (!rawThumb || rawThumb === '/logo.svg') ? '/default-cover.svg' : rawThumb;
 
                     return (
                       <div 
@@ -966,7 +968,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                         <h3 className="text-xl font-bold text-white mb-4">Playlists & Albums</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                           {searchResults.playlists.slice(0, visiblePlaylistsCount).map((pl, idx) => {
-                            const cover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail || '/default-cover.svg';
+                            const rawCover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail;
+                            const cover = (!rawCover || rawCover === '/logo.svg') ? '/default-cover.svg' : rawCover;
                             return (
                               <div 
                                 key={idx}
@@ -1106,7 +1109,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                           <h3 className="text-xl font-bold text-white mb-4">Playlists & Albums</h3>
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                             {searchResults.playlists.slice(0, visiblePlaylistsCount).map((pl, idx) => {
-                              const cover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail || '/default-cover.svg';
+                              const rawCover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail;
+                              const cover = (!rawCover || rawCover === '/logo.svg') ? '/default-cover.svg' : rawCover;
                               return (
                                 <div 
                                   key={idx}
@@ -1212,7 +1216,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                     <div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {searchResults.playlists.slice(0, visiblePlaylistsCount).map((pl, idx) => {
-                          const cover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail || '/default-cover.svg';
+                          const rawCover = playlistThumbnailMap[pl.playlistId] || pl.thumbnail;
+                          const cover = (!rawCover || rawCover === '/logo.svg') ? '/default-cover.svg' : rawCover;
                           return (
                             <div 
                               key={idx}

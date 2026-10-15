@@ -61,7 +61,7 @@ export default function Player() {
           videoId: pendingTrack.videoId,
           title: pendingTrack.title || currentTitle || "Liked Track",
           artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
-          thumbnail: pendingTrack.thumbnail || "/logo.svg",
+          thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail,
           duration: pendingTrack.duration || duration || 180
         };
         updatedTracks = [trackObj, ...likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId)];
@@ -542,7 +542,7 @@ export default function Player() {
           {/* Subtle blurred background based on cover art */}
           <div 
             className="absolute inset-0 bg-cover bg-center blur-[50px] opacity-30 transition-all duration-700"
-            style={{ backgroundImage: `url(${pendingTrack?.thumbnail || '/logo.svg'})` }}
+            style={{ backgroundImage: `url(${(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail})` }}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-zinc-950/80 to-zinc-950" />
 

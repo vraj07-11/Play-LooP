@@ -82,7 +82,7 @@ export default function FullPlayer({
           videoId: pendingTrack.videoId,
           title: pendingTrack.title || currentTitle || "Liked Track",
           artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
-          thumbnail: pendingTrack.thumbnail || "/logo.svg",
+          thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail,
           duration: pendingTrack.duration || duration || 180
         };
         updatedTracks = [trackObj, ...likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId)];

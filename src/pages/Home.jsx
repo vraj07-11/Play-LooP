@@ -103,16 +103,37 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     try {
       const prefStr = localStorage.getItem('preferred_languages');
       const langs = prefStr ? JSON.parse(prefStr) : [];
-      const more = await fetchPopularArtists(langs, popularArtists.length + 5);
-      if (more && more.length > popularArtists.length) {
-        setPopularArtists(more);
+      const nextLimit = Math.min(60, popularArtists.length + 10);
+      const more = await fetchPopularArtists(langs, nextLimit);
+      if (more && more.length > 0) {
+        setPopularArtists(prev => {
+          const existingIds = new Set(prev.map(a => a.playlistId));
+          const newArtists = more.filter(a => a && a.playlistId && !existingIds.has(a.playlistId));
+          if (newArtists.length === 0) return prev;
+          return [...prev, ...newArtists];
+        });
       }
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load more artists:", e);
     } finally {
       setLoadingMoreArtists(false);
     }
   };
+
+  useEffect(() => {
+    const handleLanguagesUpdated = () => {
+      const prefStr = localStorage.getItem('preferred_languages');
+      const langs = prefStr ? JSON.parse(prefStr) : [];
+      setPopularArtists([]);
+      fetchPopularArtists(langs, 10).then(artists => {
+        if (artists && artists.length > 0) {
+          setPopularArtists(artists);
+        }
+      });
+    };
+    window.addEventListener('playloop-languages-updated', handleLanguagesUpdated);
+    return () => window.removeEventListener('playloop-languages-updated', handleLanguagesUpdated);
+  }, []);
 
   useEffect(() => {
     const currentHour = new Date().getHours();
@@ -949,7 +970,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   className="w-full h-full object-cover"
                   fetchPriority="high"
                   decoding="async"
-                  onError={(e) => { e.target.src = '/logo.svg'; }}
+                  onError={(e) => { e.target.src = '/default-cover.svg'; }}
                 />
               </div>
             </div>
@@ -1159,11 +1180,86 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             isLoading={popularArtists.length === 0}
             onItemClick={handlePlaylistClick}
             renderSubtitle={() => "Artist"}
-            keyExtractor={(item, index) => `${item.playlistId}-${index}`}
+            keyExtractor={(item) => item.playlistId}
             cardType="circle"
             onEndReached={loadMoreArtists}
             isLoadingMore={loadingMoreArtists}
           />
+        </div>
+      )}
+
+      {/* When filtering specifically by Artists: show a dedicated responsive grid */}
+      {activeCategoryFilter === 'artists' && (
+        <div className="mb-14 sm:mb-16">
+          <div className="flex items-center justify-between mb-5 pl-0.5">
+            <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">All Artists</h3>
+            <span className="text-xs sm:text-sm text-zinc-400 font-medium">
+              {popularArtists.length} {popularArtists.length === 1 ? 'artist' : 'artists'} loaded
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-5">
+            {popularArtists.length === 0 ? (
+              [...Array(12)].map((_, index) => (
+                <div
+                  key={`skeleton-artist-grid-${index}`}
+                  className="flex flex-col items-center p-3.5 rounded-xl bg-[#141416] border border-white/5"
+                >
+                  <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-zinc-800/90 border border-white/5 mb-3 overflow-hidden skeleton-shimmer-card shadow-lg" />
+                  <div className="w-3/4 h-3.5 sm:h-4 bg-zinc-700/80 rounded mb-1.5" />
+                  <div className="w-1/2 h-2.5 sm:h-3 bg-zinc-800/50 rounded" />
+                </div>
+              ))
+            ) : (
+              popularArtists.map((artist) => (
+                <div
+                  key={`grid-${artist.playlistId}`}
+                  onClick={() => handlePlaylistClick(artist)}
+                  className="group flex flex-col items-center p-3 sm:p-4 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] cursor-pointer transition-colors duration-300 border border-white/5 text-center"
+                >
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full shadow-xl overflow-hidden mb-3 bg-black border border-white/5">
+                    <img
+                      src={(!artist.thumbnail || artist.thumbnail === '/logo.svg') ? '/default-cover.svg' : artist.thumbnail}
+                      alt={artist.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      onError={(e) => {
+                        e.target.src = '/default-cover.svg';
+                      }}
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 text-black">
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1.5px]" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <h4 className="font-bold text-white text-xs sm:text-[15px] truncate w-full mb-1 tracking-tight">
+                    {artist.title}
+                  </h4>
+                  <p className="font-medium text-zinc-400 text-[11px] sm:text-[13px] truncate w-full">
+                    {artist.followers || 'Artist'}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={loadMoreArtists}
+              disabled={loadingMoreArtists}
+              className="px-6 py-2.5 rounded-full border border-zinc-700/80 bg-zinc-900/80 hover:bg-zinc-800 text-xs sm:text-sm font-bold text-white transition-all shadow-sm hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+            >
+              {loadingMoreArtists ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-zinc-400 border-t-white animate-spin" />
+                  Loading More Artists...
+                </>
+              ) : 'Show More Artists'}
+            </button>
+          </div>
         </div>
       )}
 

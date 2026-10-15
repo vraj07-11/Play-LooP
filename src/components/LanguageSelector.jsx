@@ -55,6 +55,7 @@ export default function LanguageSelector({ onComplete }) {
   const handleContinue = () => {
     if (selected.length === 0) return;
     localStorage.setItem('preferred_languages', JSON.stringify(selected));
+    window.dispatchEvent(new Event('playloop-languages-updated'));
     setIsClosing(true);
     setTimeout(() => {
       setIsVisible(false);

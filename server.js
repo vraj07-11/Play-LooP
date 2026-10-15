@@ -243,7 +243,7 @@ async function fetchJioSaavn(callParams) {
 }
 
 function getValidImage(imgUrl) {
-	if (!imgUrl || typeof imgUrl !== "string" || !imgUrl.startsWith("http")) return "/logo.svg";
+	if (!imgUrl || typeof imgUrl !== "string" || !imgUrl.startsWith("http")) return "/default-cover.svg";
 	const url = String(imgUrl).replace("150x150", "500x500");
 	if (
 		url.includes("default_images") || 
@@ -256,7 +256,7 @@ function getValidImage(imgUrl) {
 		url.includes("placeholder") ||
 		url.includes("share-image")
 	) {
-		return "/logo.svg";
+		return "/default-cover.svg";
 	}
 	return url;
 }
@@ -265,7 +265,7 @@ const playlistCoverCache = new Map();
 
 async function resolveCleanPlaylistThumbnail(playlistId, rawImage) {
 	const validImg = getValidImage(rawImage);
-	if (!validImg || !validImg.includes('/editorial/')) {
+	if (!validImg || (!validImg.includes('/editorial/') && validImg !== '/default-cover.svg' && validImg !== '/logo.svg')) {
 		return validImg;
 	}
 	if (playlistCoverCache.has(playlistId)) {
@@ -277,7 +277,7 @@ async function resolveCleanPlaylistThumbnail(playlistId, rawImage) {
 		const cleanTrack = tracks.find(t => t?.image && !String(t.image).includes('/editorial/')) || tracks[0];
 		if (cleanTrack?.image) {
 			const cleanImg = getValidImage(cleanTrack.image);
-			if (cleanImg && !cleanImg.includes('/editorial/')) {
+			if (cleanImg && !cleanImg.includes('/editorial/') && cleanImg !== '/default-cover.svg' && cleanImg !== '/logo.svg') {
 				playlistCoverCache.set(playlistId, cleanImg);
 				return cleanImg;
 			}
@@ -410,7 +410,7 @@ async function searchSoundCloud(query, limit = 8) {
 
 		return collection.map(track => {
 			const artwork = track.artwork_url || track.user?.avatar_url || "";
-			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/logo.svg";
+			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/default-cover.svg";
 
 			return {
 				videoId: `sc:${track.id}`,
@@ -698,8 +698,8 @@ app.get("/api/search", async (req, res) => {
 				filteredPlaylists.map(async (p, idx) => {
 					const pId = p.listid || p.id;
 					let cleanThumb = playlistCoverCache.get(pId) || getValidImage(p.image);
-					// For top visible items, if image is an editorial graphic with JioSaavn logo watermark, resolve clean album art
-					if (idx < 6 && cleanThumb && cleanThumb.includes('/editorial/')) {
+					// For top visible items, if image is an editorial graphic with JioSaavn logo watermark or fallback, resolve clean album art
+					if (idx < 12 && cleanThumb && (cleanThumb.includes('/editorial/') || cleanThumb === '/default-cover.svg' || cleanThumb === '/logo.svg')) {
 						try {
 							cleanThumb = await Promise.race([
 								resolveCleanPlaylistThumbnail(pId, cleanThumb),
@@ -1103,7 +1103,7 @@ app.get("/api/song", async (req, res) => {
 			if (!trackRes.ok) return res.status(404).json({ error: "SoundCloud track not found" });
 			const track = await trackRes.json();
 			const artwork = track.artwork_url || track.user?.avatar_url || "";
-			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/logo.svg";
+			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/default-cover.svg";
 
 			return res.json({
 				videoId: `sc:${track.id}`,
@@ -1313,11 +1313,12 @@ app.get("/api/recommendations", async (req, res) => {
 
 let trendingArtistsCache = { data: {}, lastFetched: {} };
 const TRENDING_ARTISTS_TTL = 6 * 60 * 60 * 1000;
+const artistDetailCache = new Map();
 
 app.get("/api/trending-artists", async (req, res) => {
 	const now = Date.now();
 	const languagesQuery = req.query.languages || "english,hindi";
-	const limit = parseInt(req.query.limit, 10) || 5;
+	const limit = Math.min(60, Math.max(5, parseInt(req.query.limit, 10) || 10));
 	const cacheKey = languagesQuery.toLowerCase().trim() + '-' + limit;
 
 	if (trendingArtistsCache.data[cacheKey] && (now - trendingArtistsCache.lastFetched[cacheKey] < TRENDING_ARTISTS_TTL)) {
@@ -1325,59 +1326,109 @@ app.get("/api/trending-artists", async (req, res) => {
 	}
 
 	try {
-		const languages = cacheKey.split("-")[0].split(",").map(s => s.trim()).filter(Boolean);
+		const languages = languagesQuery.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 		const artistCounts = {};
 		const artistMeta = {};
-		
-		// For each language, find top artists
 		let topArtistIdsByLang = [];
 		
+		const LANGUAGE_SEEDS = {
+			punjabi: ['468245', '458889', '568603', '456070', '486770', '685088'],
+			hindi: ['459320', '464932', '456323', '456269', '456338', '455120', '455142', '455127', '455582'],
+			english: ['615155', '565990', '512453', '1274170', '1918741', '568565', '578407', '485063', '465365'],
+			tamil: ['459633', '456269', '568561', '455132', '455798'],
+			telugu: ['568561', '456269', '455132', '455798', '455127'],
+			gujarati: ['456323', '468245', '459320'],
+			marathi: ['456269', '455120', '455109', '456338'],
+			spanish: ['2029479', '455131', '455133']
+		};
+
+		const artistIdsByLang = {};
+
 		for (const lang of languages) {
 			try {
-				// 1. Search for top playlist for this language
-				const searchPlaylists = await fetchJioSaavn({ __call: "search.getPlaylistResults", q: `top ${lang} hits`, n: "2", p: "1" });
-				let pid = null;
-				if (searchPlaylists && searchPlaylists.results && searchPlaylists.results.length > 0) {
-					pid = searchPlaylists.results[0].id;
-				} else {
-					// Fallbacks
-					if (lang === 'hindi') pid = '1134543272';
-					else if (lang === 'english') pid = '947987697';
-					else continue;
+				const langCounts = {};
+
+				// 1. Search for top playlists for this specific language
+				const searchPlaylists = await fetchJioSaavn({ __call: "search.getPlaylistResults", q: `top ${lang} hits`, n: "5", p: "1" });
+				let pids = [];
+				if (searchPlaylists && Array.isArray(searchPlaylists.results) && searchPlaylists.results.length > 0) {
+					pids = searchPlaylists.results.slice(0, 3).map(p => p.id).filter(Boolean);
 				}
 
-				// 2. Fetch playlist details
-				const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid });
-				const langCounts = {};
-				const plList = playlistData?.songs || playlistData?.list;
-				
-				if (playlistData && plList) {
-					plList.forEach(song => {
-						const artists = song.more_info?.artistMap?.primary_artists || [];
-						artists.forEach(a => {
-							if (a.id && a.name && !a.name.toLowerCase().includes("various")) {
-								langCounts[a.id] = (langCounts[a.id] || 0) + 1;
-								if (!artistMeta[a.id]) artistMeta[a.id] = { id: a.id, name: a.name, image: a.image };
-							}
+				for (const pid of pids) {
+					try {
+						const playlistData = await fetchJioSaavn({ __call: "playlist.getDetails", listid: pid });
+						const plList = playlistData?.songs || playlistData?.list;
+						if (playlistData && Array.isArray(plList)) {
+							plList.forEach(song => {
+								const artists = song.more_info?.artistMap?.primary_artists || [];
+								artists.forEach(a => {
+									if (a.id && a.name && !a.name.toLowerCase().includes("various")) {
+										langCounts[a.id] = (langCounts[a.id] || 0) + 1;
+										if (!artistMeta[a.id]) artistMeta[a.id] = { id: a.id, name: a.name, image: a.image };
+									}
+								});
+							});
+						}
+					} catch (plErr) {}
+				}
+
+				// 2. Also search top songs for this language to discover more native artists
+				try {
+					const songsSearch = await fetchJioSaavn({ __call: "search.getResults", q: `${lang} superhits`, n: "30", p: "1" });
+					if (songsSearch && Array.isArray(songsSearch.results)) {
+						songsSearch.results.forEach(song => {
+							const artists = song.more_info?.artistMap?.primary_artists || [];
+							artists.forEach(a => {
+								if (a.id && a.name && !a.name.toLowerCase().includes("various")) {
+									langCounts[a.id] = (langCounts[a.id] || 0) + 1;
+									if (!artistMeta[a.id]) artistMeta[a.id] = { id: a.id, name: a.name, image: a.image };
+								}
+							});
 						});
-					});
+					}
+				} catch (songErr) {}
+
+				// 3. Fallback to seeds strictly for this language if needed
+				if (LANGUAGE_SEEDS[lang]) {
+					for (const sId of LANGUAGE_SEEDS[lang]) {
+						if (!langCounts[sId]) {
+							langCounts[sId] = 1;
+						}
+					}
 				}
 				
-				// 3. Take top N for this language to ensure equal representation
-				const numToTake = Math.max(1, Math.ceil(limit / languages.length));
+				// Rank top IDs for this specific language
+				const numToTake = Math.max(10, Math.ceil(limit / languages.length) + 5);
 				const topIds = Object.keys(langCounts).sort((a, b) => langCounts[b] - langCounts[a]).slice(0, numToTake);
-				topArtistIdsByLang.push(...topIds);
+				artistIdsByLang[lang] = topIds;
 
 			} catch(e) {
 				console.warn(`Failed to process language ${lang}:`, e.message);
+				artistIdsByLang[lang] = LANGUAGE_SEEDS[lang] || [];
 			}
 		}
 
-		// Deduplicate and limit
-		const finalIds = [...new Set(topArtistIdsByLang)].slice(0, limit);
+		// Fair round-robin interleaving across all selected languages
+		const interleavedIds = [];
+		const maxLen = Math.max(...languages.map(l => (artistIdsByLang[l] || []).length), 0);
+		for (let i = 0; i < maxLen; i++) {
+			for (const lang of languages) {
+				const id = artistIdsByLang[lang]?.[i];
+				if (id && !interleavedIds.includes(id)) {
+					interleavedIds.push(id);
+				}
+			}
+		}
 
-		// Fetch high-res details and follower counts
+		const finalIds = interleavedIds.slice(0, limit);
+
+		// Fetch details, utilizing memory cache for rapid response
 		const finalArtists = await Promise.all(finalIds.map(async (id) => {
+			if (artistDetailCache.has(id)) {
+				return artistDetailCache.get(id);
+			}
+
 			try {
 				const detail = await fetchJioSaavn({ __call: "artist.getArtistPageDetails", artistId: id, p: "1", n_song: "1", n_album: "0" });
 				const followers = parseInt(detail.follower_count || "0", 10);
@@ -1387,31 +1438,34 @@ app.get("/api/trending-artists", async (req, res) => {
 						? (followers / 1000000).toFixed(1) + "M Listeners"
 						: (followers / 1000).toFixed(1) + "K Listeners";
 				} else {
-					formattedFollowers = "Trending Artist"; // fallback
+					formattedFollowers = "Trending Artist";
 				}
 
-				return {
+				const formatted = {
 					playlistId: `ARTIST:${id}`,
-					title: detail.name || artistMeta[id].name,
-					thumbnail: getValidImage(detail.image || artistMeta[id].image),
+					title: detail.name || artistMeta[id]?.name || `Artist ${id}`,
+					thumbnail: getValidImage(detail.image || artistMeta[id]?.image),
 					followers: formattedFollowers,
 					followerCountRaw: followers,
-					author: "Artist"
+					author: "Artist",
+					isArtist: true
 				};
+
+				artistDetailCache.set(id, formatted);
+				return formatted;
 			} catch (e) {
-				return {
+				const fallbackObj = {
 					playlistId: `ARTIST:${id}`,
-					title: artistMeta[id].name,
-					thumbnail: getValidImage(artistMeta[id].image),
+					title: artistMeta[id]?.name || "Artist",
+					thumbnail: getValidImage(artistMeta[id]?.image),
 					followers: "Trending Artist",
 					followerCountRaw: 0,
-					author: "Artist"
+					author: "Artist",
+					isArtist: true
 				};
+				return fallbackObj;
 			}
 		}));
-
-		// Sort final array by absolute follower count
-		finalArtists.sort((a, b) => b.followerCountRaw - a.followerCountRaw);
 
 		trendingArtistsCache.data[cacheKey] = finalArtists;
 		trendingArtistsCache.lastFetched[cacheKey] = now;
@@ -1809,7 +1863,7 @@ app.get("/api/playlist", async (req, res) => {
 				playlistId,
 				title: `${query} Mix`,
 				description: `Curated collection for ${query}`,
-				thumbnail: finalTracks[0]?.thumbnail || "/logo.svg",
+				thumbnail: finalTracks[0]?.thumbnail || "/default-cover.svg",
 				tracks: finalTracks
 			});
 		}
@@ -1860,7 +1914,7 @@ app.get("/api/playlist", async (req, res) => {
 		const rawThumb = getValidImage(data.image);
 		const cleanThumb = (rawThumb && rawThumb.includes('/editorial/'))
 			? (tracks[0]?.thumbnail || rawThumb)
-			: (rawThumb || tracks[0]?.thumbnail || "/logo.svg");
+			: (rawThumb || tracks[0]?.thumbnail || "/default-cover.svg");
 
 		if (cleanThumb && !cleanThumb.includes('/editorial/')) {
 			playlistCoverCache.set(playlistId, cleanThumb);
@@ -1928,7 +1982,7 @@ async function getSpotifyPlaylistDetails(spotifyUrl) {
 			if (apiRes.ok) {
 				const apiData = await apiRes.json();
 				const title = apiData.name || "Spotify Playlist";
-				const thumbnail = apiData.images?.[0]?.url || "/logo.svg";
+				const thumbnail = apiData.images?.[0]?.url || "/default-cover.svg";
 				const rawItems = type === "album" ? (apiData.tracks?.items || []) : (apiData.tracks?.items || []).map(i => i.track).filter(Boolean);
 
 				const songsToSearch = [];
@@ -1954,7 +2008,7 @@ async function getSpotifyPlaylistDetails(spotifyUrl) {
 		if (embedRes.ok) {
 			const html = await embedRes.text();
 			let title = "Spotify Playlist";
-			let thumbnail = "/logo.svg";
+			let thumbnail = "/default-cover.svg";
 			const songsToSearch = [];
 
 			const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
@@ -2011,7 +2065,7 @@ async function getYouTubePlaylistDetails(ytUrl) {
 		if (title.includes("http") || title.length > 80) title = "YouTube Playlist";
 
 		const thumbMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-		const thumbnail = thumbMatch ? thumbMatch[1] : "/logo.svg";
+		const thumbnail = thumbMatch ? thumbMatch[1] : "/default-cover.svg";
 
 		const songsToSearch = [];
 
@@ -2101,7 +2155,7 @@ async function getSoundCloudPlaylistDetails(scUrl) {
 		const title = data.title || "SoundCloud Playlist";
 		const author = data.user?.username || data.user?.full_name || "SoundCloud";
 		const rawArt = data.artwork_url || data.user?.avatar_url || "";
-		const thumbnail = rawArt ? rawArt.replace("-large", "-t500x500") : "/logo.svg";
+		const thumbnail = rawArt ? rawArt.replace("-large", "-t500x500") : "/default-cover.svg";
 
 		const tracks = [];
 		const songsToSearch = [];
@@ -2183,7 +2237,7 @@ app.get("/api/import-playlist", async (req, res) => {
 				const rawThumb = getValidImage(data.image);
 				const cleanThumb = (rawThumb && rawThumb.includes('/editorial/'))
 					? (tracks[0]?.thumbnail || rawThumb)
-					: (rawThumb || tracks[0]?.thumbnail || "/logo.svg");
+					: (rawThumb || tracks[0]?.thumbnail || "/default-cover.svg");
 				return res.json({
 					source: 'jiosaavn',
 					title: data.title || data.name || "JioSaavn Playlist",
