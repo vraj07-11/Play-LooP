@@ -36,7 +36,6 @@ export default function Player() {
 
   // Top Progress Bar state for Desktop Miniplayer
   const topProgressContainerRef = useRef(null);
-  const mobileProgressRef = useRef(null);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [dragPercent, setDragPercent] = useState(null);
   const [hoverPercent, setHoverPercent] = useState(null);
@@ -668,48 +667,12 @@ export default function Player() {
         onTouchEnd={onTouchEnd}
         onClick={() => openFullPlayer(false)}
       >
-        {/* Top 2px Progress Line with Interactive Seek Feature */}
-        <div 
-          ref={mobileProgressRef}
-          className="absolute top-0 left-0 right-0 h-4 -translate-y-1/2 z-50 cursor-pointer flex items-center select-none"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!mobileProgressRef.current) return;
-            const rect = mobileProgressRef.current.getBoundingClientRect();
-            const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-            seekToPercent(pct);
-          }}
-          onTouchStart={(e) => {
-            e.stopPropagation();
-            if (!mobileProgressRef.current || !e.touches[0]) return;
-            const rect = mobileProgressRef.current.getBoundingClientRect();
-            const pct = Math.max(0, Math.min(100, ((e.touches[0].clientX - rect.left) / rect.width) * 100));
-            seekToPercent(pct);
-
-            const handleTouchMove = (moveEvent) => {
-              moveEvent.stopPropagation();
-              if (!mobileProgressRef.current || !moveEvent.touches[0]) return;
-              const r = mobileProgressRef.current.getBoundingClientRect();
-              const p = Math.max(0, Math.min(100, ((moveEvent.touches[0].clientX - r.left) / r.width) * 100));
-              seekToPercent(p);
-            };
-
-            const handleTouchEnd = (endEvent) => {
-              endEvent.stopPropagation();
-              window.removeEventListener('touchmove', handleTouchMove);
-              window.removeEventListener('touchend', handleTouchEnd);
-            };
-
-            window.addEventListener('touchmove', handleTouchMove, { passive: false });
-            window.addEventListener('touchend', handleTouchEnd);
-          }}
-        >
-          <div className="w-full h-[2px] bg-zinc-800/60 pointer-events-none">
-            <div 
-              className="h-full bg-white transition-all duration-150" 
-              style={{ width: `${progress || 0}%` }}
-            />
-          </div>
+        {/* Top 2px Progress Line */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-zinc-800/60 pointer-events-none">
+          <div 
+            className="h-full bg-white transition-all duration-150" 
+            style={{ width: `${progress || 0}%` }}
+          />
         </div>
 
         {/* Left Track Info & Artwork */}
