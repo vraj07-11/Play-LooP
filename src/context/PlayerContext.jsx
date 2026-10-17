@@ -1,7 +1,15 @@
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { fetchApi, getAudioUrl } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
+
+let hlsModulePromise = null;
+const getHlsModule = () => {
+  if (!hlsModulePromise) {
+    hlsModulePromise = import('hls.js').then((m) => m.default || m);
+  }
+  return hlsModulePromise;
+};
 
 export { fetchApi, getAudioUrl };
 
@@ -214,6 +222,8 @@ export function PlayerProvider({ children }) {
 
   const audioPlayerA = useRef(new Audio());
   const audioPlayerB = useRef(new Audio());
+  const hlsPlayerA = useRef(null);
+  const hlsPlayerB = useRef(null);
   const activePlayerSlotRef = useRef('A'); // 'A' | 'B'
   const isCrossfadingRef = useRef(false);
   const crossfadeTimerRef = useRef(null);
@@ -221,6 +231,47 @@ export function PlayerProvider({ children }) {
 
   const getActiveAudio = () => activePlayerSlotRef.current === 'A' ? audioPlayerA.current : audioPlayerB.current;
   const getInactiveAudio = () => activePlayerSlotRef.current === 'A' ? audioPlayerB.current : audioPlayerA.current;
+
+  const destroyHls = useCallback((slot) => {
+    const hlsRef = slot === 'A' ? hlsPlayerA : hlsPlayerB;
+    if (hlsRef.current) {
+      try {
+        hlsRef.current.destroy();
+      } catch (e) {}
+      hlsRef.current = null;
+    }
+  }, []);
+
+  const loadAudioSource = useCallback((slot, videoId, audioEl) => {
+    destroyHls(slot);
+    const targetUrl = getAudioUrl(videoId);
+
+    if (videoId && videoId.startsWith('sc:')) {
+      if (audioEl.canPlayType('application/vnd.apple.mpegurl')) {
+        audioEl.src = targetUrl;
+      } else {
+        getHlsModule().then(Hls => {
+          if (Hls && Hls.isSupported()) {
+            const hls = new Hls({
+              enableWorker: true,
+              lowLatencyMode: true,
+              backBufferLength: 90
+            });
+            hls.loadSource(targetUrl);
+            hls.attachMedia(audioEl);
+            if (slot === 'A') hlsPlayerA.current = hls;
+            else hlsPlayerB.current = hls;
+          } else {
+            audioEl.src = targetUrl;
+          }
+        }).catch(() => {
+          audioEl.src = targetUrl;
+        });
+      }
+    } else {
+      audioEl.src = targetUrl;
+    }
+  }, [destroyHls]);
 
   // Backward-compatible accessor for any callers expecting nativeAudioPlayer.current
   const nativeAudioPlayer = {
@@ -387,9 +438,20 @@ export function PlayerProvider({ children }) {
     const createTimeUpdateHandler = (slot) => () => {
       if (activePlayerSlotRef.current !== slot) return;
       const currentAudio = slot === 'A' ? audioA : audioB;
-      if (Number.isFinite(currentAudio.duration) && currentAudio.duration > 0) {
-        const curTime = currentAudio.currentTime;
-        const dur = currentAudio.duration;
+      const curTime = currentAudio.currentTime || 0;
+      const rawAudioDur = currentAudio.duration;
+      const knownDur = pendingTrackRef.current?.duration;
+
+      // Prioritize known duration for chunked/streaming tracks (like SoundCloud HLS)
+      // where the browser audio element initially only sees the first chunk (~10s)
+      let dur = 0;
+      if (knownDur && knownDur > 0 && (!Number.isFinite(rawAudioDur) || rawAudioDur < knownDur - 3)) {
+        dur = knownDur;
+      } else if (Number.isFinite(rawAudioDur) && rawAudioDur > 0) {
+        dur = rawAudioDur;
+      }
+
+      if (dur > 0) {
         setCurrentTime(curTime);
         setDuration(dur);
         setProgress((curTime / dur) * 100);
@@ -464,11 +526,11 @@ export function PlayerProvider({ children }) {
     return () => {
       audioA.removeEventListener('timeupdate', timeUpdateA);
       audioA.removeEventListener('ended', endedA);
-      audioA.removeEventListener('error', handleErrorA);
+      audioA.removeEventListener('error', errorA);
 
       audioB.removeEventListener('timeupdate', timeUpdateB);
       audioB.removeEventListener('ended', endedB);
-      audioB.removeEventListener('error', handleErrorB);
+      audioB.removeEventListener('error', errorB);
     };
   }, []);
 
@@ -505,6 +567,8 @@ export function PlayerProvider({ children }) {
   const stopAllPlayback = () => {
     clearCrossfadeTimer();
     hasCrossfadeTriggeredRef.current = false;
+    destroyHls('A');
+    destroyHls('B');
     try {
       if (audioPlayerA.current) {
         audioPlayerA.current.pause();
@@ -540,6 +604,17 @@ export function PlayerProvider({ children }) {
   const performCrossfadeToTrack = useCallback((trackObj, customFadeSec = null) => {
     if (!trackObj || !trackObj.videoId) return;
 
+    let trackDuration = trackObj.duration;
+    if (!trackDuration) {
+      const foundInQueue = trackQueueRef.current?.find(t => t.videoId === trackObj.videoId) || 
+                           recommendationQueueRef.current?.find(t => t.videoId === trackObj.videoId) ||
+                           recentlyPlayedRef.current?.find(t => t.videoId === trackObj.videoId);
+      if (foundInQueue?.duration) {
+        trackDuration = foundInQueue.duration;
+      }
+    }
+    const resolvedTrackObj = { ...trackObj, duration: trackDuration };
+
     const fadeSec = customFadeSec !== null ? customFadeSec : crossfadeDurationRef.current;
     const currentAudio = activePlayerSlotRef.current === 'A' ? audioPlayerA.current : audioPlayerB.current;
     const nextSlot = activePlayerSlotRef.current === 'A' ? 'B' : 'A';
@@ -548,8 +623,8 @@ export function PlayerProvider({ children }) {
     clearCrossfadeTimer();
 
     // If current audio is not playing or paused or no track or fadeSec is 0, play standard
-    if (fadeSec <= 0 || !currentAudio || !currentAudio.src || currentAudio.paused) {
-      selectAndPlayTrack(trackObj.videoId, trackObj.title, trackObj.artist, trackObj.thumbnail, false, true);
+    if (fadeSec <= 0 || !currentAudio || (!currentAudio.src && !currentAudio.currentSrc) || currentAudio.paused) {
+      selectAndPlayTrack(resolvedTrackObj.videoId, resolvedTrackObj.title, resolvedTrackObj.artist, resolvedTrackObj.thumbnail, false, true, trackDuration);
       return;
     }
 
@@ -557,18 +632,32 @@ export function PlayerProvider({ children }) {
     hasCrossfadeTriggeredRef.current = true;
 
     // Immediately update track info so mini player & metadata update seamlessly without disappearing
-    setPendingTrack(trackObj);
-    pendingTrackRef.current = trackObj;
-    setCurrentTitle(trackObj.title);
+    setPendingTrack(resolvedTrackObj);
+    pendingTrackRef.current = resolvedTrackObj;
+    setCurrentTitle(resolvedTrackObj.title);
+    if (trackDuration > 0) setDuration(trackDuration);
     setPlayerStatus("Playing");
     setIsPlaying(true);
-    addToRecentlyPlayed(trackObj);
-    markTrackSeen(trackObj);
-    applyMediaSessionMetadata(trackObj.title, trackObj.artist, trackObj.thumbnail, trackObj.videoId);
+    addToRecentlyPlayed(resolvedTrackObj);
+    markTrackSeen(resolvedTrackObj);
+    applyMediaSessionMetadata(resolvedTrackObj.title, resolvedTrackObj.artist, resolvedTrackObj.thumbnail, resolvedTrackObj.videoId);
+
+    // If track is a SoundCloud track without duration, fetch duration in background
+    if (resolvedTrackObj.videoId.startsWith('sc:') && !trackDuration) {
+      fetchApi(`/api/song?id=${encodeURIComponent(resolvedTrackObj.videoId)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(songInfo => {
+          if (songInfo?.duration && pendingTrackRef.current?.videoId === resolvedTrackObj.videoId) {
+            setPendingTrack(prev => prev ? { ...prev, duration: songInfo.duration } : prev);
+            pendingTrackRef.current = { ...pendingTrackRef.current, duration: songInfo.duration };
+            setDuration(prev => (prev < songInfo.duration - 5 ? songInfo.duration : prev));
+          }
+        })
+        .catch(() => {});
+    }
 
     // Prepare next audio element
-    const targetUrl = getAudioUrl(trackObj.videoId);
-    nextAudio.src = targetUrl;
+    loadAudioSource(nextSlot, trackObj.videoId, nextAudio);
     nextAudio.playbackRate = playbackSpeedRef.current;
     nextAudio.volume = 0; // Starts silent
 
@@ -592,6 +681,7 @@ export function PlayerProvider({ children }) {
           try {
             currentAudio.pause();
             currentAudio.currentTime = 0;
+            destroyHls(activePlayerSlotRef.current === 'A' ? 'B' : 'A');
             currentAudio.removeAttribute('src');
             currentAudio.load();
           } catch (e) {}
@@ -601,9 +691,9 @@ export function PlayerProvider({ children }) {
     }).catch(err => {
       console.warn("[Audio Engine] Next audio playback failed during crossfade:", err);
       clearCrossfadeTimer();
-      selectAndPlayTrack(trackObj.videoId, trackObj.title, trackObj.artist, trackObj.thumbnail, false, true);
+      selectAndPlayTrack(trackObj.videoId, trackObj.title, trackObj.artist, trackObj.thumbnail, false, true, trackDuration);
     });
-  }, [clearCrossfadeTimer]);
+  }, [clearCrossfadeTimer, destroyHls, loadAudioSource]);
 
   const handleTrackHistoryAndRecommendations = (trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay) => {
     if (!isHistoryNavigation) {
@@ -697,8 +787,17 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false) => {
-    const trackObj = { videoId, title, artist, thumbnail };
+  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false, duration = null) => {
+    let trackDuration = duration;
+    if (!trackDuration) {
+      const foundInQueue = trackQueueRef.current?.find(t => t.videoId === videoId) || 
+                           recommendationQueueRef.current?.find(t => t.videoId === videoId) ||
+                           recentlyPlayedRef.current?.find(t => t.videoId === videoId);
+      if (foundInQueue?.duration) {
+        trackDuration = foundInQueue.duration;
+      }
+    }
+    const trackObj = { videoId, title, artist, thumbnail, duration: trackDuration };
 
     clearCrossfadeTimer();
     hasCrossfadeTriggeredRef.current = false;
@@ -724,6 +823,23 @@ export function PlayerProvider({ children }) {
     setPlayerStatus("Loading...");
     setProgress(0);
     setCurrentTime(0);
+    if (trackDuration > 0) {
+      setDuration(trackDuration);
+    }
+
+    // If track is a SoundCloud track without duration, fetch duration in background
+    if (videoId.startsWith('sc:') && !trackDuration) {
+      fetchApi(`/api/song?id=${encodeURIComponent(videoId)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(songInfo => {
+          if (songInfo?.duration && pendingTrackRef.current?.videoId === videoId) {
+            setPendingTrack(prev => prev ? { ...prev, duration: songInfo.duration } : prev);
+            pendingTrackRef.current = { ...pendingTrackRef.current, duration: songInfo.duration };
+            setDuration(prev => (prev < songInfo.duration - 5 ? songInfo.duration : prev));
+          }
+        })
+        .catch(() => {});
+    }
 
     addToRecentlyPlayed(trackObj);
     handleTrackHistoryAndRecommendations(trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay);
@@ -731,10 +847,10 @@ export function PlayerProvider({ children }) {
     applyMediaSessionMetadata(title, artist, thumbnail, videoId);
 
     // Playback using Active Native Audio with direct audio stream URL
-    console.log(`[Audio Engine] Playing track (${title}) via native audio stream...`);
-    const targetUrl = getAudioUrl(videoId);
+    console.log(`[Audio Engine] Playing track (${title}) via audio stream...`);
     const audio = getActiveAudio();
-    audio.src = targetUrl;
+    const currentSlot = activePlayerSlotRef.current;
+    loadAudioSource(currentSlot, videoId, audio);
     audio.playbackRate = playbackSpeedRef.current;
     audio.volume = isMutedRef.current ? 0 : volumeRef.current;
     audio.play().then(() => {
@@ -861,7 +977,7 @@ export function PlayerProvider({ children }) {
     
     const startTrack = tracks[startIndex];
     if (startTrack && startTrack.videoId) {
-      selectAndPlayTrack(startTrack.videoId, startTrack.title, startTrack.artist, startTrack.thumbnail);
+      selectAndPlayTrack(startTrack.videoId, startTrack.title, startTrack.artist, startTrack.thumbnail, false, false, startTrack.duration);
     }
   };
 
@@ -998,7 +1114,7 @@ export function PlayerProvider({ children }) {
       if (fadeSec > 0 && isCurrentlyPlaying) {
         performCrossfadeToTrack(next.trackObj, Math.min(fadeSec, 2));
       } else {
-        selectAndPlayTrack(next.trackObj.videoId, next.trackObj.title, next.trackObj.artist, next.trackObj.thumbnail, next.isHistory, next.isAutoPlay);
+        selectAndPlayTrack(next.trackObj.videoId, next.trackObj.title, next.trackObj.artist, next.trackObj.thumbnail, next.isHistory, next.isAutoPlay, next.trackObj.duration);
       }
     }
   }, [resolveNextTrack, performCrossfadeToTrack]);
@@ -1039,7 +1155,7 @@ export function PlayerProvider({ children }) {
       setTrackWindow(newWindow);
       const newCurrent = newWindow[CENTER_INDEX];
       if (newCurrent) {
-        selectAndPlayTrack(newCurrent.videoId, newCurrent.title, newCurrent.artist, newCurrent.thumbnail, true);
+        selectAndPlayTrack(newCurrent.videoId, newCurrent.title, newCurrent.artist, newCurrent.thumbnail, true, false, newCurrent.duration);
       }
       preloadCoverImages(newWindow);
       return;
@@ -1052,7 +1168,7 @@ export function PlayerProvider({ children }) {
       currentHistoryIndexRef.current = newIndex;
       setCurrentHistoryIndex(newIndex);
       
-      selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true);
+      selectAndPlayTrack(previousTrack.videoId, previousTrack.title, previousTrack.artist, previousTrack.thumbnail, true, false, previousTrack.duration);
     }
   }, [clearCrossfadeTimer, preloadCoverImages]);
 

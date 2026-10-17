@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart, Share2 } from 'lucide-react';
+import { 
+  Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, 
+  ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart, Share2,
+  Volume2, Volume1, VolumeX 
+} from 'lucide-react';
 import { shareTrack } from '../services/shareService';
 
 const FullPlayer = lazy(() => import('./FullPlayer'));
@@ -15,6 +19,8 @@ export default function Player() {
     isRepeatEnabled, setIsRepeatEnabled,
     isShuffleEnabled, setIsShuffleEnabled,
     hasPrevious, hasNext,
+    volume, setVolume,
+    isMuted, toggleMute,
     pendingTrack,
     isRightSidebarOpen, setIsRightSidebarOpen,
     trackQueue, recommendationQueue, selectAndPlayTrack,
@@ -27,6 +33,14 @@ export default function Player() {
   const [initialShowLyrics, setInitialShowLyrics] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const progressRef = useRef(null);
+
+  // Top Progress Bar state for Desktop Miniplayer
+  const topProgressContainerRef = useRef(null);
+  const mobileProgressRef = useRef(null);
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  const [dragPercent, setDragPercent] = useState(null);
+  const [hoverPercent, setHoverPercent] = useState(null);
+  const [isHoveringProgress, setIsHoveringProgress] = useState(false);
 
   useEffect(() => {
     if (!pendingTrack?.videoId) return;
@@ -156,6 +170,85 @@ export default function Player() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const formatTimePadded = (seconds) => {
+    if (isNaN(seconds) || seconds < 0) return "00:00";
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+      return `${hrs < 10 ? '0' : ''}${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const getPercentFromClientX = (clientX) => {
+    if (!topProgressContainerRef.current) return 0;
+    const rect = topProgressContainerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    return rect.width > 0 ? (x / rect.width) * 100 : 0;
+  };
+
+  const handleTopProgressMouseDown = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.button !== 0) return;
+    const pct = getPercentFromClientX(e.clientX);
+    setIsDraggingProgress(true);
+    setDragPercent(pct);
+    seekToPercent(pct);
+
+    const onMouseMove = (moveEvent) => {
+      moveEvent.preventDefault();
+      const currentPct = getPercentFromClientX(moveEvent.clientX);
+      setDragPercent(currentPct);
+      seekToPercent(currentPct);
+    };
+
+    const onMouseUp = (upEvent) => {
+      upEvent.preventDefault();
+      const finalPct = getPercentFromClientX(upEvent.clientX);
+      seekToPercent(finalPct);
+      setIsDraggingProgress(false);
+      setDragPercent(null);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleTopProgressTouchStart = (e) => {
+    e.stopPropagation();
+    if (!e.touches || e.touches.length === 0) return;
+    const pct = getPercentFromClientX(e.touches[0].clientX);
+    setIsDraggingProgress(true);
+    setDragPercent(pct);
+    seekToPercent(pct);
+
+    const onTouchMove = (moveEvent) => {
+      if (!moveEvent.touches || moveEvent.touches.length === 0) return;
+      const currentPct = getPercentFromClientX(moveEvent.touches[0].clientX);
+      setDragPercent(currentPct);
+      seekToPercent(currentPct);
+    };
+
+    const onTouchEnd = () => {
+      setIsDraggingProgress(false);
+      setDragPercent(null);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+  };
+
+  const handleTopProgressMouseMove = (e) => {
+    const pct = getPercentFromClientX(e.clientX);
+    setHoverPercent(pct);
+  };
+
   const handleProgressChange = (e) => {
     seekToPercent(e.target.value);
   };
@@ -281,11 +374,13 @@ export default function Player() {
     touchStartY.current = null;
   };
 
+  const activeProgress = isDraggingProgress && dragPercent !== null ? dragPercent : (progress || 0);
+
   return (
     <>
       {/* Desktop Player Bar */}
       <footer 
-        className="hidden md:flex player-bar z-40 bg-zinc-900 border-t border-zinc-800 p-4 items-center justify-between gap-4 overflow-hidden shrink-0 cursor-pointer select-none"
+        className="hidden md:flex player-bar relative z-40 bg-zinc-900 border-t border-zinc-800 px-5 md:px-7 py-3.5 items-center justify-between gap-4 shrink-0 cursor-pointer select-none min-h-[5.5rem]"
         onClick={() => openFullPlayer(false)}
         onWheel={(e) => {
           if (e.deltaY > 0 || e.deltaY < 0) {
@@ -293,9 +388,64 @@ export default function Player() {
           }
         }}
       >
-        {/* Clickable track cover & title section */}
+        {/* Desktop Top-Edge Progress Bar (Full Width with Circular Knob Scrubber) */}
         <div 
-          className="player-track flex items-center gap-4 w-1/3 min-w-0 cursor-pointer group hover:opacity-95 select-none"
+          ref={topProgressContainerRef}
+          className="absolute top-0 left-0 right-0 h-4 -translate-y-1/2 z-50 cursor-pointer group/progressbar flex items-center select-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            const pct = getPercentFromClientX(e.clientX);
+            seekToPercent(pct);
+          }}
+          onMouseDown={handleTopProgressMouseDown}
+          onTouchStart={handleTopProgressTouchStart}
+          onMouseMove={handleTopProgressMouseMove}
+          onMouseEnter={() => setIsHoveringProgress(true)}
+          onMouseLeave={() => {
+            setIsHoveringProgress(false);
+            setHoverPercent(null);
+          }}
+          title="Seek"
+        >
+          {/* Subtle Hover Time Badge */}
+          {isHoveringProgress && hoverPercent !== null && duration > 0 && (
+            <div 
+              className="absolute -top-8 -translate-x-1/2 px-2 py-0.5 rounded bg-zinc-950/95 text-white text-xs font-mono border border-zinc-700/60 shadow-lg pointer-events-none"
+              style={{ left: `${Math.max(2, Math.min(98, hoverPercent))}%` }}
+            >
+              {formatTimePadded((hoverPercent / 100) * duration)}
+            </div>
+          )}
+
+          {/* Full-width Track */}
+          <div className="relative w-full h-[3.5px] group-hover/progressbar:h-[5px] bg-zinc-700/70 transition-all duration-100 ease-out">
+            {/* Hover Ghost Track */}
+            {isHoveringProgress && hoverPercent !== null && (
+              <div 
+                className="absolute top-0 bottom-0 left-0 bg-white/20 pointer-events-none"
+                style={{ width: `${Math.max(0, Math.min(100, hoverPercent))}%` }}
+              />
+            )}
+
+            {/* Played Progress Bar */}
+            <div 
+              className="absolute top-0 bottom-0 left-0 bg-white pointer-events-none"
+              style={{ width: `${Math.max(0, Math.min(100, activeProgress))}%` }}
+            />
+
+            {/* Scrubber Knob / Thumb (Always visible white circular dot, expands slightly on hover/drag) */}
+            <div 
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-white rounded-full shadow-[0_1px_6px_rgba(0,0,0,0.85)] border border-black/20 transition-transform duration-75 pointer-events-none ${
+                isDraggingProgress ? 'scale-125 ring-2 ring-white/30' : 'group-hover/progressbar:scale-125'
+              }`}
+              style={{ left: `${Math.max(0, Math.min(100, activeProgress))}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Left Section: Track Artwork & Title / Artist */}
+        <div 
+          className="player-track flex items-center gap-3.5 w-1/4 max-w-[280px] min-w-0 cursor-pointer group hover:opacity-95 select-none shrink"
           onClick={(e) => {
             e.stopPropagation();
             openFullPlayer(false);
@@ -314,36 +464,44 @@ export default function Player() {
             <img 
               src={(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail} 
               alt="Track thumbnail" 
-              className="w-14 h-14 rounded-md object-cover bg-black border border-white/5 shrink-0"
+              className="w-14 h-14 rounded-lg object-cover bg-black border border-white/5 shrink-0 shadow-md"
               onError={(e) => {
                 e.target.src = '/default-cover.svg';
               }}
             />
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
               <ChevronUp className="w-6 h-6 text-white translate-y-0.5" />
             </div>
           </div>
-          <div className="flex flex-col flex-1 min-w-0">
-            <span className="player-status text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-1 truncate" data-player-status>
-              {playerStatus}
+          <div className="flex flex-col flex-1 min-w-0 justify-center">
+            <span className="player-title text-[15px] font-semibold truncate text-white group-hover:text-zinc-200 transition-colors leading-tight" data-current-title>
+              {currentTitle}
             </span>
-            <div className="player-title-row flex items-center gap-2">
-              <span className="player-title text-sm font-semibold truncate text-white group-hover:text-zinc-200 transition-colors" data-current-title>
-                {currentTitle}
-              </span>
-            </div>
+            <span className="text-xs md:text-[13px] text-zinc-400 truncate mt-0.5 font-medium leading-tight">
+              {pendingTrack?.artist || pendingTrack?.channelTitle || 'Play LooP'}
+            </span>
           </div>
+          <button 
+            type="button" 
+            className="p-2 rounded-full text-zinc-400 hover:text-white transition-colors shrink-0 cursor-pointer"
+            onClick={handleLikeClick}
+            aria-label={isLiked ? "Unlike track" : "Like track"}
+            title={isLiked ? "Unlike" : "Like"}
+          >
+            <Heart className={`w-5 h-5 ${isLiked ? 'fill-white text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]' : ''}`} />
+          </button>
         </div>
 
-        <div className="player-controls flex flex-col items-center w-1/3 max-w-lg" onClick={(e) => e.stopPropagation()}>
-          <div className="player-buttons flex items-center gap-3 md:gap-4 mb-2">
+        {/* Center: Playback Buttons */}
+        <div className="player-controls flex items-center justify-center shrink-0 mx-2" onClick={(e) => e.stopPropagation()}>
+          <div className="player-buttons flex items-center gap-2 sm:gap-2.5 md:gap-3 lg:gap-4">
             <button 
               type="button" 
               className={`player-skip-button repeat-button ${isRepeatEnabled ? 'is-active text-white' : 'text-zinc-400 hover:text-white'}`}
               onClick={() => setIsRepeatEnabled(!isRepeatEnabled)}
               aria-label="Repeat"
             >
-              <Repeat1 className="w-5 h-5" />
+              <Repeat1 className="w-[22px] h-[22px]" />
             </button>
             <button 
               type="button" 
@@ -352,7 +510,7 @@ export default function Player() {
               disabled={!hasPrevious}
               aria-label="Previous track"
             >
-              <SkipBack className="w-5 h-5" />
+              <SkipBack className="w-[22px] h-[22px]" />
             </button>
             <button 
               type="button" 
@@ -361,10 +519,11 @@ export default function Player() {
               aria-label="Rewind 10 seconds"
               title="Rewind 10 seconds"
             >
-              <div className="relative flex items-center justify-center">
-                <RotateCcw className="w-5 h-5" />
-                <span className="absolute text-[8px] font-bold font-sans translate-y-[0.5px]">10</span>
-              </div>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <text x="12" y="15" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="700" fontFamily="system-ui, -apple-system, sans-serif">10</text>
+              </svg>
             </button>
             <button 
               type="button" 
@@ -373,12 +532,12 @@ export default function Player() {
               aria-label="Play/Pause"
             >
               {isPlaying ? (
-                <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                  <rect x="6.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
-                  <rect x="14.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
+                <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <rect x="6" y="4.5" width="4" height="15" rx="1" />
+                  <rect x="14" y="4.5" width="4" height="15" rx="1" />
                 </svg>
               ) : (
-                <svg className="w-7 h-7 text-white translate-x-[1px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <svg className="w-8 h-8 text-white translate-x-[2px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                   <path d="M7 4.5v15l12-7.5z" />
                 </svg>
               )}
@@ -390,10 +549,11 @@ export default function Player() {
               aria-label="Forward 10 seconds"
               title="Forward 10 seconds"
             >
-              <div className="relative flex items-center justify-center">
-                <RotateCw className="w-5 h-5" />
-                <span className="absolute text-[8px] font-bold font-sans translate-y-[0.5px]">10</span>
-              </div>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.24L21 8" />
+                <path d="M21 3v5h-5" />
+                <text x="12" y="15" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="700" fontFamily="system-ui, -apple-system, sans-serif">10</text>
+              </svg>
             </button>
             <button 
               type="button" 
@@ -402,7 +562,7 @@ export default function Player() {
               disabled={!hasNext}
               aria-label="Next track"
             >
-              <SkipForward className="w-5 h-5" />
+              <SkipForward className="w-[22px] h-[22px]" />
             </button>
             <button 
               type="button" 
@@ -410,45 +570,93 @@ export default function Player() {
               onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
               aria-label="Shuffle"
             >
-              <Shuffle className="w-5 h-5" />
+              <Shuffle className="w-[22px] h-[22px]" />
             </button>
-          </div>
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-xs text-zinc-400 min-w-[40px] text-right font-mono">{formatTime(currentTime)}</span>
-            <input 
-              ref={progressRef}
-              className="progress-bar flex-1 cursor-pointer outline-none"
-              style={{ '--progress': `${progress || 0}%` }}
-              type="range" 
-              min="0" max="100" step="0.1"
-              value={progress || 0}
-              onChange={handleProgressChange}
-              onInput={handleProgressChange}
-              aria-label="Track progress"
-            />
-            <span className="text-xs text-zinc-400 min-w-[40px] font-mono">{formatTime(duration)}</span>
           </div>
         </div>
         
-        <div className="flex w-1/3 justify-end items-center gap-1 pr-2" onClick={(e) => e.stopPropagation()}>
+        {/* Right Section: Time (00:03 / 02:33), Volume Slider & Actions */}
+        <div className="flex w-1/4 min-w-0 justify-end items-center gap-2.5 xl:gap-3.5 shrink" onClick={(e) => e.stopPropagation()}>
+          {/* Time Display: hidden on < 1200px (xl) to prevent overlapping */}
+          <div className="hidden xl:flex text-sm text-zinc-300 font-mono font-medium select-none tracking-tight shrink-0">
+            <span>{formatTimePadded(currentTime)}</span>
+            <span className="mx-1 text-zinc-600">/</span>
+            <span>{formatTimePadded(duration)}</span>
+          </div>
+
+          {/* Volume Control: Slider shown on lg (>= 1024px), compact icon button on smaller desktop screens */}
+          <div className="hidden lg:flex items-center gap-2.5 group/volume shrink-0">
+            <button
+              type="button"
+              className="text-zinc-400 hover:text-white transition-colors p-1.5 cursor-pointer"
+              onClick={toggleMute}
+              aria-label={isMuted ? "Unmute" : "Mute"}
+              title={isMuted ? "Unmute" : "Mute"}
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="w-[22px] h-[22px]" />
+              ) : volume < 0.5 ? (
+                <Volume1 className="w-[22px] h-[22px]" />
+              ) : (
+                <Volume2 className="w-[22px] h-[22px]" />
+              )}
+            </button>
+            <div className="relative flex items-center w-20 xl:w-28">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="volume-slider w-full"
+                style={{ '--vol-percent': `${(isMuted ? 0 : volume) * 100}%` }}
+                aria-label="Volume"
+              />
+            </div>
+            <span className="hidden xl:inline text-xs font-mono font-medium text-zinc-300 w-8 text-right select-none">
+              {isMuted ? '0%' : `${Math.round(volume * 100)}%`}
+            </span>
+          </div>
+
+          {/* Fallback Volume Mute Icon when slider is hidden to avoid overlapping */}
           <button
             type="button"
-            className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
-            onClick={() => shareTrack(pendingTrack)}
-            aria-label="Share track"
-            title="Share track"
+            className="lg:hidden text-zinc-400 hover:text-white transition-colors p-2 cursor-pointer shrink-0"
+            onClick={toggleMute}
+            aria-label={isMuted ? "Unmute" : "Mute"}
+            title={isMuted ? "Unmute" : "Mute"}
           >
-            <Share2 className="w-5 h-5" />
+            {isMuted || volume === 0 ? (
+              <VolumeX className="w-[22px] h-[22px]" />
+            ) : volume < 0.5 ? (
+              <Volume1 className="w-[22px] h-[22px]" />
+            ) : (
+              <Volume2 className="w-[22px] h-[22px]" />
+            )}
           </button>
-          <button
-            type="button"
-            className={`p-2 rounded-full transition-colors cursor-pointer ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}
-            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-            aria-label="Toggle right sidebar"
-            title="Now Playing View"
-          >
-            <ListMusic className="w-5 h-5" />
-          </button>
+
+          {/* Share & Queue / Sidebar Actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+              onClick={() => shareTrack(pendingTrack)}
+              aria-label="Share track"
+              title="Share track"
+            >
+              <Share2 className="w-[22px] h-[22px]" />
+            </button>
+            <button
+              type="button"
+              className={`p-2 rounded-full transition-colors cursor-pointer ${isRightSidebarOpen ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}
+              onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+              aria-label="Toggle right sidebar"
+              title="Now Playing View"
+            >
+              <ListMusic className="w-[22px] h-[22px]" />
+            </button>
+          </div>
         </div>
       </footer>
 
@@ -460,12 +668,48 @@ export default function Player() {
         onTouchEnd={onTouchEnd}
         onClick={() => openFullPlayer(false)}
       >
-        {/* Top 2px Progress Line */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-zinc-800/60 pointer-events-none">
-          <div 
-            className="h-full bg-white transition-all duration-150" 
-            style={{ width: `${progress || 0}%` }}
-          />
+        {/* Top 2px Progress Line with Interactive Seek Feature */}
+        <div 
+          ref={mobileProgressRef}
+          className="absolute top-0 left-0 right-0 h-4 -translate-y-1/2 z-50 cursor-pointer flex items-center select-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!mobileProgressRef.current) return;
+            const rect = mobileProgressRef.current.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            seekToPercent(pct);
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            if (!mobileProgressRef.current || !e.touches[0]) return;
+            const rect = mobileProgressRef.current.getBoundingClientRect();
+            const pct = Math.max(0, Math.min(100, ((e.touches[0].clientX - rect.left) / rect.width) * 100));
+            seekToPercent(pct);
+
+            const handleTouchMove = (moveEvent) => {
+              moveEvent.stopPropagation();
+              if (!mobileProgressRef.current || !moveEvent.touches[0]) return;
+              const r = mobileProgressRef.current.getBoundingClientRect();
+              const p = Math.max(0, Math.min(100, ((moveEvent.touches[0].clientX - r.left) / r.width) * 100));
+              seekToPercent(p);
+            };
+
+            const handleTouchEnd = (endEvent) => {
+              endEvent.stopPropagation();
+              window.removeEventListener('touchmove', handleTouchMove);
+              window.removeEventListener('touchend', handleTouchEnd);
+            };
+
+            window.addEventListener('touchmove', handleTouchMove, { passive: false });
+            window.addEventListener('touchend', handleTouchEnd);
+          }}
+        >
+          <div className="w-full h-[2px] bg-zinc-800/60 pointer-events-none">
+            <div 
+              className="h-full bg-white transition-all duration-150" 
+              style={{ width: `${progress || 0}%` }}
+            />
+          </div>
         </div>
 
         {/* Left Track Info & Artwork */}

@@ -441,7 +441,13 @@ async function searchSoundCloud(query, limit = 8) {
 	}
 }
 
+const scStreamUrlCache = new Map();
+
 async function getSoundCloudStreamUrl(scId) {
+	const cached = scStreamUrlCache.get(scId);
+	if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+		return cached.url;
+	}
 	try {
 		const clientId = await getSoundCloudClientId();
 		if (!clientId) return null;
@@ -475,7 +481,15 @@ async function getSoundCloudStreamUrl(scId) {
 		});
 		if (!streamRes.ok) return null;
 		const streamData = await streamRes.json();
-		return streamData.url || null;
+		const finalUrl = streamData.url || null;
+		if (finalUrl) {
+			scStreamUrlCache.set(scId, { url: finalUrl, timestamp: Date.now() });
+			if (scStreamUrlCache.size > 200) {
+				const oldest = scStreamUrlCache.keys().next().value;
+				scStreamUrlCache.delete(oldest);
+			}
+		}
+		return finalUrl;
 	} catch (err) {
 		console.error("[SoundCloud] Stream resolve error:", err.message || err);
 		return null;
@@ -556,6 +570,12 @@ async function streamSoundCloudAudio(scId, req, res) {
 		const isMp4 = Boolean(initUrl) || (hlsTrans.format?.mime_type || "").includes("mp4");
 		const mimeType = isMp4 ? "audio/mp4" : "audio/mpeg";
 
+		const trackSec = Math.round((trackData.duration || 0) / 1000);
+		if (trackSec > 0) {
+			res.setHeader("X-Track-Duration", String(trackSec));
+			res.setHeader("Access-Control-Expose-Headers", "X-Track-Duration");
+		}
+
 		res.setHeader("Content-Type", mimeType);
 		res.setHeader("Accept-Ranges", "none");
 
@@ -572,17 +592,34 @@ async function streamSoundCloudAudio(scId, req, res) {
 			}
 		}
 
-		// Stream chunks sequentially; stop immediately if client closes connection
+		// Stream chunks with a concurrent prefetch sliding window so buffer fills rapidly ahead of playback
+		const CONCURRENCY = 4;
+		const prefetchMap = new Map();
+		const fetchChunk = (idx) => {
+			if (idx >= segmentUrls.length || prefetchMap.has(idx)) return;
+			const p = fetch(segmentUrls[idx], { signal: AbortSignal.timeout(6000) })
+				.then(r => r.ok ? r.arrayBuffer() : null)
+				.then(buf => buf ? Buffer.from(buf) : null)
+				.catch(segErr => {
+					console.error("[SoundCloud] Chunk fetch error:", segErr.message);
+					return null;
+				});
+			prefetchMap.set(idx, p);
+		};
+
+		for (let k = 0; k < Math.min(CONCURRENCY, segmentUrls.length); k++) {
+			fetchChunk(k);
+		}
+
 		for (let i = 0; i < segmentUrls.length; i++) {
 			if (res.writableEnded || res.closed) break;
-			try {
-				const segRes = await fetch(segmentUrls[i], { signal: AbortSignal.timeout(5000) });
-				if (segRes.ok) {
-					const segBuf = Buffer.from(await segRes.arrayBuffer());
-					res.write(segBuf);
-				}
-			} catch (segErr) {
-				console.error("[SoundCloud] Chunk fetch error:", segErr.message);
+			fetchChunk(i + CONCURRENCY);
+
+			const segPromise = prefetchMap.get(i);
+			prefetchMap.delete(i);
+			const segBuf = segPromise ? await segPromise : null;
+			if (segBuf && !res.writableEnded && !res.closed) {
+				res.write(segBuf);
 			}
 		}
 
@@ -975,7 +1012,12 @@ app.get("/api/audio", async (req, res) => {
 	// Handle SoundCloud tracks
 	if (videoId.startsWith("sc:")) {
 		const scId = videoId.replace(/^sc:/, "");
-		return streamSoundCloudAudio(scId, req, res);
+		const scStreamUrl = await getSoundCloudStreamUrl(scId);
+		if (scStreamUrl) {
+			return res.redirect(302, scStreamUrl);
+		} else {
+			return res.status(404).send("SoundCloud stream URL not found");
+		}
 	}
 
 	// Handle dynamic search query tracks
