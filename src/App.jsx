@@ -11,6 +11,7 @@ import MobileBottomNav from './components/MobileBottomNav';
 import PullToRefresh from './components/PullToRefresh';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
+import { initNavigationHistory } from './utils/navigationHistory';
 
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const LibraryPage = lazy(() => import('./pages/LibraryPage'));
@@ -122,6 +123,8 @@ function App() {
   }, [selectAndPlayTrack]);
 
   useEffect(() => {
+    initNavigationHistory();
+
     // Prevent refresh when app is focused via a deep link or launch_handler
     if ('launchQueue' in window) {
       window.launchQueue.setConsumer((launchParams) => {

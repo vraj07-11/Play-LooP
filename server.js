@@ -315,6 +315,32 @@ function cleanStr(val, fallback = "") {
 	return decodeEntities(val).trim();
 }
 
+const MIN_SONG_DURATION = 35; // Must be longer than 35 seconds (> 35)
+const MAX_SONG_DURATION = 420; // Must be less than 7 minutes (< 420 seconds)
+
+function parseDurationInSeconds(d) {
+	if (d === null || d === undefined || d === '') return 0;
+	if (typeof d === 'number') {
+		if (d > 10000) return Math.round(d / 1000);
+		return Math.round(d);
+	}
+	const str = String(d).trim();
+	if (str.includes(':')) {
+		const parts = str.split(':').map(p => parseInt(p, 10));
+		if (parts.length === 2) return (parts[0] || 0) * 60 + (parts[1] || 0);
+		if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
+	}
+	const parsed = parseInt(str, 10);
+	if (isNaN(parsed)) return 0;
+	if (parsed > 10000) return Math.round(parsed / 1000);
+	return parsed;
+}
+
+function isValidSongDuration(duration) {
+	const secs = parseDurationInSeconds(duration);
+	return secs > MIN_SONG_DURATION && secs < MAX_SONG_DURATION;
+}
+
 function formatSong(song, quality = "320") {
 	if (!song) return null;
 	const encUrl = song.encrypted_media_url || song.more_info?.encrypted_media_url;
@@ -349,7 +375,7 @@ function formatSong(song, quality = "320") {
 		title: cleanStr(songTitle, "Unknown Track"),
 		artist: cleanStr(artistName, "Various Artists"),
 		thumbnail: getValidImage(song.image),
-		duration: parseInt(song.more_info?.duration || song.duration || 0, 10),
+		duration: parseDurationInSeconds(song.more_info?.duration || song.duration || 0),
 		streamUrl: qualityUrl
 	};
 }
@@ -432,7 +458,7 @@ async function searchSoundCloud(query, limit = 8) {
 				provider: "SoundCloud",
 				tag: "SoundCloud"
 			};
-		});
+		}).filter(s => isValidSongDuration(s.duration));
 	} catch (err) {
 		if (err.name !== "TimeoutError") {
 			console.warn("[SoundCloud] Search warning:", err.message || err);
@@ -718,20 +744,20 @@ app.get("/api/search", async (req, res) => {
 			const autoData = autoRes.status === 'fulfilled' && autoRes.value ? autoRes.value : {};
 			const scSongs = scRes.status === 'fulfilled' && Array.isArray(scRes.value) ? scRes.value : [];
 
-			let saavnSongs = songsData.map(s => formatSong(s)).filter(Boolean);
+			let saavnSongs = songsData.map(s => formatSong(s)).filter(s => Boolean(s && isValidSongDuration(s.duration)));
 			if (saavnSongs.length === 0 && autoData.songs?.data) {
 				saavnSongs = autoData.songs.data.map(s => ({
 					videoId: s.id,
 					title: cleanStr(s.title || s.song, "Unknown Track"),
 					artist: cleanStr(s.more_info?.primary_artists || s.primary_artists || s.description, "Play LooP"),
 					thumbnail: getValidImage(s.image),
-					duration: 180
-				}));
+					duration: parseDurationInSeconds(s.more_info?.duration || 180)
+				})).filter(s => isValidSongDuration(s.duration));
 			}
 
-			// Score and rank both sources by query relevance
-			const scoredSaavn = saavnSongs.map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
-			const scoredSC = scSongs.map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+			// Score and rank both sources by query relevance (ensuring valid duration)
+			const scoredSaavn = saavnSongs.filter(s => isValidSongDuration(s.duration)).map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+			const scoredSC = scSongs.filter(s => isValidSongDuration(s.duration)).map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
 
 			// Interleave and merge based on highest relevance score
 			let songs = [];
@@ -741,10 +767,10 @@ app.get("/api/search", async (req, res) => {
 				const scItem = scoredSC[j];
 
 				if (scItem && (!saavnItem || scItem.score >= saavnItem.score)) {
-					songs.push(scItem);
+					if (isValidSongDuration(scItem.duration)) songs.push(scItem);
 					j++;
 				} else if (saavnItem) {
-					songs.push(saavnItem);
+					if (isValidSongDuration(saavnItem.duration)) songs.push(saavnItem);
 					i++;
 				}
 			}
@@ -961,7 +987,7 @@ app.get("/api/search", async (req, res) => {
 
 		let saavnSongs = [];
 		if (saavnData && saavnData.results && saavnData.results.length > 0) {
-			saavnSongs = saavnData.results.map(s => formatSong(s));
+			saavnSongs = saavnData.results.map(s => formatSong(s)).filter(s => Boolean(s && isValidSongDuration(s.duration)));
 		} else {
 			const autoData = await fetchJioSaavn({ __call: "autocomplete.get", query: query }).catch(() => null);
 			if (autoData && autoData.songs?.data) {
@@ -970,13 +996,13 @@ app.get("/api/search", async (req, res) => {
 					title: (s.title || "").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
 					artist: (s.more_info?.primary_artists || s.description || "Play LooP").replace(/&quot;/g, '"').replace(/&amp;/g, '&'),
 					thumbnail: getValidImage(s.image),
-					duration: 180
-				}));
+					duration: parseDurationInSeconds(s.more_info?.duration || 180)
+				})).filter(s => isValidSongDuration(s.duration));
 			}
 		}
 
-		const scoredSaavn = saavnSongs.map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
-		const scoredSC = (scSongs || []).map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+		const scoredSaavn = saavnSongs.filter(s => isValidSongDuration(s.duration)).map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
+		const scoredSC = (scSongs || []).filter(s => isValidSongDuration(s.duration)).map(s => ({ ...s, score: computeRelevanceScore(s, queryLower) })).sort((a, b) => b.score - a.score);
 
 		let songs = [];
 		let i = 0, j = 0;
@@ -985,10 +1011,10 @@ app.get("/api/search", async (req, res) => {
 			const scItem = scoredSC[j];
 
 			if (scItem && (!saavnItem || scItem.score >= saavnItem.score)) {
-				songs.push(scItem);
+				if (isValidSongDuration(scItem.duration)) songs.push(scItem);
 				j++;
 			} else if (saavnItem) {
-				songs.push(saavnItem);
+				if (isValidSongDuration(saavnItem.duration)) songs.push(saavnItem);
 				i++;
 			}
 		}
@@ -1428,7 +1454,7 @@ app.get("/api/recommendations", async (req, res) => {
 		const currentTitleClean = (title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 		for (const track of recommendations) {
-			if (!track || !track.videoId) continue;
+			if (!track || !track.videoId || !isValidSongDuration(track.duration)) continue;
 			
 			const trackTitleClean = (track.title || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 			
@@ -1731,7 +1757,7 @@ app.get("/api/popular-songs", async (req, res) => {
 			for (let l = 0; l < shuffledByLang.length; l++) {
 				if (shuffledByLang[l][i]) {
 					const song = shuffledByLang[l][i];
-					if (song.videoId && !seenIds.has(song.videoId)) {
+					if (song.videoId && isValidSongDuration(song.duration) && !seenIds.has(song.videoId)) {
 						seenIds.add(song.videoId);
 						combinedSongs.push(song);
 					}
@@ -1744,7 +1770,7 @@ app.get("/api/popular-songs", async (req, res) => {
 
 	// General superhits fallback
 	const fallbackSearch = await fetchJioSaavn({ __call: "search.getResults", q: "superhits", n: "30", p: "1" });
-	const fallbackSongs = shuffleArray((fallbackSearch?.results || []).map(formatSong));
+	const fallbackSongs = shuffleArray((fallbackSearch?.results || []).map(formatSong).filter(s => Boolean(s && isValidSongDuration(s.duration))));
 	res.json(fallbackSongs);
 });
 
@@ -1878,9 +1904,9 @@ app.get("/api/playlist", async (req, res) => {
 
 			let tracks = [];
 			if (Array.isArray(data.topSongs)) {
-				tracks = data.topSongs.map(formatSong);
+				tracks = data.topSongs.map(formatSong).filter(t => Boolean(t && isValidSongDuration(t.duration)));
 			} else if (data.topSongs && Array.isArray(data.topSongs.songs)) {
-				tracks = data.topSongs.songs.map(formatSong);
+				tracks = data.topSongs.songs.map(formatSong).filter(t => Boolean(t && isValidSongDuration(t.duration)));
 			} else if (pageStr !== "1") {
 				// If it fails on page > 1, we just return empty tracks.
 			}
@@ -1961,7 +1987,7 @@ app.get("/api/playlist", async (req, res) => {
 			try {
 				const data = await fetchJioSaavn({ __call: "search.getResults", q: query, n: limitStr, p: pageStr });
 				if (data && Array.isArray(data.results)) {
-					rawTracks = data.results.map(formatSong);
+					rawTracks = data.results.map(formatSong).filter(t => Boolean(t && isValidSongDuration(t.duration)));
 				}
 			} catch (e) {
 				console.warn(`QUERY: search page ${pageStr} failed:`, e.message);
@@ -1981,6 +2007,7 @@ app.get("/api/playlist", async (req, res) => {
 			};
 
 			for (const track of rawTracks) {
+				if (!isValidSongDuration(track.duration)) continue;
 				const normTitle = cleanTitle(track.title);
 				if (normTitle && !isDuplicate(normTitle)) {
 					seenTitles.push(normTitle);
@@ -2001,6 +2028,7 @@ app.get("/api/playlist", async (req, res) => {
 							const extraData = await fetchJioSaavn({ __call: "search.getResults", q: cleanArt, n: "30", p: String(p) });
 							if (extraData && Array.isArray(extraData.results)) {
 								for (const track of extraData.results.map(formatSong)) {
+									if (!isValidSongDuration(track.duration)) continue;
 									const normTitle = cleanTitle(track.title);
 									if (normTitle && !isDuplicate(normTitle)) {
 										seenTitles.push(normTitle);
@@ -2019,7 +2047,7 @@ app.get("/api/playlist", async (req, res) => {
 			}
 
 			// If we found at least 3 unique tracks, return them! Otherwise, fall back to raw tracks so the playlist isn't completely empty.
-			const finalTracks = uniqueTracks.length > 2 ? uniqueTracks.slice(0, targetLimit) : rawTracks.slice(0, targetLimit);
+			const finalTracks = (uniqueTracks.length > 2 ? uniqueTracks.slice(0, targetLimit) : rawTracks.slice(0, targetLimit)).filter(t => isValidSongDuration(t.duration));
 
 			return res.json({
 				playlistId,
@@ -2050,7 +2078,7 @@ app.get("/api/playlist", async (req, res) => {
 			}
 		}
 
-		let tracks = rawTracks.map(s => formatSong(s)).filter(Boolean);
+		let tracks = rawTracks.map(s => formatSong(s)).filter(t => Boolean(t && isValidSongDuration(t.duration)));
 
 		// If still 0 tracks, fallback to searching songs by the playlist title so it is NEVER completely empty!
 		if (tracks.length === 0 && resolvedTitle) {
@@ -2062,7 +2090,7 @@ app.get("/api/playlist", async (req, res) => {
 					n: 25
 				});
 				if (fallbackSearch?.results?.length > 0) {
-					tracks = fallbackSearch.results.map(s => formatSong(s)).filter(Boolean);
+					tracks = fallbackSearch.results.map(s => formatSong(s)).filter(t => Boolean(t && isValidSongDuration(t.duration)));
 				}
 			} catch (searchErr) {
 				console.warn("Fallback song search failed for playlist:", searchErr.message);
@@ -2329,18 +2357,21 @@ async function getSoundCloudPlaylistDetails(scUrl) {
 				if (trackTitle) {
 					songsToSearch.push(`${trackTitle} ${trackArtist}`.trim());
 					if (t.id) {
-						const art = t.artwork_url || t.user?.avatar_url || rawArt || "";
-						const img = art ? art.replace("-large", "-t500x500") : thumbnail;
-						tracks.push({
-							videoId: `sc:${t.id}`,
-							title: cleanStr(trackTitle, "SoundCloud Track"),
-							artist: cleanStr(trackArtist, "SoundCloud Artist"),
-							thumbnail: getValidImage(img),
-							duration: Math.round((t.duration || 0) / 1000),
-							source: "soundcloud",
-							provider: "SoundCloud",
-							tag: "SoundCloud"
-						});
+						const durSec = Math.round((t.duration || 0) / 1000);
+						if (isValidSongDuration(durSec)) {
+							const art = t.artwork_url || t.user?.avatar_url || rawArt || "";
+							const img = art ? art.replace("-large", "-t500x500") : thumbnail;
+							tracks.push({
+								videoId: `sc:${t.id}`,
+								title: cleanStr(trackTitle, "SoundCloud Track"),
+								artist: cleanStr(trackArtist, "SoundCloud Artist"),
+								thumbnail: getValidImage(img),
+								duration: durSec,
+								source: "soundcloud",
+								provider: "SoundCloud",
+								tag: "SoundCloud"
+							});
+						}
 					}
 				}
 			}
@@ -2395,7 +2426,7 @@ app.get("/api/import-playlist", async (req, res) => {
 
 			if (data && (data.list || data.songs)) {
 				const list = data.list || data.songs;
-				const tracks = list.map(s => formatSong(s));
+				const tracks = list.map(s => formatSong(s)).filter(t => Boolean(t && isValidSongDuration(t.duration)));
 				const rawThumb = getValidImage(data.image);
 				const cleanThumb = (rawThumb && rawThumb.includes('/editorial/'))
 					? (tracks[0]?.thumbnail || rawThumb)

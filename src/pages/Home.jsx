@@ -3,6 +3,8 @@ import { usePlayer } from '../context/PlayerContext';
 import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS } from '../services/api.js';
 import Carousel from '../components/Carousel';
 import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
+import { navigateBack } from '../utils/navigationHistory';
+import { filterValidDurationTracks } from '../utils/durationUtils';
 
 export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [greeting, setGreeting] = useState('');
@@ -11,6 +13,10 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [loadingPlaylistDetails, setLoadingPlaylistDetails] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const selectedPlaylistRef = useRef(selectedPlaylist);
+  useEffect(() => {
+    selectedPlaylistRef.current = selectedPlaylist;
+  }, [selectedPlaylist]);
   
   const [extraMadeForYou, setExtraMadeForYou] = useState([]);
   const [extraPopularAlbums, setExtraPopularAlbums] = useState([]);
@@ -189,15 +195,21 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const handleOpenLikedSongs = useCallback(() => {
     try {
       resetScrollToTop();
-      const savedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+      let likedList = [];
+      try {
+        likedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+      } catch (err) {
+        likedList = [];
+      }
+      const validTracks = filterValidDurationTracks(likedList);
       const playlistDetails = {
         playlistId: 'liked_songs',
         title: 'Liked Songs',
         author: 'Your Favorites',
         thumbnail: '/liked_songs_cover.png',
         description: 'Collection of all your favorite liked songs.',
-        count: savedList.length,
-        tracks: savedList,
+        count: validTracks.length,
+        tracks: validTracks,
         isLikedPlaylist: true
       };
       if (!window.location.hash.includes('liked_songs') && !window.location.hash.includes('liked-songs')) {
@@ -227,17 +239,19 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
   useEffect(() => {
     const handleHashChange = async () => {
-      const hash = window.location.hash;
+      const hash = window.location.hash || '';
       const match = hash.match(/^#\/?playlist\/(.+)$/);
       
       if (match) {
         const id = match[1];
         resetScrollToTop();
         if (id === 'liked_songs' || id === 'liked-songs') {
-          handleOpenLikedSongs();
+          if (!selectedPlaylistRef.current || selectedPlaylistRef.current.playlistId !== 'liked_songs') {
+            handleOpenLikedSongs();
+          }
           return;
         }
-        if (!selectedPlaylist || selectedPlaylist.playlistId !== id) {
+        if (!selectedPlaylistRef.current || selectedPlaylistRef.current.playlistId !== id) {
           setLoadingPlaylistDetails(true);
           resetScrollToTop();
           setPlaylistPage(1);
@@ -245,6 +259,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
           try {
             const details = await fetchPlaylistDetails(id, 1);
             if (details) {
+              if (Array.isArray(details.tracks)) {
+                details.tracks = filterValidDurationTracks(details.tracks);
+              }
               setSelectedPlaylist(details);
               resetScrollToTop();
               if (details.playlistId && details.thumbnail) {
@@ -265,16 +282,20 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
           }
         }
       } else if (hash.includes('liked-songs') || hash.includes('liked_songs')) {
-        handleOpenLikedSongs();
+        if (!selectedPlaylistRef.current || selectedPlaylistRef.current.playlistId !== 'liked_songs') {
+          handleOpenLikedSongs();
+        }
       } else {
-        setSelectedPlaylist(null);
+        if (selectedPlaylistRef.current) {
+          setSelectedPlaylist(null);
+        }
       }
     };
 
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [selectedPlaylist, handleOpenLikedSongs]);
+  }, [handleOpenLikedSongs]);
 
   function checkIfSaved(playlistId) {
     try {
@@ -398,17 +419,25 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
 
   useEffect(() => {
-    const handlePopState = (e) => {
-      const state = e.state;
-      if (!state || !state.playlistId) {
+    const handlePopState = () => {
+      const hash = window.location.hash || '';
+      if (hash.includes('liked_songs') || hash.includes('liked-songs')) {
+        if (!selectedPlaylistRef.current || selectedPlaylistRef.current.playlistId !== 'liked_songs') {
+          handleOpenLikedSongs();
+        }
+      } else if (!hash.includes('playlist/')) {
         setSelectedPlaylist(null);
-      } else if (state.playlistId === 'liked_songs') {
-        handleOpenLikedSongs();
       }
     };
 
     const handleOpenLikedEvent = () => {
       handleOpenLikedSongs();
+    };
+
+    const handleLikedUpdated = () => {
+      if (selectedPlaylistRef.current?.playlistId === 'liked_songs') {
+        handleOpenLikedSongs();
+      }
     };
 
     if (window.history.state?.playlistId === 'liked_songs') {
@@ -417,9 +446,11 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
     window.addEventListener('popstate', handlePopState);
     window.addEventListener('playloop-open-liked-songs', handleOpenLikedEvent);
+    window.addEventListener('playloop-liked-songs-updated', handleLikedUpdated);
     return () => {
       window.removeEventListener('popstate', handlePopState);
       window.removeEventListener('playloop-open-liked-songs', handleOpenLikedEvent);
+      window.removeEventListener('playloop-liked-songs-updated', handleLikedUpdated);
     };
   }, [handleOpenLikedSongs]);
 
@@ -427,10 +458,11 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     setLoadingMorePlaylist(true);
     try {
       const details = await fetchPlaylistDetails(id, page);
-      if (details && details.tracks && details.tracks.length > 0) {
+      const validDetailsTracks = filterValidDurationTracks(details?.tracks || []);
+      if (details && validDetailsTracks.length > 0) {
         setSelectedPlaylist(prev => {
           const existingIds = new Set(prev.tracks.map(t => t.videoId));
-          const newTracks = details.tracks.filter(t => !existingIds.has(t.videoId));
+          const newTracks = validDetailsTracks.filter(t => !existingIds.has(t.videoId));
           
           if (newTracks.length === 0) {
             setHasMorePlaylist(false);
@@ -485,14 +517,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     });
   }, [popularAlbumsPlaylists, visiblePopularCount, playlistThumbnailMap]);
 
-  const handleBackToHome = () => {
-    setSelectedPlaylist(null);
+  const handleBack = () => {
     resetScrollToTop();
-    if (setCurrentView) {
-      setCurrentView('home');
-    } else {
-      window.location.hash = '#/home';
-    }
+    navigateBack('#/home');
   };
 
   const handlePlayPlaylistAll = () => {
@@ -521,10 +548,14 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     return (
       <div className="max-w-[1400px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
         {/* Back Button Skeleton */}
-        <div className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-900/50 border border-zinc-800/60 rounded-full w-36 h-9 skeleton-shimmer-card">
-          <ArrowLeft className="w-4 h-4 text-zinc-600" />
-          <div className="w-20 h-3.5 bg-zinc-700/60 rounded" />
-        </div>
+        <button
+          type="button"
+          onClick={handleBack}
+          aria-label="Go back"
+          className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-sm font-medium transition cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
 
         {/* Playlist Header Skeleton */}
         <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-6 md:gap-8 mb-8">
@@ -608,21 +639,18 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
       <div className="max-w-[1400px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
         <button
           type="button"
-          onClick={handleBackToHome}
+          onClick={handleBack}
+          aria-label="Go back"
           className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-sm font-medium transition cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Home
+          <ArrowLeft className="w-4 h-4" /> Back
         </button>
 
         {/* Playlist Header */}
         <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-6 md:gap-8 mb-8">
           {selectedPlaylist.isLikedPlaylist ? (
-            <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-black border border-white/10 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(0,0,0,0.7)] relative overflow-hidden group select-none mx-auto md:mx-0">
-              <img
-                src="/default-cover.svg"
-                alt="Play LooP Logo"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
+            <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-gradient-to-br from-indigo-700 via-purple-600 to-rose-500 border border-white/10 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(99,102,241,0.35)] relative overflow-hidden group select-none mx-auto md:mx-0">
+              <Heart className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 text-white fill-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-500" />
             </div>
           ) : (
             <img
@@ -684,11 +712,13 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               >
                 <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play
               </button>
-              <button onClick={handleToggleSave} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-zinc-600 hover:border-zinc-400 text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px]">
-                {selectedPlaylist.isArtist ? 'Follow' : (
-                  isSaved ? <span className="text-zinc-300">Saved</span> : <><span className="text-lg leading-none">+</span> Save</>
-                )}
-              </button>
+              {!selectedPlaylist.isLikedPlaylist && (
+                <button onClick={handleToggleSave} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-zinc-600 hover:border-zinc-400 text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px]">
+                  {selectedPlaylist.isArtist ? 'Follow' : (
+                    isSaved ? <span className="text-zinc-300">Saved</span> : <><span className="text-lg leading-none">+</span> Save</>
+                  )}
+                </button>
+              )}
               <button className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer">
                 <span className="flex gap-1">
                   <span className="w-1 h-1 rounded-full bg-current"></span>
@@ -822,7 +852,18 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   </article>
                 ))
               ) : (
-                <p className="text-zinc-500 text-center py-12">No tracks found in this playlist.</p>
+                <div className="text-center py-16 px-4">
+                  <p className="text-zinc-400 text-base font-medium">
+                    {selectedPlaylist.isLikedPlaylist 
+                      ? "You haven't liked any songs yet." 
+                      : "No tracks found in this playlist."}
+                  </p>
+                  {selectedPlaylist.isLikedPlaylist && (
+                    <p className="text-zinc-500 text-xs sm:text-sm mt-1.5">
+                      Tap the heart icon on any song or player to add it to your Liked Songs.
+                    </p>
+                  )}
+                </div>
               )}
               {loadingMorePlaylist && (
                 <div className="flex justify-center items-center py-6">

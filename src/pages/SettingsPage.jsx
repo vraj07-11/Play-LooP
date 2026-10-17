@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Download, Link, FileText, Upload, CheckCircle, AlertCircle, Trash2, Check, RefreshCw } from 'lucide-react';
 import { fetchApi } from '../services/api';
 import { usePlayer } from '../context/PlayerContext';
+import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
 const AVAILABLE_LANGUAGES = [
   { id: 'english', label: 'English' },
@@ -129,11 +130,12 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
 
       // If JioSaavn or SoundCloud playlist with direct tracks
       if ((data.source === 'jiosaavn' || data.source === 'soundcloud') && Array.isArray(data.tracks)) {
+        const validTracks = filterValidDurationTracks(data.tracks);
         setPreviewPlaylist({
           title: data.title || (data.source === 'soundcloud' ? 'SoundCloud Playlist' : 'JioSaavn Playlist'),
           author: data.author || (data.source === 'soundcloud' ? 'SoundCloud' : 'JioSaavn'),
           thumbnail: data.thumbnail || '/default-cover.svg',
-          tracks: data.tracks
+          tracks: validTracks
         });
         setIsProcessing(false);
         return;
@@ -160,7 +162,9 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
             const res1 = await fetchApi(`/api/search?q=${encodeURIComponent(songQuery)}`);
             if (res1.ok) {
               const songs1 = await res1.json();
-              if (Array.isArray(songs1) && songs1.length > 0) matched = songs1[0];
+              if (Array.isArray(songs1) && songs1.length > 0) {
+                matched = songs1.find(s => isValidSongDuration(s.duration)) || null;
+              }
             }
 
             // Attempt 2: Clean Title (remove feat, brackets)
@@ -170,7 +174,9 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
                 const res2 = await fetchApi(`/api/search?q=${encodeURIComponent(cleanTitle)}`);
                 if (res2.ok) {
                   const songs2 = await res2.json();
-                  if (Array.isArray(songs2) && songs2.length > 0) matched = songs2[0];
+                  if (Array.isArray(songs2) && songs2.length > 0) {
+                    matched = songs2.find(s => isValidSongDuration(s.duration)) || null;
+                  }
                 }
               }
             }
@@ -181,16 +187,18 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
               const res3 = await fetchApi(`/api/search?q=${encodeURIComponent(wordsQuery)}`);
               if (res3.ok) {
                 const songs3 = await res3.json();
-                if (Array.isArray(songs3) && songs3.length > 0) matched = songs3[0];
+                if (Array.isArray(songs3) && songs3.length > 0) {
+                  matched = songs3.find(s => isValidSongDuration(s.duration)) || null;
+                }
               }
             }
           } catch (err) {
             console.error(`Failed matching track ${songQuery}:`, err);
           }
 
-          if (matched) {
+          if (matched && isValidSongDuration(matched.duration)) {
             matchedTracks.push(matched);
-          } else {
+          } else if (!matched) {
             const parts = songQuery.split(/ - | by | – /);
             const trackTitle = parts[0]?.trim() || songQuery;
             const trackArtist = parts[1]?.trim() || 'Imported Song';
@@ -206,15 +214,17 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
           }
         }
 
-        if (matchedTracks.length === 0) {
+        const validMatchedTracks = filterValidDurationTracks(matchedTracks);
+
+        if (validMatchedTracks.length === 0) {
           throw new Error('Could not find matching audio streams for tracks in this playlist.');
         }
 
         setPreviewPlaylist({
           title: data.title || 'Imported Playlist',
           author: `${data.source.toUpperCase()} Import`,
-          thumbnail: data.thumbnail || matchedTracks[0]?.thumbnail || '/default-cover.svg',
-          tracks: matchedTracks,
+          thumbnail: data.thumbnail || validMatchedTracks[0]?.thumbnail || '/default-cover.svg',
+          tracks: validMatchedTracks,
           totalExtracted: total
         });
       } else {
@@ -285,15 +295,17 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
             const searchRes = await fetchApi(`/api/search?q=${encodeURIComponent(songQuery)}`);
             if (searchRes.ok) {
               const songs = await searchRes.json();
-              if (Array.isArray(songs) && songs.length > 0) matched = songs[0];
+              if (Array.isArray(songs) && songs.length > 0) {
+                matched = songs.find(s => isValidSongDuration(s.duration)) || null;
+              }
             }
           } catch (err) {
             console.error(`Failed matching track ${songQuery}:`, err);
           }
 
-          if (matched) {
+          if (matched && isValidSongDuration(matched.duration)) {
             matchedTracks.push(matched);
-          } else {
+          } else if (!matched) {
             const parts = songQuery.split(/ - | by | – /);
             const trackTitle = parts[0]?.trim() || songQuery;
             const trackArtist = parts[1]?.trim() || 'Imported Song';
@@ -309,15 +321,17 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
           }
         }
 
-        if (matchedTracks.length === 0) {
+        const validTracks = filterValidDurationTracks(matchedTracks);
+
+        if (validTracks.length === 0) {
           throw new Error('Could not find matches for songs in the uploaded file.');
         }
 
         setPreviewPlaylist({
           title: fileNameTitle || 'File Playlist Import',
           author: 'File Import',
-          thumbnail: matchedTracks[0]?.thumbnail || '/default-cover.svg',
-          tracks: matchedTracks
+          thumbnail: validTracks[0]?.thumbnail || '/default-cover.svg',
+          tracks: validTracks
         });
       } catch (err) {
         console.error('File import error:', err);

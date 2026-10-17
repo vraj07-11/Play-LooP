@@ -1,3 +1,5 @@
+import { filterValidDurationTracks } from '../utils/durationUtils';
+
 // Fetch API helper
 export async function fetchApi(endpoint, options = {}) {
   try {
@@ -261,14 +263,15 @@ export async function fetchPlaylistDetails(playlistId, page = 1) {
     const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
     const localMatch = saved.find(p => String(p.playlistId) === String(playlistId));
     if (localMatch && Array.isArray(localMatch.tracks) && localMatch.tracks.length > 0) {
+      const validTracks = filterValidDurationTracks(localMatch.tracks);
       const result = {
         playlistId: localMatch.playlistId,
         title: localMatch.title,
         author: localMatch.author || 'Imported Playlist',
         thumbnail: (!localMatch.thumbnail || localMatch.thumbnail === '/logo.svg') ? '/default-cover.svg' : localMatch.thumbnail,
-        description: localMatch.description || `Collection containing ${localMatch.tracks.length} tracks.`,
-        count: localMatch.tracks.length,
-        tracks: localMatch.tracks
+        description: localMatch.description || `Collection containing ${validTracks.length} tracks.`,
+        count: validTracks.length,
+        tracks: validTracks
       };
       if (page === 1) playlistDetailsCache.set(cacheKey, result);
       return result;
@@ -282,6 +285,9 @@ export async function fetchPlaylistDetails(playlistId, page = 1) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data && data.playlistId) {
+      if (Array.isArray(data.tracks)) {
+        data.tracks = filterValidDurationTracks(data.tracks);
+      }
       playlistDetailsCache.set(cacheKey, data);
     }
     return data;
@@ -298,7 +304,7 @@ export async function fetchPopularSongs(languages = []) {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        return data;
+        return filterValidDurationTracks(data);
       }
     }
   } catch (err) {

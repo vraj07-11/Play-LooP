@@ -2,11 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPlaylistDetails, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
 import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
+import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
 export default function SearchPage({ refreshKey = 0 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searchResults, setSearchResults] = useState({ songs: [], artists: [], playlists: [], topResult: null });
+  const searchResultsRef = useRef(searchResults);
+  useEffect(() => {
+    searchResultsRef.current = searchResults;
+  }, [searchResults]);
+  const searchCacheRef = useRef(new Map());
+  const lastSearchedQueryRef = useRef('');
   const [activeSearchFilter, setActiveSearchFilter] = useState('all');
   const [isSongsExpanded, setIsSongsExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -157,9 +164,10 @@ export default function SearchPage({ refreshKey = 0 }) {
         if (res.ok) {
           const extraSongs = await res.json();
           if (Array.isArray(extraSongs) && extraSongs.length > 0) {
+            const validExtra = filterValidDurationTracks(extraSongs);
             setPopularSongsData(prev => {
               const existingIds = new Set(prev.map(s => s.videoId));
-              const newUnique = extraSongs.filter(s => s.videoId && !existingIds.has(s.videoId));
+              const newUnique = validExtra.filter(s => s.videoId && !existingIds.has(s.videoId));
               return [...prev, ...newUnique];
             });
           }
@@ -180,6 +188,7 @@ export default function SearchPage({ refreshKey = 0 }) {
     const trimmed = val.trim();
     if (!trimmed) {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      lastSearchedQueryRef.current = '';
       setResults([]);
       setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
       setLoading(false);
@@ -187,7 +196,6 @@ export default function SearchPage({ refreshKey = 0 }) {
       return;
     }
 
-    setLoading(true);
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
       window.history.replaceState(null, '', `#/search?q=${encodeURIComponent(trimmed)}`);
@@ -197,27 +205,59 @@ export default function SearchPage({ refreshKey = 0 }) {
 
   useEffect(() => {
     const handleHashChange = (overrideQuery) => {
-      const q = typeof overrideQuery === 'string' ? overrideQuery : (() => {
-        const hash = window.location.hash || '';
+      const hash = window.location.hash || '';
+
+      // If triggered by hashchange/popstate but the current hash is NOT a search route
+      // (e.g. #/player, #/playlist/..., #/home, #/library, #/settings), do NOT touch SearchPage state!
+      // This preserves search results when opening full player or playlists.
+      if (typeof overrideQuery !== 'string' && !hash.startsWith('#/search') && !hash.startsWith('#search')) {
+        return;
+      }
+
+      const q = typeof overrideQuery === 'string' ? overrideQuery.trim() : (() => {
         const match = hash.match(/#\/?search\?q=(.+)/);
-        return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+        return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')).trim() : '';
       })();
 
+      if (!q) {
+        lastSearchedQueryRef.current = '';
+        setQuery('');
+        setResults([]);
+        setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
+        setLoading(false);
+        return;
+      }
+
       setQuery(prev => {
-        if (prev && (prev.trim() === q.trim() || document.activeElement === mobileInputRef.current)) {
+        if (prev && (prev.trim() === q || document.activeElement === mobileInputRef.current)) {
           return prev;
         }
         return q;
       });
 
-      if (q) {
-        setLoading(true);
-        performSearch(q);
-      } else {
-        setResults([]);
-        setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
+      // If the exact query is already loaded and we have results displayed, do NOT re-fetch or show skeleton!
+      if (lastSearchedQueryRef.current.toLowerCase() === q.toLowerCase() && searchResultsRef.current && (
+        (searchResultsRef.current.songs && searchResultsRef.current.songs.length > 0) ||
+        (searchResultsRef.current.artists && searchResultsRef.current.artists.length > 0) ||
+        (searchResultsRef.current.playlists && searchResultsRef.current.playlists.length > 0) ||
+        searchResultsRef.current.topResult
+      )) {
         setLoading(false);
+        return;
       }
+
+      // If in memory cache, restore instantly without network latency or skeleton effect
+      if (searchCacheRef.current && searchCacheRef.current.has(q.toLowerCase())) {
+        const cached = searchCacheRef.current.get(q.toLowerCase());
+        lastSearchedQueryRef.current = q;
+        setSearchResults(cached.searchResults);
+        setResults(cached.results);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      performSearch(q);
     };
 
     handleHashChange();
@@ -275,30 +315,65 @@ export default function SearchPage({ refreshKey = 0 }) {
   }, [results, selectedIndex, selectAndPlayTrack, query]);
 
   const performSearch = async (searchTerm) => {
+    const trimmed = (searchTerm || '').trim();
+    if (!trimmed) {
+      setLoading(false);
+      return;
+    }
+
+    // Return instant cached results if available
+    if (searchCacheRef.current && searchCacheRef.current.has(trimmed.toLowerCase())) {
+      const cached = searchCacheRef.current.get(trimmed.toLowerCase());
+      lastSearchedQueryRef.current = trimmed;
+      setSearchResults(cached.searchResults);
+      setResults(cached.results);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setIsSongsExpanded(false);
     setVisiblePlaylistsCount(6);
     setVisibleArtistsCount(6);
     try {
-      const response = await fetchApi(`/api/search?q=${encodeURIComponent(searchTerm)}&type=all`);
+      const response = await fetchApi(`/api/search?q=${encodeURIComponent(trimmed)}&type=all`);
       if (response.ok) {
         const data = await response.json();
         if (data && typeof data === 'object' && !Array.isArray(data)) {
-          setSearchResults({
-            songs: data.songs || [],
+          const validSongs = filterValidDurationTracks(data.songs || []);
+          let topResult = data.topResult;
+          if (topResult && (topResult.category === 'Song' || topResult.videoId)) {
+            if (!isValidSongDuration(topResult.duration)) {
+              topResult = validSongs.length > 0
+                ? { ...validSongs[0], category: 'Song' }
+                : (data.artists?.[0] ? { ...data.artists[0], category: 'Artist' } : (data.playlists?.[0] ? { ...data.playlists[0], category: 'Playlist' } : null));
+            }
+          }
+          const newSearchResults = {
+            songs: validSongs,
             artists: data.artists || [],
             playlists: data.playlists || [],
-            topResult: data.topResult || null
-          });
-          setResults(data.songs || []);
+            topResult: topResult || null
+          };
+          lastSearchedQueryRef.current = trimmed;
+          searchCacheRef.current.set(trimmed.toLowerCase(), { searchResults: newSearchResults, results: validSongs });
+          setSearchResults(newSearchResults);
+          setResults(validSongs);
         } else if (Array.isArray(data)) {
-          setSearchResults({
-            songs: data,
+          const validSongs = filterValidDurationTracks(data);
+          const newSearchResults = {
+            songs: validSongs,
             artists: [],
             playlists: [],
-            topResult: data.length > 0 ? { ...data[0], category: 'Song' } : null
-          });
-          setResults(data);
+            topResult: validSongs.length > 0 ? { ...validSongs[0], category: 'Song' } : null
+          };
+          lastSearchedQueryRef.current = trimmed;
+          searchCacheRef.current.set(trimmed.toLowerCase(), { searchResults: newSearchResults, results: validSongs });
+          setSearchResults(newSearchResults);
+          setResults(validSongs);
+        } else {
+          setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
+          setResults([]);
         }
       } else {
         setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });
@@ -368,6 +443,7 @@ export default function SearchPage({ refreshKey = 0 }) {
                 type="button"
                 onClick={() => {
                   if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+                  lastSearchedQueryRef.current = '';
                   setQuery('');
                   setResults([]);
                   setSearchResults({ songs: [], artists: [], playlists: [], topResult: null });

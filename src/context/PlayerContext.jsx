@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useRef, useEffect, useCallback } f
 import { fetchApi, getAudioUrl } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
+import { filterValidDurationTracks } from '../utils/durationUtils.js';
 
 let hlsModulePromise = null;
 const getHlsModule = () => {
@@ -757,11 +758,12 @@ export function PlayerProvider({ children }) {
       fetchApi(`/api/recommendations?${queryParams}`)
         .then((res) => (res.ok ? res.json() : []))
         .then((data) => {
-          if (Array.isArray(data) && data.length > 0) {
+          const validData = filterValidDurationTracks(data);
+          if (validData.length > 0) {
             const currentPlayingTrack = { videoId, title, artist, thumbnail };
             const scoredRecs = generateRecommendations({
               currentTrack: currentPlayingTrack,
-              candidatePool: data,
+              candidatePool: validData,
               history: trackHistoryRef.current || [],
               likedSongs: [],
               seenIds: sessionSeenIdsRef.current,
@@ -922,8 +924,9 @@ export function PlayerProvider({ children }) {
         data = searchRes.ok ? await searchRes.json() : [];
       }
 
-      if (Array.isArray(data) && data.length > 0) {
-        const shuffledCandidates = [...data].sort(() => 0.5 - Math.random());
+      const validData = filterValidDurationTracks(data);
+      if (validData.length > 0) {
+        const shuffledCandidates = [...validData].sort(() => 0.5 - Math.random());
         
         const scoredRecs = generateRecommendations({
           currentTrack: currentTrack,

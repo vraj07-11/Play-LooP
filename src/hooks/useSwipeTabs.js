@@ -1,4 +1,5 @@
 import { useRef, useCallback } from 'react';
+import { navigateBack } from '../utils/navigationHistory';
 
 export const MOBILE_TABS = ['home', 'search', 'library', 'settings'];
 
@@ -113,9 +114,9 @@ export function useSwipeTabs({
     const isSwipingLeft = deltaX < 0;
     const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
 
-    // If viewing a playlist or liked songs detail on mobile, swiping right returns to Home
+    // If viewing a playlist or liked songs detail on mobile, swiping right returns to previous view
     if (!isSwipingLeft && (hash.includes('playlist/') || hash.includes('liked-songs') || hash.includes('liked_songs'))) {
-      onNavigate('home', 'backward');
+      navigateBack('#/home');
       return;
     }
 
