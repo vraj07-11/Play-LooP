@@ -2731,7 +2731,10 @@ app.get("/api/sync", async (req, res) => {
 			artist: row.artist,
 			album: row.album,
 			genre: row.genre,
-			cover: row.cover || (row.track_id ? `/api/cover/${row.track_id}` : '/default-cover.svg'),
+			// Only emit the stored CDN URL; never emit a server-relative path
+			// (/api/cover/…) which would resolve incorrectly on another device.
+			// The client-side mergeIncomingScrobbles applies its own fallback chain.
+			cover: row.cover || null,
 			duration: row.duration != null ? Number(row.duration) : null,
 			played_at: row.played_at
 		}));
@@ -2920,7 +2923,9 @@ app.get("/api/user/stats", async (req, res) => {
 			title: row.title,
 			artist: row.artist,
 			track_id: row.track_id,
-			cover: row.cover || (row.track_id ? `/api/cover/${row.track_id}` : '/default-cover.svg'),
+			// Only emit stored CDN URLs; never emit server-relative /api/cover/… paths
+			// that would break on another device. ProfilePage falls back to /default-cover.svg.
+			cover: row.cover || null,
 			playCount: Number(row.playCount)
 		}));
 
@@ -2931,7 +2936,8 @@ app.get("/api/user/stats", async (req, res) => {
 			title: row.title,
 			artist: row.artist,
 			album: row.album || null,
-			cover: row.cover || (row.track_id ? `/api/cover/${row.track_id}` : "/default-cover.svg"),
+			// Only emit stored CDN URLs; never emit server-relative /api/cover/… paths.
+			cover: row.cover || null,
 			played_at: Number(row.played_at),
 			last_played_at: formatRelativeTime(row.played_at)
 		}));

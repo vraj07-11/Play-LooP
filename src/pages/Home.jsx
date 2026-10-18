@@ -1187,7 +1187,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
           <Carousel
             title="Recently Played"
             items={recentlyPlayed}
-            onItemClick={(track) => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail)}
+            onItemClick={(track) => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail || track.cover || track.artwork || track.albumArt)}
             renderSubtitle={(track) => track.artist}
             keyExtractor={(track, index) => `${track.videoId}-${index}`}
             cardType="square"

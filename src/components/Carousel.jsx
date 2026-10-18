@@ -112,7 +112,7 @@ export default function Carousel({
                   onClick={() => onItemClick && onItemClick(item)}
                 >
                   <img 
-                    src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail} 
+                    src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
                     alt={item.title} 
                     className="wide-card-art"
                     onError={(e) => {
@@ -153,7 +153,7 @@ export default function Carousel({
                 >
                   <div className="relative w-full aspect-square rounded-full overflow-hidden shadow-xl bg-black border border-white/5">
                     <img 
-                      src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail} 
+                      src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
                       alt={item.title} 
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                       onError={(e) => {
@@ -198,7 +198,7 @@ export default function Carousel({
                   </div>
                   <div className="square-card-art-container bg-black border border-white/5">
                     <img 
-                      src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail} 
+                      src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
                       alt={item.title} 
                       className="square-card-art object-cover"
                       onError={(e) => {

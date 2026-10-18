@@ -73,10 +73,15 @@ export function PlayerProvider({ children }) {
 
   const addToRecentlyPlayed = (trackObj) => {
     if (!trackObj || !trackObj.videoId) return;
+    // Normalise artwork: always keep both `thumbnail` and `cover` in sync so
+    // that the Carousel (reads thumbnail) and ProfilePage (reads cover) both
+    // resolve the correct CDN URL without falling back to the default cover.
+    const artUrl = trackObj.thumbnail || trackObj.cover || trackObj.artwork || trackObj.albumArt || trackObj.image || null;
+    const normalisedTrack = { ...trackObj, thumbnail: artUrl || trackObj.thumbnail, cover: artUrl || trackObj.cover };
     setRecentlyPlayed((prev) => {
       const currentList = Array.isArray(prev) ? prev : [];
-      const filtered = currentList.filter((t) => t.videoId !== trackObj.videoId);
-      const updated = [trackObj, ...filtered].slice(0, 20); // Cap at max 20
+      const filtered = currentList.filter((t) => t.videoId !== normalisedTrack.videoId);
+      const updated = [normalisedTrack, ...filtered].slice(0, 20); // Cap at max 20
       try {
         localStorage.setItem("playloop_recently_played", JSON.stringify(updated));
       } catch (e) {
@@ -252,14 +257,23 @@ export function PlayerProvider({ children }) {
 
       const historyTracks = incoming
         .filter((s) => s.title)
-        .map((s) => ({
-          videoId: s.track_id || s.videoId,
-          title: s.title,
-          artist: s.artist,
-          thumbnail: s.thumbnail || '/default-cover.svg',
-          album: s.album || null,
-          genre: s.genre || null
-        }));
+        .map((s) => {
+          // Prefer the explicit CDN cover stored in `cover`; fall back through
+          // every known artwork alias before giving up to the default cover.
+          const artUrl = s.cover || s.thumbnail || s.artwork || s.albumArt || s.image_url || s.image || null;
+          return {
+            videoId: s.track_id || s.videoId,
+            title: s.title,
+            artist: s.artist,
+            // Keep both `thumbnail` (read by Carousel) and `cover` (read by
+            // ProfilePage / selectAndPlayTrack) pointing at the same CDN URL.
+            thumbnail: artUrl || '/default-cover.svg',
+            cover: artUrl || '/default-cover.svg',
+            album: s.album || null,
+            genre: s.genre || null,
+            duration: s.duration || null
+          };
+        });
 
       if (historyTracks.length > 0) {
         setRecentlyPlayed((prev) => {
