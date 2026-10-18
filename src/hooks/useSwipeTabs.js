@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { navigateBack } from '../utils/navigationHistory';
 
-export const MOBILE_TABS = ['home', 'search', 'library', 'settings'];
+export const MOBILE_TABS = ['home', 'search', 'library', 'profile', 'settings'];
 
 export function useSwipeTabs({
   currentView,

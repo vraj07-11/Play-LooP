@@ -6,15 +6,68 @@ const compression = require("compression");
 const crypto = require("node:crypto");
 const CryptoJS = require("crypto-js");
 const dns = require("node:dns");
+require("dotenv").config();
+const { createClient } = require("@libsql/client");
 
 // Enforce IPv4 priority to prevent Windows IPv6 connection timeouts (UND_ERR_CONNECT_TIMEOUT)
 dns.setDefaultResultOrder("ipv4first");
+
+const db = createClient({
+	url: process.env.TURSO_DATABASE_URL,
+	authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+async function initDb() {
+	await db.execute(`
+		CREATE TABLE IF NOT EXISTS scrobbles (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_uuid TEXT NOT NULL,
+			track_id TEXT,
+			title TEXT NOT NULL,
+			artist TEXT NOT NULL,
+			album TEXT,
+			genre TEXT,
+			played_at INTEGER NOT NULL
+		)
+	`);
+	await db.execute(`
+		CREATE TABLE IF NOT EXISTS playlists (
+			id TEXT PRIMARY KEY,
+			user_uuid TEXT NOT NULL,
+			name TEXT NOT NULL,
+			tracks_json TEXT NOT NULL,
+			updated_at INTEGER NOT NULL
+		)
+	`);
+	await db.execute(`
+		CREATE TABLE IF NOT EXISTS user_profiles (
+			user_uuid TEXT PRIMARY KEY,
+			display_name TEXT DEFAULT 'Loopner',
+			avatar_url TEXT DEFAULT '',
+			updated_at INTEGER
+		)
+	`);
+	await db.execute("CREATE INDEX IF NOT EXISTS idx_scrobbles_user ON scrobbles(user_uuid)");
+	await db.execute("CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_uuid)");
+	await db.execute("CREATE INDEX IF NOT EXISTS idx_user_profiles ON user_profiles(user_uuid)");
+
+	try {
+		await db.execute("ALTER TABLE scrobbles ADD COLUMN cover TEXT");
+	} catch (_) {}
+	try {
+		await db.execute("ALTER TABLE scrobbles ADD COLUMN duration INTEGER");
+	} catch (_) {}
+	try {
+		await db.execute("ALTER TABLE scrobbles ADD COLUMN duration_listened INTEGER DEFAULT 0");
+	} catch (_) {}
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(compression());
+app.use(express.json({ limit: "2mb" }));
 
 function escapeHtml(str) {
 	if (!str) return '';
@@ -2482,6 +2535,451 @@ app.get("/api/import-playlist", async (req, res) => {
 	}
 });
 
+function parsePlaylistTracks(tracksJson) {
+	if (tracksJson == null) return [];
+	if (typeof tracksJson !== "string") return tracksJson;
+	try {
+		return JSON.parse(tracksJson);
+	} catch (_) {
+		return tracksJson;
+	}
+}
+
+app.post("/api/scrobble", async (req, res) => {
+	try {
+		const user_uuid = req.body?.user_uuid;
+		const track = req.body?.track || {};
+		const title = track.title;
+		const artist = track.artist;
+
+		if (!user_uuid || !title || !artist) {
+			return res.status(400).json({ error: "user_uuid, track.title, and track.artist are required" });
+		}
+
+		const played_at = track.played_at != null ? Number(track.played_at) : Date.now();
+		const cover = track.cover || track.thumbnail || track.image || null;
+		const duration = track.duration != null && !isNaN(track.duration) ? Math.round(Number(track.duration)) : null;
+		const duration_listened = Math.max(0, Math.round(Number(track.duration_listened || track.time_listened || 0)));
+
+		try {
+			await db.execute({
+				sql: `INSERT INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration, duration_listened)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				args: [
+					user_uuid,
+					track.track_id ?? null,
+					title,
+					artist,
+					track.album ?? null,
+					track.genre ?? null,
+					played_at,
+					cover,
+					duration,
+					duration_listened
+				]
+			});
+		} catch (insertErr) {
+			try {
+				await db.execute({
+					sql: `INSERT INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					args: [
+						user_uuid,
+						track.track_id ?? null,
+						title,
+						artist,
+						track.album ?? null,
+						track.genre ?? null,
+						played_at,
+						cover,
+						duration
+					]
+				});
+			} catch (_) {
+				await db.execute({
+					sql: `INSERT INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at)
+						VALUES (?, ?, ?, ?, ?, ?, ?)`,
+					args: [
+						user_uuid,
+						track.track_id ?? null,
+						title,
+						artist,
+						track.album ?? null,
+						track.genre ?? null,
+						played_at
+					]
+				});
+			}
+		}
+
+		return res.status(201).json({ success: true, message: "Scrobble recorded" });
+	} catch (error) {
+		console.error("Scrobble failed:", error);
+		return res.status(500).json({ error: "Failed to record scrobble" });
+	}
+});
+
+// Multi-Device Profile Identity Endpoints
+app.get("/api/user/profile", async (req, res) => {
+	try {
+		const user_uuid = String(req.query.user_uuid || "").trim();
+		if (!user_uuid) {
+			return res.status(400).json({ error: "user_uuid is required" });
+		}
+
+		const result = await db.execute({
+			sql: `SELECT user_uuid, display_name, avatar_url, updated_at FROM user_profiles WHERE user_uuid = ?`,
+			args: [user_uuid]
+		});
+
+		if (result.rows && result.rows.length > 0) {
+			const row = result.rows[0];
+			return res.json({
+				user_uuid: row.user_uuid,
+				display_name: row.display_name || "Loopner",
+				avatar_url: row.avatar_url || "",
+				updated_at: Number(row.updated_at || Date.now())
+			});
+		}
+
+		return res.json({
+			user_uuid,
+			display_name: "Loopner",
+			avatar_url: "",
+			updated_at: Date.now()
+		});
+	} catch (error) {
+		console.error("Fetch profile failed:", error);
+		return res.status(500).json({ error: "Failed to fetch user profile" });
+	}
+});
+
+app.post("/api/user/profile", async (req, res) => {
+	try {
+		const user_uuid = String(req.body?.user_uuid || "").trim();
+		if (!user_uuid) {
+			return res.status(400).json({ error: "user_uuid is required" });
+		}
+
+		const display_name = String(req.body?.display_name || "Loopner").trim().slice(0, 50) || "Loopner";
+		const avatar_url = String(req.body?.avatar_url || "").trim().slice(0, 500);
+		const updated_at = Date.now();
+
+		await db.execute({
+			sql: `INSERT INTO user_profiles (user_uuid, display_name, avatar_url, updated_at)
+				VALUES (?, ?, ?, ?)
+				ON CONFLICT(user_uuid) DO UPDATE SET
+					display_name = excluded.display_name,
+					avatar_url = excluded.avatar_url,
+					updated_at = excluded.updated_at`,
+			args: [user_uuid, display_name, avatar_url, updated_at]
+		});
+
+		return res.json({
+			success: true,
+			profile: {
+				user_uuid,
+				display_name,
+				avatar_url,
+				updated_at
+			}
+		});
+	} catch (error) {
+		console.error("Save profile failed:", error);
+		return res.status(500).json({ error: "Failed to save user profile" });
+	}
+});
+
+app.get("/api/sync", async (req, res) => {
+	try {
+		const user_uuid = String(req.query.user_uuid || "").trim();
+		if (!user_uuid) {
+			return res.status(400).json({ error: "user_uuid is required" });
+		}
+
+		const since = req.query.since != null && String(req.query.since).trim() !== ""
+			? Number(req.query.since)
+			: 0;
+
+		const [scrobblesResult, playlistsResult] = await Promise.all([
+			db.execute({
+				sql: `SELECT id, user_uuid, track_id, title, artist, album, genre, played_at, cover, duration
+					FROM scrobbles
+					WHERE user_uuid = ? AND played_at > ?
+					ORDER BY played_at ASC`,
+				args: [user_uuid, since]
+			}).catch(() => db.execute({
+				sql: `SELECT id, user_uuid, track_id, title, artist, album, genre, played_at
+					FROM scrobbles
+					WHERE user_uuid = ? AND played_at > ?
+					ORDER BY played_at ASC`,
+				args: [user_uuid, since]
+			})),
+			db.execute({
+				sql: `SELECT id, user_uuid, name, tracks_json, updated_at
+					FROM playlists
+					WHERE user_uuid = ? AND updated_at > ?`,
+				args: [user_uuid, since]
+			})
+		]);
+
+		const scrobbles = scrobblesResult.rows.map((row) => ({
+			id: row.id,
+			user_uuid: row.user_uuid,
+			track_id: row.track_id,
+			title: row.title,
+			artist: row.artist,
+			album: row.album,
+			genre: row.genre,
+			cover: row.cover || (row.track_id ? `/api/cover/${row.track_id}` : '/default-cover.svg'),
+			duration: row.duration != null ? Number(row.duration) : null,
+			played_at: row.played_at
+		}));
+
+		const playlists = playlistsResult.rows.map((row) => ({
+			id: row.id,
+			user_uuid: row.user_uuid,
+			name: row.name,
+			tracks: parsePlaylistTracks(row.tracks_json),
+			tracks_json: row.tracks_json,
+			updated_at: row.updated_at
+		}));
+
+		return res.json({ scrobbles, playlists });
+	} catch (error) {
+		console.error("Sync failed:", error);
+		return res.status(500).json({ error: "Failed to sync data" });
+	}
+});
+
+app.post("/api/playlist/save", async (req, res) => {
+	try {
+		const user_uuid = req.body?.user_uuid;
+		const playlist = req.body?.playlist || {};
+		const id = playlist.id;
+		const name = playlist.name;
+
+		if (!user_uuid || !id || !name) {
+			return res.status(400).json({ error: "user_uuid, playlist.id, and playlist.name are required" });
+		}
+
+		const tracks = playlist.tracks;
+		const tracks_json = typeof tracks === "string" ? tracks : JSON.stringify(tracks ?? []);
+		const updated_at = Date.now();
+
+		await db.execute({
+			sql: `INSERT INTO playlists (id, user_uuid, name, tracks_json, updated_at)
+				VALUES (?, ?, ?, ?, ?)
+				ON CONFLICT(id) DO UPDATE SET
+					user_uuid = excluded.user_uuid,
+					name = excluded.name,
+					tracks_json = excluded.tracks_json,
+					updated_at = excluded.updated_at`,
+			args: [id, user_uuid, name, tracks_json, updated_at]
+		});
+
+		return res.json({ success: true });
+	} catch (error) {
+		console.error("Playlist save failed:", error);
+		return res.status(500).json({ error: "Failed to save playlist" });
+	}
+});
+
+app.get("/api/user/stats", async (req, res) => {
+	try {
+		const user_uuid = String(req.query.user_uuid || "").trim();
+		if (!user_uuid) {
+			return res.status(400).json({ error: "user_uuid is required" });
+		}
+
+		const tf = String(req.query.timeframe || "all").toLowerCase();
+		let cutoff = 0;
+		if (tf === "week" || tf === "7d" || tf === "7days" || tf === "last 7 days") {
+			cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		} else if (tf === "month" || tf === "30d" || tf === "30days" || tf === "last 30 days") {
+			cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+		}
+
+		const formatRelativeTime = (timestamp) => {
+			if (!timestamp) return "Recently";
+			const diffSec = Math.max(0, Math.floor((Date.now() - Number(timestamp)) / 1000));
+			if (diffSec < 60) return "Just now";
+			const diffMin = Math.floor(diffSec / 60);
+			if (diffMin < 60) return `${diffMin}m ago`;
+			const diffHours = Math.floor(diffMin / 60);
+			if (diffHours < 24) return `${diffHours}h ago`;
+			const diffDays = Math.floor(diffHours / 24);
+			if (diffDays === 1) return "Yesterday";
+			if (diffDays < 7) return `${diffDays}d ago`;
+			const diffWeeks = Math.floor(diffDays / 7);
+			if (diffWeeks < 4) return `${diffWeeks}w ago`;
+			return new Date(Number(timestamp)).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+		};
+
+		const formatDurationText = (seconds) => {
+			const secs = Math.max(0, Math.round(seconds || 0));
+			if (secs < 60) return `${secs}s`;
+			const m = Math.floor(secs / 60);
+			if (m < 60) return `${m}m`;
+			const h = Math.floor(m / 60);
+			const remM = m % 60;
+			return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
+		};
+
+		const [totalResult, artistsResult, tracksResult, historyResult, playlistsResult] = await Promise.all([
+			db.execute({
+				sql: `SELECT 
+						COUNT(*) AS totalPlays,
+						COUNT(DISTINCT title || ' - ' || artist) AS uniqueSongs,
+						SUM(COALESCE(duration_listened, CASE WHEN duration IS NOT NULL AND duration > 0 THEN duration ELSE 0 END)) AS totalSeconds
+					FROM scrobbles
+					WHERE user_uuid = ? AND played_at >= ?`,
+				args: [user_uuid, cutoff]
+			}).catch(async () => {
+				const fallback = await db.execute({
+					sql: `SELECT COUNT(*) AS totalPlays, SUM(CASE WHEN duration IS NOT NULL AND duration > 0 THEN duration ELSE 0 END) AS totalSeconds FROM scrobbles WHERE user_uuid = ? AND played_at >= ?`,
+					args: [user_uuid, cutoff]
+				});
+				const plays = Number(fallback.rows[0]?.totalPlays || 0);
+				const secs = Number(fallback.rows[0]?.totalSeconds || (plays * 180));
+				return {
+					rows: [{
+						totalPlays: plays,
+						uniqueSongs: plays,
+						totalSeconds: secs
+					}]
+				};
+			}),
+			db.execute({
+				sql: `SELECT artist, COUNT(*) AS playCount
+					FROM scrobbles
+					WHERE user_uuid = ? AND played_at >= ?
+					GROUP BY artist
+					ORDER BY playCount DESC
+					LIMIT 5`,
+				args: [user_uuid, cutoff]
+			}),
+			db.execute({
+				sql: `SELECT title, artist, track_id, MAX(cover) AS cover, COUNT(*) AS playCount
+					FROM scrobbles
+					WHERE user_uuid = ? AND played_at >= ?
+					GROUP BY track_id, title, artist
+					ORDER BY playCount DESC
+					LIMIT 5`,
+				args: [user_uuid, cutoff]
+			}).catch(() => {
+				return db.execute({
+					sql: `SELECT title, artist, track_id, COUNT(*) AS playCount
+						FROM scrobbles
+						WHERE user_uuid = ? AND played_at >= ?
+						GROUP BY track_id, title, artist
+						ORDER BY playCount DESC
+						LIMIT 5`,
+					args: [user_uuid, cutoff]
+				});
+			}),
+			db.execute({
+				sql: `SELECT id, track_id, title, artist, album, cover, played_at
+					FROM scrobbles
+					WHERE user_uuid = ?
+					ORDER BY played_at DESC
+					LIMIT 30`,
+				args: [user_uuid]
+			}).catch(() => {
+				return db.execute({
+					sql: `SELECT id, track_id, title, artist, album, played_at
+						FROM scrobbles
+						WHERE user_uuid = ?
+						ORDER BY played_at DESC
+						LIMIT 30`,
+					args: [user_uuid]
+				});
+			}),
+			db.execute({
+				sql: `SELECT id, name, tracks_json, updated_at
+					FROM playlists
+					WHERE user_uuid = ?
+					ORDER BY updated_at DESC
+					LIMIT 10`,
+				args: [user_uuid]
+			})
+		]);
+
+		const totalPlays = Number(totalResult.rows[0]?.totalPlays || 0);
+		const uniqueSongs = Number(totalResult.rows[0]?.uniqueSongs || totalPlays);
+		const totalSeconds = totalPlays > 0 ? Number(totalResult.rows[0]?.totalSeconds || (totalPlays * 210)) : 0;
+		const totalMinutes = Math.round(totalSeconds / 60);
+		const listeningTimeFormatted = formatDurationText(totalSeconds);
+
+		const topArtists = artistsResult.rows.map((row) => ({
+			artist: row.artist,
+			playCount: Number(row.playCount)
+		}));
+
+		const topTracks = tracksResult.rows.map((row) => ({
+			title: row.title,
+			artist: row.artist,
+			track_id: row.track_id,
+			cover: row.cover || (row.track_id ? `/api/cover/${row.track_id}` : '/default-cover.svg'),
+			playCount: Number(row.playCount)
+		}));
+
+		const songHistory = historyResult.rows.map((row) => ({
+			id: `song_${row.id}`,
+			type: "song",
+			track_id: row.track_id,
+			title: row.title,
+			artist: row.artist,
+			album: row.album || null,
+			cover: row.cover || (row.track_id ? `/api/cover/${row.track_id}` : "/default-cover.svg"),
+			played_at: Number(row.played_at),
+			last_played_at: formatRelativeTime(row.played_at)
+		}));
+
+		const playlistHistory = playlistsResult.rows.map((row) => {
+			let tracks = [];
+			try {
+				tracks = JSON.parse(row.tracks_json || "[]");
+			} catch (_) {
+				tracks = [];
+			}
+			const firstCover = tracks[0]?.cover || tracks[0]?.thumbnail || "/default-cover.svg";
+			return {
+				id: `playlist_${row.id}`,
+				type: "playlist",
+				playlist_id: row.id,
+				title: row.name,
+				artist: "Imported Playlist",
+				count: tracks.length,
+				cover: firstCover,
+				tracks: tracks,
+				played_at: Number(row.updated_at),
+				last_played_at: formatRelativeTime(row.updated_at)
+			};
+		});
+
+		const history = [...songHistory, ...playlistHistory]
+			.sort((a, b) => b.played_at - a.played_at)
+			.slice(0, 30);
+
+		return res.json({
+			totalPlays,
+			totalSongs: uniqueSongs || totalPlays,
+			uniqueSongs,
+			totalListeningSeconds: totalSeconds,
+			totalListeningMinutes: totalMinutes,
+			totalListeningTime: listeningTimeFormatted,
+			listeningTimeFormatted,
+			topArtists,
+			topTracks,
+			history
+		});
+	} catch (error) {
+		console.error("User stats failed:", error);
+		return res.status(500).json({ error: "Failed to fetch user stats" });
+	}
+});
+
 // SPA fallback for client-side routing
 app.use(async (req, res) => {
 	const html = await getHtmlWithMeta(req);
@@ -2490,15 +2988,22 @@ app.use(async (req, res) => {
 	return res.send(html);
 });
 
-const server = app.listen(port, "0.0.0.0", () => {
-	console.log(`Play LooP is running at http://0.0.0.0:${port}`);
-});
+initDb()
+	.then(() => {
+		const server = app.listen(port, "0.0.0.0", () => {
+			console.log(`Play LooP is running at http://0.0.0.0:${port}`);
+		});
 
-server.on("error", (error) => {
-	if (error.code === "EADDRINUSE") {
-		console.error(`Port ${port} is already in use.`);
-	} else {
-		console.error("Server failed:", error);
-	}
-	process.exitCode = 1;
-});
+		server.on("error", (error) => {
+			if (error.code === "EADDRINUSE") {
+				console.error(`Port ${port} is already in use.`);
+			} else {
+				console.error("Server failed:", error);
+			}
+			process.exitCode = 1;
+		});
+	})
+	.catch((error) => {
+		console.error("Failed to initialize database:", error);
+		process.exitCode = 1;
+	});

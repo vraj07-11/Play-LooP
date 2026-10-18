@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Link, FileText, Upload, CheckCircle, AlertCircle, Trash2, Check, RefreshCw } from 'lucide-react';
-import { fetchApi } from '../services/api';
+import { Download, Link, FileText, Upload, CheckCircle, AlertCircle, Trash2, Check, RefreshCw, Copy } from 'lucide-react';
+import { fetchApi, getUserUuid, LAST_SYNC_KEY, USER_UUID_KEY } from '../services/api';
 import { usePlayer } from '../context/PlayerContext';
 import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
@@ -20,7 +20,7 @@ const AVAILABLE_LANGUAGES = [
 ];
 
 export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
-  const { crossfadeDuration = 0, setCrossfadeDuration } = usePlayer() || {};
+  const { crossfadeDuration = 0, setCrossfadeDuration, pullDeviceSync } = usePlayer() || {};
   const [activeTab, setActiveTab] = useState('link'); // 'link' | 'file'
   const [playlistLink, setPlaylistLink] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -61,6 +61,11 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
   // Preferred Languages State
   const [selectedLangs, setSelectedLangs] = useState([]);
   const [audioQuality, setAudioQuality] = useState('320');
+  const [deviceUuid, setDeviceUuid] = useState(() => getUserUuid());
+  const [linkUuid, setLinkUuid] = useState('');
+  const [idCopied, setIdCopied] = useState(false);
+  const [isLinkingDevice, setIsLinkingDevice] = useState(false);
+  const [linkMessage, setLinkMessage] = useState('');
 
   useEffect(() => {
     try {
@@ -75,6 +80,7 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
       }
       const qual = localStorage.getItem('playloop_audio_quality') || '320';
       setAudioQuality(qual);
+      setDeviceUuid(getUserUuid());
     } catch (e) {
       console.error(e);
     }
@@ -106,6 +112,53 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
     const val = e.target.value;
     setAudioQuality(val);
     localStorage.setItem('playloop_audio_quality', val);
+  };
+
+  const handleCopySyncId = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(deviceUuid);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = deviceUuid;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      setIdCopied(true);
+      setTimeout(() => setIdCopied(false), 2000);
+    } catch (e) {
+      console.error('Failed to copy sync ID', e);
+    }
+  };
+
+  const handleLinkDevice = async (e) => {
+    if (e) e.preventDefault();
+    const newUuid = String(linkUuid || '').trim();
+    if (!newUuid) {
+      setLinkMessage('Enter a Sync ID to link this device.');
+      return;
+    }
+
+    setIsLinkingDevice(true);
+    setLinkMessage('');
+    try {
+      localStorage.setItem(USER_UUID_KEY, newUuid);
+      localStorage.setItem(LAST_SYNC_KEY, '0');
+      setDeviceUuid(newUuid);
+      if (typeof pullDeviceSync === 'function') {
+        await pullDeviceSync();
+      }
+      window.dispatchEvent(new Event('playloop-sync-now'));
+      setLinkUuid('');
+      setLinkMessage('Device linked. History and playlists are syncing.');
+    } catch (err) {
+      console.error('Failed to link device', err);
+      setLinkMessage('Could not complete sync. Your ID was saved — try again.');
+    } finally {
+      setIsLinkingDevice(false);
+    }
   };
 
   // --- Link Importer Logic ---
@@ -720,6 +773,78 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* --- DEVICE SYNC & TRANSFER CARD --- */}
+      <div className="page-card space-y-4">
+        <div>
+          <h3 className="text-lg font-medium text-white mb-1">Device Sync & Transfer</h3>
+          <p className="text-xs text-zinc-400">
+            Use your anonymous Sync ID to continue listening history and playlists on another device.
+          </p>
+        </div>
+
+        <div className="space-y-2 pt-1">
+          <label className="text-xs font-medium text-zinc-300">Your Device Sync ID</label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              readOnly
+              value={deviceUuid}
+              className="flex-1 bg-black/50 border border-zinc-700/80 text-white px-4 py-2.5 rounded-lg text-sm font-mono"
+            />
+            <button
+              type="button"
+              onClick={handleCopySyncId}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-white font-semibold text-sm rounded-lg transition cursor-pointer shrink-0"
+            >
+              {idCopied ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  <span>Copy ID</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleLinkDevice} className="space-y-2 pt-2 border-t border-zinc-800/60">
+          <label className="text-xs font-medium text-zinc-300">Link Another Device</label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={linkUuid}
+              onChange={(e) => setLinkUuid(e.target.value)}
+              placeholder="Paste an existing Sync ID..."
+              className="flex-1 bg-black/50 border border-zinc-700/80 focus:border-zinc-400 focus:outline-none text-white placeholder-zinc-500 px-4 py-2.5 rounded-lg text-sm transition font-mono"
+            />
+            <button
+              type="submit"
+              disabled={isLinkingDevice || !linkUuid.trim()}
+              className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-lg transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+            >
+              {isLinkingDevice ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <Link className="w-4 h-4" />
+                  <span>Link & Sync</span>
+                </>
+              )}
+            </button>
+          </div>
+          {linkMessage && (
+            <p className="text-xs text-zinc-300">{linkMessage}</p>
+          )}
+        </form>
       </div>
 
       {/* --- DATA & STORAGE CARD --- */}

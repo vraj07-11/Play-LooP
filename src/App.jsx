@@ -15,6 +15,7 @@ import { initNavigationHistory } from './utils/navigationHistory';
 
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const LibraryPage = lazy(() => import('./pages/LibraryPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DownloadPage = lazy(() => import('./pages/DownloadPage'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
@@ -29,6 +30,7 @@ function App() {
     home: 0,
     search: 0,
     library: 0,
+    profile: 0,
     settings: 0,
     download: 0
   });
@@ -295,6 +297,12 @@ function App() {
                       </div>
                     )}
 
+                    {visitedViews.has('profile') && (
+                      <div className={`w-full min-h-full ${currentView === 'profile' ? `block ${slideClass}` : 'hidden'}`}>
+                        <ProfilePage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.profile} />
+                      </div>
+                    )}
+
                     {visitedViews.has('settings') && (
                       <div className={`w-full min-h-full ${currentView === 'settings' ? `block ${slideClass}` : 'hidden'}`}>
                         <SettingsPage setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.settings} />
@@ -307,7 +315,7 @@ function App() {
                       </div>
                     )}
 
-                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'profile' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
                       <PlaceholderPage view={currentView} />
                     )}
                   </Suspense>

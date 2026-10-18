@@ -16,6 +16,94 @@ export function getAudioUrl(videoId) {
   return `/api/audio?id=${encodeURIComponent(videoId)}&quality=${encodeURIComponent(quality)}`;
 }
 
+export const USER_UUID_KEY = 'user_uuid';
+export const LAST_SYNC_KEY = 'playloop_last_sync';
+export const LOCAL_SCROBBLES_KEY = 'playloop_scrobbles';
+export const PROFILE_NAME_KEY = 'profile_name';
+export const PROFILE_AVATAR_KEY = 'profile_avatar';
+
+export function getUserUuid() {
+  try {
+    let id = localStorage.getItem(USER_UUID_KEY);
+    if (!id) {
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `anon-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem(USER_UUID_KEY, id);
+    }
+    return id;
+  } catch (err) {
+    console.warn('getUserUuid error:', err);
+    return (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `anon-${Date.now()}`;
+  }
+}
+
+export function sendScrobble(trackData) {
+  try {
+    fetchApi('/api/scrobble', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: getUserUuid(),
+        track: trackData
+      })
+    }).catch((err) => {
+      console.warn('sendScrobble failed:', err);
+    });
+  } catch (err) {
+    console.warn('sendScrobble failed:', err);
+  }
+}
+
+export async function fetchSyncData(sinceTimestamp = 0) {
+  const since = Number(sinceTimestamp) || 0;
+  const res = await fetchApi(
+    `/api/sync?user_uuid=${encodeURIComponent(getUserUuid())}&since=${encodeURIComponent(since)}`
+  );
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchUserProfile(user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    const res = await fetchApi(`/api/user/profile?user_uuid=${encodeURIComponent(uuid)}`);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn('fetchUserProfile failed:', err);
+    return null;
+  }
+}
+
+export async function saveUserProfile(profileData) {
+  try {
+    const payload = {
+      user_uuid: profileData.user_uuid || getUserUuid(),
+      display_name: profileData.display_name || 'Loopner',
+      avatar_url: profileData.avatar_url || ''
+    };
+    const res = await fetchApi('/api/user/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn('saveUserProfile failed:', err);
+    return null;
+  }
+}
+
 function shuffleArray(array) {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {

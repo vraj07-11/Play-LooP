@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Search, Library, Download, PlusSquare, Heart, LogOut, Settings } from 'lucide-react';
+import { Home, Search, Library, Download, PlusSquare, Heart, User, Settings } from 'lucide-react';
 
 export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentView }) {
   const handleNavClick = (e, view) => {
@@ -58,9 +58,9 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentVie
       </nav>
       <ul className="mt-auto pt-5">
         <li className="mb-5">
-          <a href="#logout" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'logout')}>
-            <LogOut className="w-6 h-6" />
-            <span className="font-semibold">Logout</span>
+          <a href="#profile" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'profile')}>
+            <User className="w-6 h-6" />
+            <span className="font-semibold">Profile</span>
           </a>
         </li>
         <li className="">

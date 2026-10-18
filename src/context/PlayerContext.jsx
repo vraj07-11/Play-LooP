@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { fetchApi, getAudioUrl } from '../services/api.js';
+import { fetchApi, getAudioUrl, sendScrobble, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, getUserUuid } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
 import { filterValidDurationTracks } from '../utils/durationUtils.js';
@@ -12,7 +12,7 @@ const getHlsModule = () => {
   return hlsModulePromise;
 };
 
-export { fetchApi, getAudioUrl };
+export { fetchApi, getAudioUrl, getUserUuid, sendScrobble, fetchSyncData };
 
 const cleanTitle = (title) => {
   if (!title) return "";
@@ -90,6 +90,231 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     recentlyPlayedRef.current = recentlyPlayed;
   }, [recentlyPlayed]);
+
+  getUserUuid();
+
+  const activePlaySecondsRef = useRef(0);
+  const lastScrobbleWallRef = useRef(0);
+  const hasScrobbledRef = useRef(false);
+  const scrobbleTrackKeyRef = useRef(null);
+
+  const getTrackScrobbleKey = (track) => {
+    if (!track) return null;
+    return track.videoId || `${track.title || ''}:${track.artist || ''}`;
+  };
+
+  const flushListeningTime = () => {
+    const track = pendingTrackRef.current;
+    if (!track || !track.title || !track.artist || hasScrobbledRef.current) return;
+    const listened = Math.round(activePlaySecondsRef.current);
+    if (listened >= 5) {
+      hasScrobbledRef.current = true;
+      recordScrobble(track, listened);
+    }
+  };
+
+  const resetScrobbleSession = (track = null) => {
+    flushListeningTime();
+    activePlaySecondsRef.current = 0;
+    lastScrobbleWallRef.current = 0;
+    hasScrobbledRef.current = false;
+    scrobbleTrackKeyRef.current = getTrackScrobbleKey(track);
+  };
+
+  const storeLocalScrobble = (entry) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem(LOCAL_SCROBBLES_KEY) || '[]');
+      const list = Array.isArray(existing) ? existing : [];
+      list.push(entry);
+      localStorage.setItem(LOCAL_SCROBBLES_KEY, JSON.stringify(list.slice(-100)));
+    } catch (e) {
+      console.warn('Failed to cache local scrobble', e);
+    }
+  };
+
+  const recordScrobble = (track, timeListened = null) => {
+    if (!track || !track.title || !track.artist) return;
+    const listenedSec = Math.max(1, Math.round(timeListened != null ? timeListened : (activePlaySecondsRef.current || 0)));
+    const payload = {
+      track_id: track.videoId || track.track_id || null,
+      title: track.title,
+      artist: track.artist,
+      album: track.album || null,
+      genre: track.genre || null,
+      cover: track.cover || track.thumbnail || track.image || null,
+      duration: track.duration != null ? Number(track.duration) : null,
+      duration_listened: listenedSec,
+      time_listened: listenedSec,
+      played_at: Date.now()
+    };
+    storeLocalScrobble(payload);
+    sendScrobble(payload);
+  };
+
+  const maybeRecordScrobble = (dur, currentAudio = null) => {
+    const track = pendingTrackRef.current;
+    if (!track || !track.title) return;
+
+    const trackKey = getTrackScrobbleKey(track);
+    if (scrobbleTrackKeyRef.current !== trackKey) {
+      resetScrobbleSession(track);
+    }
+
+    const isActivelyPlaying = currentAudio
+      ? (!currentAudio.paused && !currentAudio.ended && isPlayingRef.current)
+      : isPlayingRef.current;
+
+    if (isActivelyPlaying) {
+      const now = performance.now();
+      if (lastScrobbleWallRef.current > 0) {
+        const delta = (now - lastScrobbleWallRef.current) / 1000;
+        if (delta > 0 && delta < 1.5) {
+          activePlaySecondsRef.current += delta;
+        }
+      }
+      lastScrobbleWallRef.current = now;
+    } else {
+      lastScrobbleWallRef.current = 0;
+      return;
+    }
+
+    if (hasScrobbledRef.current) return;
+
+    const halfDuration = dur > 0 ? dur * 0.5 : Number.POSITIVE_INFINITY;
+    if (activePlaySecondsRef.current >= 30 || (dur > 0 && activePlaySecondsRef.current >= halfDuration)) {
+      hasScrobbledRef.current = true;
+      recordScrobble(track, activePlaySecondsRef.current);
+    }
+  };
+
+  const mergeIncomingPlaylists = (incoming) => {
+    if (!Array.isArray(incoming) || incoming.length === 0) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      const list = Array.isArray(saved) ? saved : [];
+      const byId = new Map(list.map((p) => [String(p.playlistId), p]));
+
+      for (const p of incoming) {
+        const id = String(p.id || p.playlistId || '');
+        if (!id) continue;
+        let tracks = [];
+        if (Array.isArray(p.tracks)) {
+          tracks = p.tracks;
+        } else if (typeof p.tracks_json === 'string') {
+          try {
+            const parsed = JSON.parse(p.tracks_json || '[]');
+            tracks = Array.isArray(parsed) ? parsed : [];
+          } catch (_) {
+            tracks = [];
+          }
+        }
+        const mapped = {
+          playlistId: id,
+          title: p.name || p.title || 'Synced Playlist',
+          author: p.author || 'Synced',
+          thumbnail: p.thumbnail || tracks[0]?.thumbnail || '/default-cover.svg',
+          description: p.description || `Synced playlist containing ${tracks.length} tracks.`,
+          count: tracks.length,
+          tracks,
+          updated_at: p.updated_at
+        };
+        const existing = byId.get(id);
+        if (!existing || (p.updated_at && (!existing.updated_at || p.updated_at >= existing.updated_at))) {
+          byId.set(id, existing ? { ...existing, ...mapped } : mapped);
+        }
+      }
+
+      localStorage.setItem('playloop_saved_playlists', JSON.stringify(Array.from(byId.values())));
+      window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+    } catch (e) {
+      console.warn('Failed to merge synced playlists', e);
+    }
+  };
+
+  const mergeIncomingScrobbles = (incoming) => {
+    if (!Array.isArray(incoming) || incoming.length === 0) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem(LOCAL_SCROBBLES_KEY) || '[]');
+      const local = Array.isArray(existing) ? existing : [];
+      const keyOf = (s) => `${s.track_id || s.videoId || ''}|${s.played_at || ''}|${s.title || ''}`;
+      const seen = new Set(local.map(keyOf));
+
+      for (const s of incoming) {
+        const k = keyOf(s);
+        if (!seen.has(k)) {
+          local.push(s);
+          seen.add(k);
+        }
+      }
+
+      local.sort((a, b) => (Number(b.played_at) || 0) - (Number(a.played_at) || 0));
+      localStorage.setItem(LOCAL_SCROBBLES_KEY, JSON.stringify(local.slice(0, 100)));
+
+      const historyTracks = incoming
+        .filter((s) => s.title)
+        .map((s) => ({
+          videoId: s.track_id || s.videoId,
+          title: s.title,
+          artist: s.artist,
+          thumbnail: s.thumbnail || '/default-cover.svg',
+          album: s.album || null,
+          genre: s.genre || null
+        }));
+
+      if (historyTracks.length > 0) {
+        setRecentlyPlayed((prev) => {
+          const currentList = Array.isArray(prev) ? prev : [];
+          const merged = [...historyTracks, ...currentList];
+          const seenIds = new Set();
+          const unique = [];
+          for (const t of merged) {
+            const id = t.videoId || `${t.title}:${t.artist}`;
+            if (seenIds.has(id)) continue;
+            seenIds.add(id);
+            unique.push(t);
+            if (unique.length >= 20) break;
+          }
+          try {
+            localStorage.setItem('playloop_recently_played', JSON.stringify(unique));
+          } catch (e) {}
+          return unique;
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to merge synced scrobbles', e);
+    }
+  };
+
+  const pullDeviceSync = useCallback(async () => {
+    try {
+      const lastSync = Number(localStorage.getItem(LAST_SYNC_KEY) || 0);
+      const data = await fetchSyncData(lastSync);
+      if (!data) return data;
+      mergeIncomingScrobbles(data.scrobbles);
+      mergeIncomingPlaylists(data.playlists);
+      localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+      return data;
+    } catch (e) {
+      console.warn('Device sync failed:', e);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    pullDeviceSync();
+    const onFocus = () => {
+      pullDeviceSync();
+    };
+    const onSyncNow = () => {
+      pullDeviceSync();
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('playloop-sync-now', onSyncNow);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('playloop-sync-now', onSyncNow);
+    };
+  }, [pullDeviceSync]);
 
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
@@ -366,6 +591,7 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     pendingTrackRef.current = pendingTrack;
     hasRepeatedCurrentTrackRef.current = false;
+    resetScrobbleSession(pendingTrack);
   }, [pendingTrack]);
   
   const volumeRef = useRef(volume);
@@ -414,6 +640,8 @@ export function PlayerProvider({ children }) {
           setPlayerStatus("Playing");
         });
         navigator.mediaSession.setActionHandler('pause', () => {
+          lastScrobbleWallRef.current = 0;
+          flushListeningTime();
           const active = getActiveAudio();
           if (active) {
             active.pause();
@@ -467,6 +695,8 @@ export function PlayerProvider({ children }) {
           } catch (e) {}
         }
 
+        maybeRecordScrobble(dur, currentAudio);
+
         // Check if auto-crossfade to next track should be triggered
         const fadeSec = crossfadeDurationRef.current;
         if (fadeSec > 0 && !hasCrossfadeTriggeredRef.current && !isRepeatEnabledRef.current && isPlayingRef.current) {
@@ -489,6 +719,7 @@ export function PlayerProvider({ children }) {
         currentAudio.play().catch(e => console.error(e));
         setIsRepeatEnabled(false);
       } else {
+        flushListeningTime();
         playNextTrackRef.current?.();
       }
     };
@@ -539,6 +770,8 @@ export function PlayerProvider({ children }) {
     const activeAudio = getActiveAudio();
     const inactiveAudio = getInactiveAudio();
     if (isPlaying) {
+      lastScrobbleWallRef.current = 0;
+      flushListeningTime();
       if (activeAudio) {
         activeAudio.pause();
       }
@@ -1442,6 +1675,8 @@ export function PlayerProvider({ children }) {
     isPlaying,
     playPause,
     pendingTrack,
+    currentTrack: pendingTrack,
+    activePlaySecondsRef,
     currentTitle,
     playerStatus,
     progress,
@@ -1483,7 +1718,8 @@ export function PlayerProvider({ children }) {
     playbackSpeed,
     setPlaybackSpeed,
     crossfadeDuration,
-    setCrossfadeDuration
+    setCrossfadeDuration,
+    pullDeviceSync
   };
 
   return (

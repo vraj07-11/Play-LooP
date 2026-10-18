@@ -345,8 +345,8 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
             className="profile-button bg-zinc-900 p-2 rounded-full hover:bg-zinc-800 transition-colors cursor-pointer" 
             aria-label="Profile"
             onClick={() => {
-              if (typeof setCurrentView === 'function') setCurrentView('settings');
-              window.location.hash = '#/settings';
+              if (typeof setCurrentView === 'function') setCurrentView('profile');
+              window.location.hash = '#/profile';
             }}
           >
             <User className="w-6 h-6 text-white" />

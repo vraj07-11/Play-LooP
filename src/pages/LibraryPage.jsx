@@ -2,11 +2,19 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Library, Play, Heart, ArrowUpDown, Check, Download } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 
+
+
+
+// ---------------------------------------------------------------------------
+// Main LibraryPage
+// ---------------------------------------------------------------------------
 export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
+  const { selectAndPlayTrack } = usePlayer() || {};
+
   const [savedPlaylists, setSavedPlaylists] = useState([]);
-  const [likedCount, setLikedCount] = useState(0);
-  const [sortOption, setSortOption] = useState('recent');
-  const [isSortOpen, setIsSortOpen] = useState(false);
+  const [likedCount, setLikedCount]         = useState(0);
+  const [sortOption, setSortOption]         = useState('recent');
+  const [isSortOpen, setIsSortOpen]         = useState(false);
   const sortRef = useRef(null);
 
   useEffect(() => {
@@ -20,7 +28,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
         console.error(e);
       }
     };
-    
+
     fetchSaved();
     window.addEventListener('playloop-saved-playlists-updated', fetchSaved);
     return () => window.removeEventListener('playloop-saved-playlists-updated', fetchSaved);
@@ -57,32 +65,34 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
   };
 
   const handleImportClick = () => {
-    if (setCurrentView) {
-      setCurrentView('settings');
-    }
+    if (setCurrentView) setCurrentView('settings');
     window.location.hash = '#/settings#import';
   };
 
   const handleKeyDown = (e, action, param) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      if (action === 'liked') {
-        handleLikedClick();
-      } else if (action === 'playlist') {
-        handlePlaylistClick(param);
-      }
+      if (action === 'liked') handleLikedClick();
+      else if (action === 'playlist') handlePlaylistClick(param);
     }
   };
 
   return (
     <div className="max-w-[1400px] mx-auto pb-24 px-4 sm:px-6 lg:px-8 mt-6 select-none">
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Header                                                              */}
+      {/* ------------------------------------------------------------------ */}
       <div className="mb-6 sm:mb-8 flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap w-full">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <Library className="w-6 h-6 sm:w-8 sm:h-8 text-white shrink-0" />
-          <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight truncate">Your Library</h2>
+          <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight truncate">
+            Your Library
+          </h2>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-2.5 ml-auto shrink-0">
+          {/* Import button (desktop only) */}
           <button
             type="button"
             onClick={handleImportClick}
@@ -93,6 +103,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
             <span>Import</span>
           </button>
 
+          {/* Sort dropdown */}
           <div className="relative z-20 shrink-0" ref={sortRef}>
             <button
               type="button"
@@ -102,10 +113,10 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
               <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
               <span>
                 Sort: {
-                  sortOption === 'recent' ? 'Newest First' :
-                  sortOption === 'recent-reverse' ? 'Oldest First' :
-                  sortOption === 'name-asc' ? 'Name (A-Z)' :
-                  sortOption === 'name-desc' ? 'Name (Z-A)' : 'Newest First'
+                  sortOption === 'recent'         ? 'Newest First'  :
+                  sortOption === 'recent-reverse' ? 'Oldest First'  :
+                  sortOption === 'name-asc'       ? 'Name (A-Z)'    :
+                  sortOption === 'name-desc'      ? 'Name (Z-A)'    : 'Newest First'
                 }
               </span>
               <span className="text-[10px] text-zinc-400">▼</span>
@@ -117,20 +128,19 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                   Sort Playlists By
                 </div>
                 {[
-                  { id: 'recent', label: 'Newest First' },
-                  { id: 'recent-reverse', label: 'Oldest First' },
-                  { id: 'name-asc', label: 'Name (A – Z)' },
-                  { id: 'name-desc', label: 'Name (Z – A)' }
+                  { id: 'recent',         label: 'Newest First'  },
+                  { id: 'recent-reverse', label: 'Oldest First'  },
+                  { id: 'name-asc',       label: 'Name (A – Z)' },
+                  { id: 'name-desc',      label: 'Name (Z – A)' },
                 ].map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => {
-                      setSortOption(opt.id);
-                      setIsSortOpen(false);
-                    }}
+                    onClick={() => { setSortOption(opt.id); setIsSortOpen(false); }}
                     className={`w-full text-left px-3.5 py-2 text-xs font-normal flex items-center justify-between transition cursor-pointer ${
-                      sortOption === opt.id ? 'bg-white/10 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                      sortOption === opt.id
+                        ? 'bg-white/10 text-white font-medium'
+                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
                     }`}
                   >
                     <span>{opt.label}</span>
@@ -143,9 +153,14 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
         </div>
       </div>
 
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Playlist Grid                                                       */}
+      {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+
         {/* Liked Songs Card */}
-        <div 
+        <div
           onClick={handleLikedClick}
           onKeyDown={(e) => handleKeyDown(e, 'liked')}
           tabIndex={0}
@@ -169,15 +184,10 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
           </p>
         </div>
 
-        {/* Import Playlist Card (Mobile Grid Tile) */}
+        {/* Import Playlist Card (mobile grid tile) */}
         <div
           onClick={handleImportClick}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleImportClick();
-            }
-          }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleImportClick(); } }}
           tabIndex={0}
           role="button"
           aria-label="Import Playlist"
@@ -195,7 +205,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
             Import Playlist
           </h4>
           <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
-            Spotify, YT & Files
+            Spotify, YT &amp; Files
           </p>
         </div>
 
@@ -215,19 +225,15 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                 src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail}
                 alt={item.title}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                onError={(e) => {
-                  e.target.src = '/default-cover.svg';
-                }}
+                onError={(e) => { e.target.src = '/default-cover.svg'; }}
                 loading="lazy"
               />
-              
               <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
                 <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
                   <Play className="w-5 h-5 fill-current translate-x-[2px]" />
                 </div>
               </div>
             </div>
-
             <h4 className="font-bold text-white text-[15px] truncate mb-1.5 tracking-tight">
               {item.title}
             </h4>

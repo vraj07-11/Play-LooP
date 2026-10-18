@@ -40,8 +40,8 @@ export const pagesData = {
     cards: ["Account", "Playback", "Appearance"]
   },
   profile: {
-    title: "Profile",
-    description: "Your Play LooP profile.",
-    cards: ["Profile details", "Listening activity", "Preferences"]
+    title: "Your Profile",
+    description: "Your listening activity, top songs and artists, and sync ID.",
+    cards: ["Listening Stats", "Top Music", "Listening History"]
   }
 };
