@@ -60,6 +60,28 @@ async function initDb() {
 	try {
 		await db.execute("ALTER TABLE scrobbles ADD COLUMN duration_listened INTEGER DEFAULT 0");
 	} catch (_) {}
+	// session_id dedup column — added in a later migration; safe to run repeatedly.
+	try {
+		await db.execute("ALTER TABLE scrobbles ADD COLUMN session_id TEXT");
+	} catch (_) {}
+	try {
+		await db.execute("ALTER TABLE scrobbles ADD COLUMN playlist_id TEXT");
+	} catch (_) {}
+	try {
+		await db.execute("ALTER TABLE scrobbles ADD COLUMN origin_context TEXT");
+	} catch (_) {}
+	try {
+		await db.execute("ALTER TABLE playlists ADD COLUMN last_played_at INTEGER");
+	} catch (_) {}
+	try {
+		await db.execute("ALTER TABLE playlists ADD COLUMN play_count INTEGER DEFAULT 0");
+	} catch (_) {}
+	try {
+		await db.execute(
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_scrobbles_session " +
+			"ON scrobbles(user_uuid, session_id) WHERE session_id IS NOT NULL"
+		);
+	} catch (_) {}
 }
 
 const app = express();
@@ -2560,11 +2582,17 @@ app.post("/api/scrobble", async (req, res) => {
 		const cover = track.cover || track.thumbnail || track.image || null;
 		const duration = track.duration != null && !isNaN(track.duration) ? Math.round(Number(track.duration)) : null;
 		const duration_listened = Math.max(0, Math.round(Number(track.duration_listened || track.time_listened || 0)));
+		// session_id: optional unique token from the client. When present, the
+		// UNIQUE INDEX on (user_uuid, session_id) makes the INSERT a no-op if
+		// the same scrobble was already committed (e.g. duplicate network retry).
+		const session_id = track.session_id || null;
+		const playlist_id = track.playlistId || track.playlist_id || null;
+		const origin_context = track.originContext || track.origin_context || null;
 
 		try {
 			await db.execute({
-				sql: `INSERT INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration, duration_listened)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				sql: `INSERT OR IGNORE INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration, duration_listened, session_id, playlist_id, origin_context)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				args: [
 					user_uuid,
 					track.track_id ?? null,
@@ -2575,14 +2603,17 @@ app.post("/api/scrobble", async (req, res) => {
 					played_at,
 					cover,
 					duration,
-					duration_listened
+					duration_listened,
+					session_id,
+					playlist_id,
+					origin_context
 				]
 			});
 		} catch (insertErr) {
 			try {
 				await db.execute({
-					sql: `INSERT INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration)
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					sql: `INSERT OR IGNORE INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration, duration_listened, session_id)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					args: [
 						user_uuid,
 						track.track_id ?? null,
@@ -2592,23 +2623,43 @@ app.post("/api/scrobble", async (req, res) => {
 						track.genre ?? null,
 						played_at,
 						cover,
-						duration
+						duration,
+						duration_listened,
+						session_id
 					]
 				});
 			} catch (_) {
-				await db.execute({
-					sql: `INSERT INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at)
-						VALUES (?, ?, ?, ?, ?, ?, ?)`,
-					args: [
-						user_uuid,
-						track.track_id ?? null,
-						title,
-						artist,
-						track.album ?? null,
-						track.genre ?? null,
-						played_at
-					]
-				});
+				try {
+					await db.execute({
+						sql: `INSERT OR IGNORE INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration)
+							VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+						args: [
+							user_uuid,
+							track.track_id ?? null,
+							title,
+							artist,
+							track.album ?? null,
+							track.genre ?? null,
+							played_at,
+							cover,
+							duration
+						]
+					});
+				} catch (_) {
+					await db.execute({
+						sql: `INSERT OR IGNORE INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at)
+							VALUES (?, ?, ?, ?, ?, ?, ?)`,
+						args: [
+							user_uuid,
+							track.track_id ?? null,
+							title,
+							artist,
+							track.album ?? null,
+							track.genre ?? null,
+							played_at
+						]
+					});
+				}
 			}
 		}
 
@@ -2788,6 +2839,56 @@ app.post("/api/playlist/save", async (req, res) => {
 	}
 });
 
+app.post("/api/playlist/activity", async (req, res) => {
+	try {
+		const user_uuid = req.body?.user_uuid;
+		const playlist = req.body?.playlist || {};
+		const id = playlist.id || playlist.playlistId;
+		const name = playlist.name || playlist.title;
+
+		if (!user_uuid || !id) {
+			return res.status(400).json({ error: "user_uuid and playlist.id are required" });
+		}
+
+		const tracks = playlist.tracks;
+		const tracks_json = typeof tracks === "string" ? tracks : JSON.stringify(tracks ?? []);
+		const now = Date.now();
+		const last_played_at = playlist.last_played_at ? Number(playlist.last_played_at) : now;
+		const play_count = Number(playlist.play_count || 1);
+
+		try {
+			await db.execute({
+				sql: `INSERT INTO playlists (id, user_uuid, name, tracks_json, updated_at, last_played_at, play_count)
+					VALUES (?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT(id) DO UPDATE SET
+						user_uuid = excluded.user_uuid,
+						name = COALESCE(excluded.name, playlists.name),
+						tracks_json = CASE WHEN excluded.tracks_json != '[]' THEN excluded.tracks_json ELSE playlists.tracks_json END,
+						updated_at = excluded.updated_at,
+						last_played_at = excluded.last_played_at,
+						play_count = COALESCE(playlists.play_count, 0) + 1`,
+				args: [id, user_uuid, name || "Playlist", tracks_json, now, last_played_at, play_count]
+			});
+		} catch (innerErr) {
+			await db.execute({
+				sql: `INSERT INTO playlists (id, user_uuid, name, tracks_json, updated_at)
+					VALUES (?, ?, ?, ?, ?)
+					ON CONFLICT(id) DO UPDATE SET
+						user_uuid = excluded.user_uuid,
+						name = COALESCE(excluded.name, playlists.name),
+						tracks_json = CASE WHEN excluded.tracks_json != '[]' THEN excluded.tracks_json ELSE playlists.tracks_json END,
+						updated_at = excluded.updated_at`,
+				args: [id, user_uuid, name || "Playlist", tracks_json, now]
+			});
+		}
+
+		return res.json({ success: true });
+	} catch (error) {
+		console.error("Playlist activity update failed:", error);
+		return res.status(500).json({ error: "Failed to update playlist activity" });
+	}
+});
+
 app.get("/api/user/stats", async (req, res) => {
 	try {
 		const user_uuid = String(req.query.user_uuid || "").trim();
@@ -2899,12 +3000,21 @@ app.get("/api/user/stats", async (req, res) => {
 				});
 			}),
 			db.execute({
-				sql: `SELECT id, name, tracks_json, updated_at
+				sql: `SELECT id, name, tracks_json, updated_at, COALESCE(last_played_at, updated_at) AS last_played_at, COALESCE(play_count, 0) AS play_count
 					FROM playlists
 					WHERE user_uuid = ?
-					ORDER BY updated_at DESC
-					LIMIT 10`,
+					ORDER BY COALESCE(last_played_at, updated_at) DESC
+					LIMIT 20`,
 				args: [user_uuid]
+			}).catch(() => {
+				return db.execute({
+					sql: `SELECT id, name, tracks_json, updated_at
+						FROM playlists
+						WHERE user_uuid = ?
+						ORDER BY updated_at DESC
+						LIMIT 20`,
+					args: [user_uuid]
+				});
 			})
 		]);
 
@@ -2950,6 +3060,7 @@ app.get("/api/user/stats", async (req, res) => {
 				tracks = [];
 			}
 			const firstCover = tracks[0]?.cover || tracks[0]?.thumbnail || "/default-cover.svg";
+			const played_at = Number(row.last_played_at || row.updated_at);
 			return {
 				id: `playlist_${row.id}`,
 				type: "playlist",
@@ -2959,14 +3070,14 @@ app.get("/api/user/stats", async (req, res) => {
 				count: tracks.length,
 				cover: firstCover,
 				tracks: tracks,
-				played_at: Number(row.updated_at),
-				last_played_at: formatRelativeTime(row.updated_at)
+				played_at,
+				last_played_at: formatRelativeTime(played_at),
+				play_count: Number(row.play_count || 1)
 			};
 		});
 
 		const history = [...songHistory, ...playlistHistory]
-			.sort((a, b) => b.played_at - a.played_at)
-			.slice(0, 30);
+			.sort((a, b) => b.played_at - a.played_at);
 
 		return res.json({
 			totalPlays,
@@ -2978,7 +3089,8 @@ app.get("/api/user/stats", async (req, res) => {
 			listeningTimeFormatted,
 			topArtists,
 			topTracks,
-			history
+			history,
+			playlists: playlistHistory
 		});
 	} catch (error) {
 		console.error("User stats failed:", error);

@@ -47,7 +47,17 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
   const sortedSavedPlaylists = useMemo(() => {
     const list = [...savedPlaylists];
     if (sortOption === 'recent-reverse') {
-      return list.reverse();
+      return list.sort((a, b) => {
+        const timeA = a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : (a.updated_at || 0);
+        const timeB = b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : (b.updated_at || 0);
+        return timeA - timeB;
+      });
+    } else if (sortOption === 'recent') {
+      return list.sort((a, b) => {
+        const timeA = a.lastPlayedAt ? new Date(a.lastPlayedAt).getTime() : (a.updated_at || 0);
+        const timeB = b.lastPlayedAt ? new Date(b.lastPlayedAt).getTime() : (b.updated_at || 0);
+        return timeB - timeA;
+      });
     } else if (sortOption === 'name-asc') {
       return list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
     } else if (sortOption === 'name-desc') {

@@ -522,17 +522,45 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     navigateBack('#/home');
   };
 
+  const getSelectedPlaylistContext = (tracks) => {
+    if (!selectedPlaylist) return null;
+    const pid = String(selectedPlaylist.playlistId || '');
+    const isImported = Boolean(
+      selectedPlaylist.isImported ||
+      pid.startsWith('imported_') ||
+      selectedPlaylist.author === 'Imported Playlist' ||
+      selectedPlaylist.artist === 'Imported Playlist'
+    );
+    const title = selectedPlaylist.title || (pid === 'liked_songs' ? 'Liked Songs' : 'Untitled Playlist');
+    const firstCover = selectedPlaylist.thumbnail || tracks?.[0]?.thumbnail || tracks?.[0]?.cover || '/default-cover.svg';
+    const cleanCover = (!firstCover || firstCover === '/logo.svg') ? '/default-cover.svg' : firstCover;
+    return {
+      type: 'playlist',
+      id: pid,
+      name: title,
+      title,
+      isImported,
+      author: selectedPlaylist.author || (selectedPlaylist.isArtist ? selectedPlaylist.title : (isImported ? 'Imported Playlist' : 'Playlist')),
+      thumbnail: cleanCover,
+      cover: cleanCover,
+      count: tracks?.length || selectedPlaylist.count || 0,
+      tracks: tracks || []
+    };
+  };
+
   const handlePlayPlaylistAll = () => {
     const listToPlay = sortedTracks.length > 0 ? sortedTracks : (selectedPlaylist?.tracks || []);
     if (listToPlay.length > 0) {
-      playPlaylist(listToPlay, 0);
+      const context = getSelectedPlaylistContext(listToPlay);
+      playPlaylist(listToPlay, 0, context);
     }
   };
 
   const handlePlayTrackInPlaylist = (index) => {
     const listToPlay = sortedTracks.length > 0 ? sortedTracks : (selectedPlaylist?.tracks || []);
     if (listToPlay.length > 0) {
-      playPlaylist(listToPlay, index);
+      const context = getSelectedPlaylistContext(listToPlay);
+      playPlaylist(listToPlay, index, context);
     }
   };
 

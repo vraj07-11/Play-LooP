@@ -19,6 +19,7 @@ export function getAudioUrl(videoId) {
 export const USER_UUID_KEY = 'user_uuid';
 export const LAST_SYNC_KEY = 'playloop_last_sync';
 export const LOCAL_SCROBBLES_KEY = 'playloop_scrobbles';
+export const PLAYLIST_HISTORY_KEY = 'playloop_playlist_history';
 export const PROFILE_NAME_KEY = 'profile_name';
 export const PROFILE_AVATAR_KEY = 'profile_avatar';
 
@@ -349,13 +350,22 @@ export async function fetchPlaylistDetails(playlistId, page = 1) {
   // Check if it's an imported or locally saved playlist with tracks stored in localStorage
   try {
     const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-    const localMatch = saved.find(p => String(p.playlistId) === String(playlistId));
+    const history = JSON.parse(localStorage.getItem(PLAYLIST_HISTORY_KEY) || '[]');
+    const localMatch = saved.find(p => String(p.playlistId || p.id) === String(playlistId))
+      || history.find(p => String(p.playlistId || p.id) === String(playlistId));
     if (localMatch && Array.isArray(localMatch.tracks) && localMatch.tracks.length > 0) {
       const validTracks = filterValidDurationTracks(localMatch.tracks);
+      const isImported = Boolean(
+        localMatch.isImported ||
+        String(localMatch.playlistId || localMatch.id).startsWith('imported_') ||
+        localMatch.author === 'Imported Playlist' ||
+        localMatch.artist === 'Imported Playlist'
+      );
       const result = {
-        playlistId: localMatch.playlistId,
-        title: localMatch.title,
-        author: localMatch.author || 'Imported Playlist',
+        playlistId: localMatch.playlistId || localMatch.id,
+        title: localMatch.title || localMatch.name,
+        author: localMatch.author || (isImported ? 'Imported Playlist' : 'Playlist'),
+        isImported,
         thumbnail: (!localMatch.thumbnail || localMatch.thumbnail === '/logo.svg') ? '/default-cover.svg' : localMatch.thumbnail,
         description: localMatch.description || `Collection containing ${validTracks.length} tracks.`,
         count: validTracks.length,

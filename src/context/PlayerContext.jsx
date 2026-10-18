@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { fetchApi, getAudioUrl, sendScrobble, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, getUserUuid } from '../services/api.js';
+import { fetchApi, getAudioUrl, sendScrobble, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, getUserUuid } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
 import { filterValidDurationTracks } from '../utils/durationUtils.js';
@@ -48,6 +48,8 @@ export function PlayerProvider({ children }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [trackQueue, setTrackQueue] = useState([]);
+  const [activeContext, setActiveContext] = useState(null);
+  const activeContextRef = useRef(null);
   const [recommendationQueue, setRecommendationQueue] = useState([]);
   const [isRefreshingUpNext, setIsRefreshingUpNext] = useState(false);
   const [trackHistory, setTrackHistory] = useState([]);
@@ -98,20 +100,72 @@ export function PlayerProvider({ children }) {
 
   getUserUuid();
 
-  const activePlaySecondsRef = useRef(0);
-  const lastScrobbleWallRef = useRef(0);
+  // --- Scrobble session state ---
+  // playbackSessionIdRef: unique UUID per track play session; used to deduplicate
+  // scrobbles at the localStorage layer in case both timeupdate and ended both fire.
+  const playbackSessionIdRef = useRef(null);
   const hasScrobbledRef = useRef(false);
   const scrobbleTrackKeyRef = useRef(null);
+
+  // Wall-clock listen-time tracking (replaces per-tick delta accumulation which
+  // was silently zeroed out in background tabs when timeupdate gaps > 1.5 s).
+  // playStartWallTimeRef: Date.now() captured when audio transitions to "playing".
+  // accumulatedListenSecondsRef: total seconds confirmed-accumulated across
+  // pause/resume cycles within the current track session.
+  const playStartWallTimeRef = useRef(null);     // null = not currently playing
+  const accumulatedListenSecondsRef = useRef(0); // confirmed seconds for this track
 
   const getTrackScrobbleKey = (track) => {
     if (!track) return null;
     return track.videoId || `${track.title || ''}:${track.artist || ''}`;
   };
 
+  /** Generate a new unique session token. Falls back to timestamp+random on old browsers. */
+  const newSessionId = () =>
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `sess-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  /**
+   * Snapshot the in-flight wall-clock segment (if audio is currently playing)
+   * into accumulatedListenSecondsRef WITHOUT resetting the start time.
+   * Returns the total seconds accumulated so far for this session.
+   */
+  const peekListenSeconds = () => {
+    const extra = playStartWallTimeRef.current !== null
+      ? (Date.now() - playStartWallTimeRef.current) / 1000
+      : 0;
+    return accumulatedListenSecondsRef.current + extra;
+  };
+
+  /**
+   * Commit the current in-flight wall-clock segment into accumulatedListenSecondsRef
+   * and stop the wall-clock (set playStartWallTimeRef = null).
+   * Call on pause, seek, track-change, or beforeunload.
+   */
+  const flushWallClock = () => {
+    if (playStartWallTimeRef.current !== null) {
+      accumulatedListenSecondsRef.current +=
+        (Date.now() - playStartWallTimeRef.current) / 1000;
+      playStartWallTimeRef.current = null;
+    }
+  };
+
+  /**
+   * Start (or resume) the wall-clock timer. Call when audio transitions to playing.
+   */
+  const startWallClock = () => {
+    // Only start if not already running to avoid double-counting on rapid re-entrancy.
+    if (playStartWallTimeRef.current === null) {
+      playStartWallTimeRef.current = Date.now();
+    }
+  };
+
   const flushListeningTime = () => {
     const track = pendingTrackRef.current;
     if (!track || !track.title || !track.artist || hasScrobbledRef.current) return;
-    const listened = Math.round(activePlaySecondsRef.current);
+    flushWallClock();
+    const listened = Math.round(accumulatedListenSecondsRef.current);
     if (listened >= 5) {
       hasScrobbledRef.current = true;
       recordScrobble(track, listened);
@@ -119,9 +173,13 @@ export function PlayerProvider({ children }) {
   };
 
   const resetScrobbleSession = (track = null) => {
+    // Flush whatever is currently in-flight before clearing counters.
     flushListeningTime();
-    activePlaySecondsRef.current = 0;
-    lastScrobbleWallRef.current = 0;
+    // Reset wall-clock state for the new session.
+    playStartWallTimeRef.current = null;
+    accumulatedListenSecondsRef.current = 0;
+    // Generate a new unique session token so the new track gets its own dedup bucket.
+    playbackSessionIdRef.current = newSessionId();
     hasScrobbledRef.current = false;
     scrobbleTrackKeyRef.current = getTrackScrobbleKey(track);
   };
@@ -130,6 +188,11 @@ export function PlayerProvider({ children }) {
     try {
       const existing = JSON.parse(localStorage.getItem(LOCAL_SCROBBLES_KEY) || '[]');
       const list = Array.isArray(existing) ? existing : [];
+      // Idempotency guard: if a scrobble for this exact session already exists, skip.
+      if (entry.session_id && list.some((e) => e.session_id === entry.session_id)) {
+        console.debug('[Scrobble] Duplicate session_id detected, skipping:', entry.session_id);
+        return;
+      }
       list.push(entry);
       localStorage.setItem(LOCAL_SCROBBLES_KEY, JSON.stringify(list.slice(-100)));
     } catch (e) {
@@ -137,9 +200,109 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const recordPlaylistActivity = (context) => {
+    if (!context || !context.id) return;
+    try {
+      const id = String(context.id);
+      const nowIso = new Date().toISOString();
+      const nowTs = Date.now();
+      const isImported = Boolean(
+        context.isImported ||
+        id.startsWith('imported_') ||
+        context.author === 'Imported Playlist' ||
+        context.artist === 'Imported Playlist'
+      );
+
+      const existingHistory = JSON.parse(localStorage.getItem(PLAYLIST_HISTORY_KEY) || '[]');
+      const historyList = Array.isArray(existingHistory) ? existingHistory : [];
+      const existingIdx = historyList.findIndex((p) => String(p.id || p.playlistId || p.playlist_id) === id);
+
+      let playCount = 1;
+      let existingTracks = [];
+      if (existingIdx >= 0) {
+        playCount = (historyList[existingIdx].playCount || 0) + 1;
+        existingTracks = historyList[existingIdx].tracks || [];
+        historyList.splice(existingIdx, 1);
+      }
+
+      const tracks = (Array.isArray(context.tracks) && context.tracks.length > 0)
+        ? context.tracks
+        : existingTracks;
+
+      const firstCover = tracks[0]?.cover || tracks[0]?.thumbnail || context.thumbnail || context.cover || '/default-cover.svg';
+      const cleanCover = (!firstCover || firstCover === '/logo.svg') ? '/default-cover.svg' : firstCover;
+
+      const historyEntry = {
+        id: `playlist_${id}`,
+        playlistId: id,
+        playlist_id: id,
+        type: 'playlist',
+        title: context.name || context.title || 'Untitled Playlist',
+        name: context.name || context.title || 'Untitled Playlist',
+        author: context.author || (isImported ? 'Imported Playlist' : 'Playlist'),
+        artist: context.author || (isImported ? 'Imported Playlist' : 'Playlist'),
+        thumbnail: cleanCover,
+        cover: cleanCover,
+        count: context.count || tracks.length || 0,
+        tracks: tracks.slice(0, 50),
+        isImported,
+        lastPlayedAt: nowIso,
+        played_at: nowTs,
+        playCount
+      };
+
+      historyList.unshift(historyEntry);
+      localStorage.setItem(PLAYLIST_HISTORY_KEY, JSON.stringify(historyList.slice(0, 50)));
+
+      // Also update playloop_saved_playlists if present
+      try {
+        const savedList = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+        if (Array.isArray(savedList)) {
+          const sIdx = savedList.findIndex((p) => String(p.playlistId) === id);
+          if (sIdx >= 0) {
+            savedList[sIdx] = {
+              ...savedList[sIdx],
+              lastPlayedAt: nowIso,
+              updated_at: nowTs,
+              playCount: (savedList[sIdx].playCount || 0) + 1
+            };
+            localStorage.setItem('playloop_saved_playlists', JSON.stringify(savedList));
+          }
+        }
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('playloop-playlist-activity', { detail: historyEntry }));
+      window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+
+      // Sync activity to backend
+      const uuid = getUserUuid();
+      if (uuid) {
+        fetchApi('/api/playlist/activity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_uuid: uuid,
+            playlist: {
+              id,
+              name: historyEntry.title,
+              tracks: tracks.slice(0, 50),
+              last_played_at: nowTs,
+              play_count: playCount
+            }
+          })
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Failed to record playlist activity:', e);
+    }
+  };
+
   const recordScrobble = (track, timeListened = null) => {
     if (!track || !track.title || !track.artist) return;
-    const listenedSec = Math.max(1, Math.round(timeListened != null ? timeListened : (activePlaySecondsRef.current || 0)));
+    const listenedSec = Math.max(1, Math.round(
+      timeListened != null ? timeListened : peekListenSeconds()
+    ));
+    const currentContext = activeContextRef.current;
     const payload = {
       track_id: track.videoId || track.track_id || null,
       title: track.title,
@@ -150,7 +313,14 @@ export function PlayerProvider({ children }) {
       duration: track.duration != null ? Number(track.duration) : null,
       duration_listened: listenedSec,
       time_listened: listenedSec,
-      played_at: Date.now()
+      played_at: Date.now(),
+      // Unique session token — lets storeLocalScrobble and the server both
+      // reject any second scrobble for the exact same playback session.
+      session_id: playbackSessionIdRef.current,
+      originContext: currentContext?.type || null,
+      playlistId: currentContext?.id || null,
+      playlistTitle: currentContext?.name || currentContext?.title || null,
+      isImported: Boolean(currentContext?.isImported)
     };
     storeLocalScrobble(payload);
     sendScrobble(payload);
@@ -170,25 +340,22 @@ export function PlayerProvider({ children }) {
       : isPlayingRef.current;
 
     if (isActivelyPlaying) {
-      const now = performance.now();
-      if (lastScrobbleWallRef.current > 0) {
-        const delta = (now - lastScrobbleWallRef.current) / 1000;
-        if (delta > 0 && delta < 1.5) {
-          activePlaySecondsRef.current += delta;
-        }
-      }
-      lastScrobbleWallRef.current = now;
+      // Ensure wall-clock is running. startWallClock() is a no-op if already started.
+      startWallClock();
     } else {
-      lastScrobbleWallRef.current = 0;
+      // Audio is paused/ended — flush any in-flight segment.
+      flushWallClock();
       return;
     }
 
     if (hasScrobbledRef.current) return;
 
+    // Use the live wall-clock total (accumulated + current in-flight segment).
+    const totalListened = peekListenSeconds();
     const halfDuration = dur > 0 ? dur * 0.5 : Number.POSITIVE_INFINITY;
-    if (activePlaySecondsRef.current >= 30 || (dur > 0 && activePlaySecondsRef.current >= halfDuration)) {
+    if (totalListened >= 30 || (dur > 0 && totalListened >= halfDuration)) {
       hasScrobbledRef.current = true;
-      recordScrobble(track, activePlaySecondsRef.current);
+      recordScrobble(track, totalListened);
     }
   };
 
@@ -322,11 +489,19 @@ export function PlayerProvider({ children }) {
     const onSyncNow = () => {
       pullDeviceSync();
     };
+    // Flush in-flight listen-time before the tab is closed so the last partial
+    // segment is not lost and the final scrobble can fire even on sudden exits.
+    const onBeforeUnload = () => {
+      flushWallClock();
+      flushListeningTime();
+    };
     window.addEventListener('focus', onFocus);
     window.addEventListener('playloop-sync-now', onSyncNow);
+    window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('playloop-sync-now', onSyncNow);
+      window.removeEventListener('beforeunload', onBeforeUnload);
     };
   }, [pullDeviceSync]);
 
@@ -654,7 +829,7 @@ export function PlayerProvider({ children }) {
           setPlayerStatus("Playing");
         });
         navigator.mediaSession.setActionHandler('pause', () => {
-          lastScrobbleWallRef.current = 0;
+          flushWallClock();
           flushListeningTime();
           const active = getActiveAudio();
           if (active) {
@@ -662,6 +837,10 @@ export function PlayerProvider({ children }) {
           }
           setIsPlaying(false);
           setPlayerStatus("Paused");
+        });
+        navigator.mediaSession.setActionHandler('play', () => {
+          // Override: also start wall-clock on media-session resume.
+          startWallClock();
         });
         navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousTrack());
         navigator.mediaSession.setActionHandler('nexttrack', () => playNextTrackRef.current?.());
@@ -784,7 +963,8 @@ export function PlayerProvider({ children }) {
     const activeAudio = getActiveAudio();
     const inactiveAudio = getInactiveAudio();
     if (isPlaying) {
-      lastScrobbleWallRef.current = 0;
+      // Flush the in-flight wall-clock segment before pausing.
+      flushWallClock();
       flushListeningTime();
       if (activeAudio) {
         activeAudio.pause();
@@ -804,6 +984,8 @@ export function PlayerProvider({ children }) {
       if (isCrossfadingRef.current && inactiveAudio) {
         inactiveAudio.play().catch(e => console.error(e));
       }
+      // Start wall-clock timer when resuming from pause.
+      startWallClock();
       setIsPlaying(true);
       setPlayerStatus("Playing");
       if ('mediaSession' in navigator) {
@@ -1036,7 +1218,16 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false, duration = null) => {
+  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false, duration = null, context = null) => {
+    if (context) {
+      setActiveContext(context);
+      activeContextRef.current = context;
+      recordPlaylistActivity(context);
+    } else if (!isHistoryNavigation && !isAutoPlay) {
+      setActiveContext(null);
+      activeContextRef.current = null;
+    }
+
     let trackDuration = duration;
     if (!trackDuration) {
       const foundInQueue = trackQueueRef.current?.find(t => t.videoId === videoId) || 
@@ -1103,6 +1294,8 @@ export function PlayerProvider({ children }) {
     audio.playbackRate = playbackSpeedRef.current;
     audio.volume = isMutedRef.current ? 0 : volumeRef.current;
     audio.play().then(() => {
+      // Start wall-clock timer as soon as audio confirms it is playing.
+      startWallClock();
       setIsPlaying(true);
       setPlayerStatus("Playing");
       if ('mediaSession' in navigator) {
@@ -1113,6 +1306,7 @@ export function PlayerProvider({ children }) {
       // If browser blocked autoplay before user interaction, unlock on first gesture
       const resumeOnGesture = () => {
         audio.play().then(() => {
+          startWallClock();
           setIsPlaying(true);
           setPlayerStatus("Playing");
           if ('mediaSession' in navigator) {
@@ -1214,7 +1408,7 @@ export function PlayerProvider({ children }) {
     }
   }, []);
 
-  const playPlaylist = (tracks, startIndex = 0) => {
+  const playPlaylist = (tracks, startIndex = 0, context = null) => {
     if (!Array.isArray(tracks) || tracks.length === 0) return;
     
     trackQueueRef.current = tracks;
@@ -1225,9 +1419,15 @@ export function PlayerProvider({ children }) {
     
     shuffleCycleStartIndexRef.current = trackHistoryRef.current.length;
     
+    if (context) {
+      setActiveContext(context);
+      activeContextRef.current = context;
+      recordPlaylistActivity(context);
+    }
+
     const startTrack = tracks[startIndex];
     if (startTrack && startTrack.videoId) {
-      selectAndPlayTrack(startTrack.videoId, startTrack.title, startTrack.artist, startTrack.thumbnail, false, false, startTrack.duration);
+      selectAndPlayTrack(startTrack.videoId, startTrack.title, startTrack.artist, startTrack.thumbnail, false, false, startTrack.duration, context);
     }
   };
 
@@ -1483,6 +1683,9 @@ export function PlayerProvider({ children }) {
         ? duration 
         : (active.duration || 3600);
       const newTime = Math.max(0, Math.min(audioDuration, cTime + seconds));
+      // Flush current wall-clock segment (pre-seek) then restart (post-seek)
+      // so we don't count the skipped/rewound region.
+      flushWallClock();
       active.currentTime = newTime;
       setCurrentTime(newTime);
       if (audioDuration > 0) {
@@ -1491,6 +1694,7 @@ export function PlayerProvider({ children }) {
       if (audioDuration - newTime > (crossfadeDurationRef.current || 0) + 2) {
         hasCrossfadeTriggeredRef.current = false;
       }
+      if (isPlayingRef.current) startWallClock();
     }
   };
   
@@ -1500,12 +1704,14 @@ export function PlayerProvider({ children }) {
     const newTime = (numericPercent / 100) * duration;
     const active = getActiveAudio();
     if (active) {
+      flushWallClock();
       active.currentTime = newTime;
       setCurrentTime(newTime);
       setProgress(numericPercent);
       if (duration - newTime > (crossfadeDurationRef.current || 0) + 2) {
         hasCrossfadeTriggeredRef.current = false;
       }
+      if (isPlayingRef.current) startWallClock();
     }
   };
 
@@ -1513,12 +1719,14 @@ export function PlayerProvider({ children }) {
     const targetTime = Math.max(0, Math.min(duration || 3600, timeInSeconds));
     const active = getActiveAudio();
     if (active) {
+      flushWallClock();
       active.currentTime = targetTime;
       setCurrentTime(targetTime);
       if (duration > 0) setProgress((targetTime / duration) * 100);
       if (duration - targetTime > (crossfadeDurationRef.current || 0) + 2) {
         hasCrossfadeTriggeredRef.current = false;
       }
+      if (isPlayingRef.current) startWallClock();
     }
   };
 
@@ -1690,7 +1898,6 @@ export function PlayerProvider({ children }) {
     playPause,
     pendingTrack,
     currentTrack: pendingTrack,
-    activePlaySecondsRef,
     currentTitle,
     playerStatus,
     progress,
@@ -1699,6 +1906,8 @@ export function PlayerProvider({ children }) {
     trackQueue,
     setTrackQueue,
     recentlyPlayed,
+    activeContext,
+    recordPlaylistActivity,
     selectAndPlayTrack,
     playPlaylist,
     playNextTrack,

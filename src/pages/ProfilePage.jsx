@@ -19,7 +19,8 @@ import {
   fetchUserProfile, 
   saveUserProfile, 
   PROFILE_NAME_KEY, 
-  PROFILE_AVATAR_KEY 
+  PROFILE_AVATAR_KEY,
+  PLAYLIST_HISTORY_KEY 
 } from '../services/api';
 
 const TIMEFRAMES = [
@@ -186,6 +187,109 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
     setCustomAvatarInput('');
   };
 
+  // Build an aggregated map of all playlists (imported, local saved, and server synced)
+  const buildAggregatedPlaylistHistory = useCallback((serverPlaylists = [], serverHistory = []) => {
+    const allPlaylistsMap = new Map();
+
+    const mergePlaylist = (pl) => {
+      if (!pl) return;
+      const pid = String(pl.playlist_id || pl.playlistId || pl.id || '');
+      if (!pid) return;
+
+      const isImported = Boolean(
+        pl.isImported ||
+        pid.startsWith('imported_') ||
+        pl.author === 'Imported Playlist' ||
+        pl.artist === 'Imported Playlist'
+      );
+
+      const title = pl.title || pl.name || 'Untitled Playlist';
+      let tracks = [];
+      if (Array.isArray(pl.tracks)) {
+        tracks = pl.tracks;
+      } else if (typeof pl.tracks_json === 'string') {
+        try { tracks = JSON.parse(pl.tracks_json); } catch (_) {}
+      }
+
+      const firstCover = tracks[0]?.cover || tracks[0]?.thumbnail || pl.cover || pl.thumbnail || '/default-cover.svg';
+      const cleanCover = (!firstCover || firstCover === '/logo.svg') ? '/default-cover.svg' : firstCover;
+
+      const playedAt = Number(
+        pl.played_at ||
+        (pl.lastPlayedAt ? new Date(pl.lastPlayedAt).getTime() : 0) ||
+        pl.updated_at ||
+        0
+      );
+
+      const playCount = Number(pl.playCount || pl.play_count || 1);
+      const count = Number(pl.count || tracks.length || 0);
+
+      const existing = allPlaylistsMap.get(pid);
+      if (!existing) {
+        allPlaylistsMap.set(pid, {
+          id: `playlist_${pid}`,
+          type: 'playlist',
+          playlist_id: pid,
+          playlistId: pid,
+          title,
+          name: title,
+          artist: pl.artist || pl.author || (isImported ? 'Imported Playlist' : 'Playlist'),
+          author: pl.author || pl.artist || (isImported ? 'Imported Playlist' : 'Playlist'),
+          isImported,
+          cover: cleanCover,
+          thumbnail: cleanCover,
+          count,
+          tracks,
+          played_at: playedAt,
+          last_played_at: formatRelativeTime(playedAt),
+          playCount
+        });
+      } else {
+        const mostRecentPlayedAt = Math.max(existing.played_at || 0, playedAt || 0);
+        allPlaylistsMap.set(pid, {
+          ...existing,
+          title: title || existing.title,
+          name: title || existing.name,
+          cover: (cleanCover && cleanCover !== '/default-cover.svg') ? cleanCover : existing.cover,
+          thumbnail: (cleanCover && cleanCover !== '/default-cover.svg') ? cleanCover : existing.thumbnail,
+          count: count > 0 ? count : existing.count,
+          tracks: tracks.length > 0 ? tracks : existing.tracks,
+          isImported: isImported || existing.isImported,
+          played_at: mostRecentPlayedAt,
+          last_played_at: formatRelativeTime(mostRecentPlayedAt),
+          playCount: Math.max(existing.playCount || 0, playCount)
+        });
+      }
+    };
+
+    // 1. Ingest saved playlists (imported and native) from localStorage
+    try {
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      if (Array.isArray(saved)) {
+        saved.forEach(mergePlaylist);
+      }
+    } catch (_) {}
+
+    // 2. Ingest playlist history (recent played playlists) from localStorage
+    try {
+      const history = JSON.parse(localStorage.getItem(PLAYLIST_HISTORY_KEY) || '[]');
+      if (Array.isArray(history)) {
+        history.forEach(mergePlaylist);
+      }
+    } catch (_) {}
+
+    // 3. Ingest server playlists and server history items
+    if (Array.isArray(serverPlaylists)) {
+      serverPlaylists.forEach(mergePlaylist);
+    }
+    if (Array.isArray(serverHistory)) {
+      serverHistory.filter((i) => i.type === 'playlist' || i.playlist_id).forEach(mergePlaylist);
+    }
+
+    return Array.from(allPlaylistsMap.values())
+      .sort((a, b) => (b.played_at || 0) - (a.played_at || 0));
+  }, []);
+
   // Fetch listening stats from backend with local fallback
   const fetchProfileStats = useCallback(async () => {
     setLoading(true);
@@ -194,7 +298,22 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
       const res = await fetch(`/api/user/stats?user_uuid=${encodeURIComponent(userUuid)}&timeframe=${timeframe}`);
       if (res.ok) {
         const data = await res.json();
-        setStats(data);
+        
+        // Extract song history from server response
+        const serverSongs = (data.history || []).filter(item => item.type === 'song' || (!item.playlist_id && item.track_id));
+        
+        // Build aggregated playlist history from all sources (local recent, local saved/imported, and server)
+        const aggregatedPlaylists = buildAggregatedPlaylistHistory(data.playlists, data.history);
+        
+        // Interleave song history with recent playlist activity
+        const combinedHistory = [...serverSongs, ...aggregatedPlaylists]
+          .sort((a, b) => (b.played_at || 0) - (a.played_at || 0));
+
+        setStats({
+          ...data,
+          history: combinedHistory,
+          playlistHistory: aggregatedPlaylists
+        });
       } else {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -202,7 +321,6 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
       console.warn('[ProfilePage] Server stats fetch failed, generating fallback:', err);
       try {
         const localRecently = JSON.parse(localStorage.getItem('playloop_recently_played') || '[]');
-        const localPlaylists = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
         const localScrobbles = JSON.parse(localStorage.getItem('playloop_scrobbles') || '[]');
 
         const allPlays = Array.isArray(localScrobbles) && localScrobbles.length > 0 
@@ -253,7 +371,7 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
           .sort((a, b) => b.playCount - a.playCount)
           .slice(0, 5);
 
-        const songHistory = allPlays.slice(0, 25).map((p, idx) => ({
+        const songHistory = allPlays.slice(0, 30).map((p, idx) => ({
           id: `song_local_${idx}`,
           type: 'song',
           track_id: p.track_id,
@@ -265,20 +383,9 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
           last_played_at: formatRelativeTime(p.played_at || Date.now())
         }));
 
-        const playlistHistory = localPlaylists.slice(0, 10).map((pl, idx) => ({
-          id: `playlist_local_${idx}`,
-          type: 'playlist',
-          playlist_id: pl.playlistId,
-          title: pl.title,
-          artist: 'Imported Playlist',
-          count: Array.isArray(pl.tracks) ? pl.tracks.length : 0,
-          cover: pl.thumbnail || '/default-cover.svg',
-          played_at: pl.updated_at || Date.now(),
-          last_played_at: formatRelativeTime(pl.updated_at || Date.now())
-        }));
-
-        const combinedHistory = [...songHistory, ...playlistHistory]
-          .sort((a, b) => b.played_at - a.played_at);
+        const aggregatedPlaylists = buildAggregatedPlaylistHistory([], []);
+        const combinedHistory = [...songHistory, ...aggregatedPlaylists]
+          .sort((a, b) => (b.played_at || 0) - (a.played_at || 0));
 
         setStats({
           totalPlays,
@@ -287,7 +394,8 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
           listeningTimeFormatted: formatDurationText(totalSeconds),
           topArtists,
           topTracks,
-          history: combinedHistory
+          history: combinedHistory,
+          playlistHistory: aggregatedPlaylists
         });
       } catch (fallbackErr) {
         console.error('[ProfilePage] Fallback generation error:', fallbackErr);
@@ -296,11 +404,23 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
     } finally {
       setLoading(false);
     }
-  }, [userUuid, timeframe]);
+  }, [userUuid, timeframe, buildAggregatedPlaylistHistory]);
 
   useEffect(() => {
     fetchProfileStats();
   }, [fetchProfileStats, refreshKey]);
+
+  useEffect(() => {
+    const handlePlaylistActivity = () => {
+      fetchProfileStats();
+    };
+    window.addEventListener('playloop-playlist-activity', handlePlaylistActivity);
+    window.addEventListener('playloop-saved-playlists-updated', handlePlaylistActivity);
+    return () => {
+      window.removeEventListener('playloop-playlist-activity', handlePlaylistActivity);
+      window.removeEventListener('playloop-saved-playlists-updated', handlePlaylistActivity);
+    };
+  }, [fetchProfileStats]);
 
   // Handle Copy Sync ID
   const handleCopySyncId = async () => {
@@ -374,15 +494,16 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
 
   // Filter history
   const filteredHistory = useMemo(() => {
-    if (!Array.isArray(historyItems)) return [];
     if (historyFilter === 'songs') {
-      return historyItems.filter((item) => item.type === 'song');
+      return (stats?.history || []).filter((item) => item.type === 'song' || (!item.playlist_id && item.track_id));
     }
     if (historyFilter === 'playlists') {
-      return historyItems.filter((item) => item.type === 'playlist');
+      return (stats?.playlistHistory && stats.playlistHistory.length > 0)
+        ? stats.playlistHistory
+        : (stats?.history || []).filter((item) => item.type === 'playlist' || item.playlist_id);
     }
-    return historyItems;
-  }, [historyItems, historyFilter]);
+    return stats?.history || [];
+  }, [stats?.history, stats?.playlistHistory, historyFilter]);
 
   const isColdStart = !loading && totalPlays === 0 && historyItems.length === 0;
 
@@ -396,11 +517,11 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
           
           {/* Avatar & Display Name */}
-          <div className="flex items-center gap-5 min-w-0">
+          <div className="flex items-center gap-3.5 sm:gap-5 min-w-0 w-full sm:w-auto">
             {/* Avatar container with hover edit button */}
             <div 
               onClick={() => setIsAvatarModalOpen(true)}
-              className="relative w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer group shadow-md"
+              className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer group shadow-md"
               title="Change profile avatar"
             >
               <img
@@ -419,7 +540,7 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
               {isEditingName ? (
                 <form 
                   onSubmit={(e) => { e.preventDefault(); handleSaveName(); }}
-                  className="flex items-center gap-2 mb-1"
+                  className="flex items-center gap-2 mb-1 w-full min-w-0"
                 >
                   <input
                     type="text"
@@ -434,21 +555,22 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
                     }}
                     maxLength={32}
                     autoFocus
-                    className="bg-black border border-zinc-700 focus:border-white focus:outline-none text-white text-xl sm:text-2xl font-bold px-3 py-1 rounded-xl max-w-[220px] sm:max-w-[280px]"
+                    className="bg-black border border-zinc-700 focus:border-white focus:outline-none text-white text-lg sm:text-2xl font-bold px-3 py-1 rounded-xl flex-1 min-w-0 w-full sm:w-auto sm:max-w-[280px]"
                   />
                   <button
                     type="submit"
-                    className="p-1.5 rounded-full bg-white text-black hover:bg-zinc-200 transition cursor-pointer"
+                    onMouseDown={(e) => e.preventDefault()}
+                    className="shrink-0 p-1.5 rounded-full bg-white text-black hover:bg-zinc-200 transition cursor-pointer"
                     title="Save name"
                   >
                     <Check className="w-4 h-4" />
                   </button>
                 </form>
               ) : (
-                <div className="flex items-center gap-2 group/edit mb-1">
+                <div className="flex items-center gap-2 group/edit mb-1 min-w-0">
                   <h1 
                     onClick={() => { setTempName(displayName); setIsEditingName(true); }}
-                    className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight cursor-pointer hover:text-zinc-200 transition-colors truncate"
+                    className="text-xl sm:text-3xl font-extrabold text-white tracking-tight cursor-pointer hover:text-zinc-200 transition-colors truncate"
                     title="Click to edit name"
                   >
                     {displayName}
@@ -456,7 +578,7 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
                   <button
                     type="button"
                     onClick={() => { setTempName(displayName); setIsEditingName(true); }}
-                    className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition opacity-70 group-hover/edit:opacity-100 cursor-pointer"
+                    className="shrink-0 p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition opacity-70 group-hover/edit:opacity-100 cursor-pointer"
                     aria-label="Edit display name"
                     title="Edit display name"
                   >
