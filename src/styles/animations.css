@@ -226,4 +226,53 @@
   }
 }
 
+/* Smooth Lyric Line Transition Animation */
+@keyframes lyric-slide-in {
+  0% {
+    opacity: 0.35;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lyric-line-active {
+  animation: lyric-slide-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes lyric-fade-neighbor {
+  0% {
+    opacity: 0.18;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+}
+
+.lyric-line-neighbor {
+  animation: lyric-fade-neighbor 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes loops-lyrics-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loops-lyrics-container {
+  animation: loops-lyrics-fade 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+
 

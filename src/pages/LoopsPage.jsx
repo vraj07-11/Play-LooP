@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Repeat,
   Play, 
-  Pause,
+  Pause, 
   Volume2, 
   VolumeX, 
   Heart, 
@@ -15,10 +15,12 @@ import {
   Radio,
   RotateCw,
   ListMusic,
-  Compass
+  Compass,
+  Mic2
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchPopularSongs, getAudioUrl, saveLikedTrackApi } from '../services/api';
+import { fetchSyncedLyrics } from '../services/lyrics';
 
 const LOOP_DURATION = 30; // 30-second music loop preview
 
@@ -55,6 +57,12 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
   const [heartBurstPos, setHeartBurstPos] = useState({ x: 0, y: 0 });
   const [toastMessage, setToastMessage] = useState(null);
   const [requiresUserGesture, setRequiresUserGesture] = useState(false);
+  const [lyricsState, setLyricsState] = useState({
+    trackId: null,
+    lyrics: null,
+    loading: false
+  });
+  const [currentAudioTime, setCurrentAudioTime] = useState(0);
 
   const audioRef = useRef(null);
   const containerRef = useRef(null);
@@ -63,6 +71,7 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
   const toastTimeoutRef = useRef(null);
   const isFetchingMoreRef = useRef(false);
   const wheelLockRef = useRef(false);
+  const lyricsCacheRef = useRef(new Map());
 
   const likedTrackIdsRef = useRef(likedTrackIds);
   useEffect(() => {
@@ -194,6 +203,22 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
   }, [activeTag]);
 
   const currentTrack = tracks[currentIndex] || null;
+  const activeTrackId = currentTrack?.videoId || null;
+
+  // Immediate synchronous cache check to avoid flash of stale lyrics on slide/render
+  const cachedLyrics = activeTrackId ? lyricsCacheRef.current.get(activeTrackId) : null;
+  const isCached = activeTrackId ? lyricsCacheRef.current.has(activeTrackId) : false;
+
+  // Derive active lyrics and loading state: if track changed, old lyrics instantly disappear
+  const effectiveLyrics = (lyricsState.trackId === activeTrackId)
+    ? lyricsState.lyrics
+    : (isCached ? cachedLyrics : null);
+
+  const effectiveLyricsLoading = (lyricsState.trackId === activeTrackId)
+    ? lyricsState.loading
+    : (!isCached && Boolean(activeTrackId));
+
+  const hasLyrics = Boolean(effectiveLyrics && effectiveLyrics.syncedLyrics && effectiveLyrics.syncedLyrics.length > 0);
 
   // Auto-scroll queue item into view on desktop
   useEffect(() => {
@@ -211,6 +236,75 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
     if (dur <= 40) return 0;
     return Math.min(25, Math.floor(dur * 0.2));
   }, []);
+
+  // Lyrics fetching & caching for active track
+  useEffect(() => {
+    if (!isActiveView || !activeTrackId || !currentTrack) {
+      setLyricsState({ trackId: null, lyrics: null, loading: false });
+      return;
+    }
+
+    if (lyricsCacheRef.current.has(activeTrackId)) {
+      const cached = lyricsCacheRef.current.get(activeTrackId);
+      setLyricsState({ trackId: activeTrackId, lyrics: cached, loading: false });
+      return;
+    }
+
+    // Immediately trigger loading state for newly selected track
+    setLyricsState({ trackId: activeTrackId, lyrics: null, loading: true });
+
+    let isMounted = true;
+
+    fetchSyncedLyrics(currentTrack.title, currentTrack.artist, currentTrack.duration)
+      .then((data) => {
+        if (!isMounted) return;
+        const result = (data && data.syncedLyrics && data.syncedLyrics.length > 0) ? data : null;
+        lyricsCacheRef.current.set(activeTrackId, result);
+        setLyricsState({ trackId: activeTrackId, lyrics: result, loading: false });
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        lyricsCacheRef.current.set(activeTrackId, null);
+        setLyricsState({ trackId: activeTrackId, lyrics: null, loading: false });
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isActiveView, activeTrackId, currentTrack?.title, currentTrack?.artist, currentTrack?.duration]);
+
+  const activeLyricIndex = useMemo(() => {
+    if (!hasLyrics || !effectiveLyrics) return -1;
+    const list = effectiveLyrics.syncedLyrics;
+    let active = -1;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].time <= currentAudioTime) {
+        active = i;
+      } else {
+        break;
+      }
+    }
+    return active;
+  }, [hasLyrics, effectiveLyrics, currentAudioTime]);
+
+  const currentLine = useMemo(() => {
+    if (!hasLyrics || !effectiveLyrics || activeLyricIndex === -1) return null;
+    return effectiveLyrics.syncedLyrics[activeLyricIndex];
+  }, [hasLyrics, activeLyricIndex, effectiveLyrics]);
+
+  const prevLine = useMemo(() => {
+    if (!hasLyrics || !effectiveLyrics || activeLyricIndex <= 0) return null;
+    return effectiveLyrics.syncedLyrics[activeLyricIndex - 1];
+  }, [hasLyrics, activeLyricIndex, effectiveLyrics]);
+
+  const nextLine = useMemo(() => {
+    if (!hasLyrics || !effectiveLyrics) return null;
+    if (activeLyricIndex === -1) return effectiveLyrics.syncedLyrics[0];
+    if (activeLyricIndex < effectiveLyrics.syncedLyrics.length - 1) {
+      return effectiveLyrics.syncedLyrics[activeLyricIndex + 1];
+    }
+    return null;
+  }, [hasLyrics, activeLyricIndex, effectiveLyrics]);
 
   // Audio management: load track when index or track changes (NOT on mute toggle)
   useEffect(() => {
@@ -239,7 +333,9 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
 
     const streamUrl = currentTrack.streamUrl || getAudioUrl(currentTrack.videoId);
     audio.src = streamUrl;
-    audio.currentTime = getSampleStartTime(currentTrack);
+    const startTime = getSampleStartTime(currentTrack);
+    audio.currentTime = startTime;
+    setCurrentAudioTime(startTime);
     audio.muted = isMutedRef.current;
 
     setPlaybackProgress(0);
@@ -258,11 +354,10 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
         });
     }
 
-    const startTime = getSampleStartTime(currentTrack);
-
     const handleTimeUpdate = () => {
       const current = audio.currentTime;
       const elapsed = current - startTime;
+      setCurrentAudioTime(current);
       if (elapsed >= LOOP_DURATION || audio.ended) {
         audio.currentTime = startTime;
         audio.play().catch(() => {});
@@ -499,13 +594,16 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
 
   // Mobile swipe
   const touchStartY = useRef(null);
+  const touchStartX = useRef(null);
   const handleTouchStart = (e) => {
     touchStartY.current = e.touches[0].clientY;
+    touchStartX.current = e.touches[0].clientX;
   };
   const handleTouchEnd = (e) => {
     if (touchStartY.current === null) return;
     const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-    if (Math.abs(deltaY) > 40) {
+    const deltaX = touchStartX.current !== null ? Math.abs(e.changedTouches[0].clientX - touchStartX.current) : 0;
+    if (Math.abs(deltaY) > 40 && Math.abs(deltaY) > deltaX) {
       if (deltaY < 0) {
         goToNext();
       } else {
@@ -513,13 +611,14 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
       }
     }
     touchStartY.current = null;
+    touchStartX.current = null;
   };
 
   const isCurrentLiked = currentTrack && likedTrackIds.includes(currentTrack.videoId);
 
   return (
     <div 
-      className="relative w-full h-[calc(100dvh-130px)] md:h-[calc(100vh-135px)] flex items-center justify-center gap-6 lg:gap-8 overflow-hidden bg-black select-none p-1 sm:p-2 md:p-3 lg:px-6 xl:px-10"
+      className="relative w-full h-full flex items-center justify-center gap-6 lg:gap-8 overflow-hidden bg-black select-none p-0 sm:p-3 md:p-4 lg:p-6 touch-none"
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -538,10 +637,10 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
         />
       )}
 
-      {/* Main Reel Frame (Mobile Edge-to-Edge / Desktop Centered Card) */}
+      {/* Main Reel Frame (Mobile Edge-to-Edge / Desktop Centered Card matching Up Next size) */}
       <div 
         ref={containerRef}
-        className="relative w-full h-full max-w-full md:max-w-[400px] lg:max-w-[420px] rounded-2xl md:rounded-3xl overflow-hidden border border-zinc-800/80 bg-zinc-950 shadow-[0_12px_45px_rgba(0,0,0,0.85)] z-10 shrink-0"
+        className="relative w-full h-full max-w-full md:w-[400px] lg:w-[420px] md:max-h-[820px] rounded-none sm:rounded-2xl md:rounded-3xl overflow-hidden border-0 sm:border border-zinc-800/80 bg-zinc-950 shadow-[0_12px_45px_rgba(0,0,0,0.85)] z-10 shrink-0"
       >
         {/* Pinned Top Navigation Overlay (Snippet Progress, Loops Brand, Mute, and Mobile Language Filter Chips) */}
         <div className="absolute top-0 left-0 right-0 z-30 px-3.5 sm:px-4 pt-2.5 pb-2 flex flex-col gap-2 pointer-events-none bg-gradient-to-b from-black/85 via-black/45 to-transparent">
@@ -639,33 +738,53 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
                     <img 
                       src={track.thumbnail || '/default-cover.svg'} 
                       alt="" 
-                      className="w-full h-full object-cover filter blur-2xl scale-125 opacity-30 transition-all duration-700" 
+                      className="w-full h-full object-cover filter blur-3xl scale-150 opacity-50 transition-all duration-700" 
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/25 to-black/95" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/25 to-black/95" />
+                    <div className="absolute inset-0 bg-radial from-transparent via-black/20 to-black/80" />
                   </div>
 
                   {/* Spacer for Top Pinned Header */}
-                  <div className="pt-24 lg:pt-14 shrink-0 pointer-events-none" />
+                  <div className={`shrink-0 pointer-events-none transition-all duration-300 ${isCardActive && hasLyrics ? 'pt-24 lg:pt-20' : 'pt-24 lg:pt-14'}`} />
 
-                  {/* Center Visual: Vinyl / Cover Art with animated Equalizer */}
-                  <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-3 sm:p-5 pointer-events-none min-h-0">
-                    <div className="relative w-44 h-44 sm:w-52 sm:h-52 md:w-56 md:h-56 flex items-center justify-center">
+                  {/* Center Visual: Vinyl / Cover Art with animated Equalizer & Synced Lyrics */}
+                  <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-2 sm:p-4 pointer-events-none min-h-0">
+                    {/* Vinyl + Artwork Frame (Scales appropriately on desktop when lyrics are present to prevent header overlap) */}
+                    <div className={`relative flex items-center justify-center transition-all duration-300 ${
+                      isCardActive && hasLyrics 
+                        ? 'w-44 h-44 sm:w-52 sm:h-52 lg:w-44 lg:h-44' 
+                        : 'w-44 h-44 sm:w-52 sm:h-52 md:w-56 md:h-56'
+                    }`}>
                       {/* Vinyl Record Shadow / Peek Animation */}
                       <div 
-                        className={`absolute w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-full bg-zinc-900 border-4 border-zinc-950/80 shadow-2xl flex items-center justify-center transition-transform duration-700 ${
-                          isCardActive && isPlaying ? 'translate-x-8 sm:translate-x-10 rotate-45' : 'translate-x-0'
+                        className={`absolute rounded-full bg-zinc-900 border-4 border-zinc-950/90 shadow-2xl flex items-center justify-center transition-all duration-700 ease-out ${
+                          isCardActive && hasLyrics
+                            ? 'w-32 h-32 sm:w-38 sm:h-38 lg:w-32 lg:h-32'
+                            : 'w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48'
+                        } ${
+                          isCardActive && isPlaying 
+                            ? (isCardActive && hasLyrics ? 'translate-x-5 sm:translate-x-6 lg:translate-x-6 rotate-45' : 'translate-x-8 sm:translate-x-10 rotate-45') 
+                            : 'translate-x-0'
                         }`}
                       >
-                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-white/10 flex items-center justify-center bg-zinc-950">
-                          <Disc3 className={`w-8 h-8 sm:w-10 sm:h-10 text-zinc-400 ${isCardActive && isPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '6s' }} />
+                        <div className={`rounded-full border-2 border-white/10 flex items-center justify-center bg-zinc-950 transition-all duration-300 ${
+                          isCardActive && hasLyrics ? 'w-11 h-11 sm:w-13 sm:h-13 lg:w-11 lg:h-11' : 'w-14 h-14 sm:w-16 sm:h-16'
+                        }`}>
+                          <Disc3 className={`text-zinc-400 ${isCardActive && isPlaying ? 'animate-spin' : ''} ${
+                            isCardActive && hasLyrics ? 'w-6 h-6 sm:w-8 sm:h-8 lg:w-6 lg:h-6' : 'w-8 h-8 sm:w-10 sm:h-10'
+                          }`} style={{ animationDuration: '6s' }} />
                         </div>
                       </div>
 
                       {/* Front Album Artwork */}
-                      <div className="relative w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-2xl overflow-hidden shadow-[0_16px_36px_rgba(0,0,0,0.8)] border border-white/15 bg-zinc-900">
+                      <div className={`relative rounded-2xl md:rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.9)] border border-white/20 bg-zinc-900 transition-all duration-300 ${
+                        isCardActive && hasLyrics
+                          ? 'w-36 h-36 sm:w-44 sm:h-44 lg:w-36 lg:h-36'
+                          : 'w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48'
+                      }`}>
                         <img 
                           src={track.thumbnail || '/default-cover.svg'} 
-                          alt={track.title}
+                          alt={track.title} 
                           className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
                         />
                         
@@ -680,9 +799,11 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
                       </div>
                     </div>
 
-                    {/* Animated Equalizer Waveform Bars when playing */}
-                    <div className="flex items-center gap-1 mt-3 sm:mt-4 h-5">
-                      {[40, 75, 100, 60, 90, 45, 80, 65, 95, 50, 85, 30].map((height, i) => (
+                    {/* Animated Equalizer Waveform Bars */}
+                    <div className={`flex items-center gap-1 h-5 transition-all duration-300 ${
+                      isCardActive && hasLyrics ? 'mt-3 sm:mt-4' : 'mt-4 sm:mt-5'
+                    }`}>
+                      {[40, 75, 100, 60, 90, 45, 80, 65, 95, 50, 85, 30, 70, 90, 60, 40].slice(0, (isCardActive && hasLyrics) ? 12 : 16).map((height, i) => (
                         <span
                           key={i}
                           className={`w-1 bg-white/90 rounded-full transition-all duration-300 ${
@@ -696,6 +817,41 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
                         />
                       ))}
                     </div>
+
+                    {/* Center Area: Live Synced Lyrics (Downside) OR Loading indicator when fetching */}
+                    {isCardActive && hasLyrics ? (
+                      <div className="w-full max-w-[360px] px-4 mt-4 sm:mt-5 lg:mt-4 flex flex-col items-center text-center gap-2 sm:gap-2.5 transition-all duration-500 loops-lyrics-container">
+                        {prevLine && (
+                          <p 
+                            key={`prev-${prevLine?.time ?? activeLyricIndex}`}
+                            className="lyric-line-neighbor text-xs sm:text-sm text-white/40 line-clamp-1 font-medium select-none"
+                          >
+                            {prevLine.text}
+                          </p>
+                        )}
+                        <p 
+                          key={`curr-${currentLine?.time ?? activeLyricIndex}`}
+                          className="lyric-line-active text-base sm:text-lg font-bold text-white tracking-normal leading-relaxed drop-shadow-[0_2px_14px_rgba(0,0,0,0.9)] line-clamp-2 select-none px-4 py-2 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10"
+                        >
+                          {currentLine ? currentLine.text : (nextLine ? nextLine.text : "♪ ♪ ♪")}
+                        </p>
+                        {nextLine && activeLyricIndex !== -1 && (
+                          <p 
+                            key={`next-${nextLine?.time ?? activeLyricIndex}`}
+                            className="lyric-line-neighbor text-xs sm:text-sm text-white/40 line-clamp-1 font-medium select-none"
+                          >
+                            {nextLine.text}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      isCardActive && effectiveLyricsLoading ? (
+                        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 backdrop-blur-md border border-white/10 text-zinc-300 text-xs mt-6 transition-all duration-300 shadow-sm animate-pulse loops-lyrics-container">
+                          <Disc3 className="w-3.5 h-3.5 text-zinc-400 animate-spin" />
+                          <span className="font-medium tracking-wide">Loading lyrics...</span>
+                        </div>
+                      ) : null
+                    )}
                   </div>
 
                   {/* Tap to Unmute Overlay Banner */}
@@ -837,8 +993,8 @@ export default function LoopsPage({ setCurrentView, isActiveView = true }) {
         </button>
       </div>
 
-      {/* DESKTOP COMPANION PANEL: Uses desktop space for Up Next queue, language chips, and keyboard tips */}
-      <div className="hidden lg:flex flex-col w-[350px] xl:w-[410px] h-full max-h-[96%] rounded-3xl border border-zinc-800/80 bg-zinc-950/70 backdrop-blur-xl p-5 shadow-2xl z-10 shrink-0 justify-between">
+      {/* DESKTOP COMPANION PANEL: Uses desktop space for Up Next queue, language chips, and keyboard tips (exact same size as player card) */}
+      <div className="hidden lg:flex flex-col w-[400px] lg:w-[420px] h-full lg:max-h-[820px] rounded-3xl border border-zinc-800/80 bg-zinc-950/70 backdrop-blur-xl p-5 shadow-[0_12px_45px_rgba(0,0,0,0.85)] z-10 shrink-0 justify-between">
         {/* Panel Header */}
         <div>
           <div className="flex items-center justify-between pb-3.5 border-b border-zinc-800/80">

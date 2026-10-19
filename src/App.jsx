@@ -223,11 +223,13 @@ function App() {
     }));
   }, [currentView]);
 
+  const isLoopsView = currentView === 'loops' || currentView === 'samples';
+
   const { pullDistance, isRefreshing } = usePullToRefresh({
     containerRef: contentRef,
     onRefresh: handleRefreshCurrentPage,
     threshold: 65,
-    enabled: languagesReady
+    enabled: languagesReady && !isLoopsView
   });
 
   const { getTabIndex, swipeHandlers } = useSwipeTabs({
@@ -272,7 +274,7 @@ function App() {
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} currentView={currentView} />
             <section 
               ref={contentRef}
-              className="app-content select-none touch-pan-y relative" 
+              className={`app-content select-none relative ${isLoopsView ? 'loops-active' : 'touch-pan-y'}`} 
               aria-live="polite"
               {...swipeHandlers}
             >
@@ -282,7 +284,7 @@ function App() {
                 threshold={65}
                 currentView={currentView}
               />
-              <div className="w-full min-h-full overflow-hidden">
+              <div className={`w-full min-h-full overflow-hidden ${isLoopsView ? 'h-full' : ''}`}>
                 <ErrorBoundary>
                   <div className={`w-full min-h-full ${currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked' ? `block ${slideClass}` : 'hidden'}`}>
                     <Home setCurrentView={handleSetCurrentView} refreshKey={pageRefreshKeys.home} />
@@ -290,8 +292,8 @@ function App() {
 
                   <Suspense fallback={<div className="w-full min-h-full" />}>
                     {(visitedViews.has('loops') || visitedViews.has('samples')) && (
-                      <div className={`w-full min-h-full ${currentView === 'loops' || currentView === 'samples' ? `block ${slideClass}` : 'hidden'}`}>
-                        <LoopsPage setCurrentView={handleSetCurrentView} isActiveView={currentView === 'loops' || currentView === 'samples'} />
+                      <div className={`w-full ${isLoopsView ? 'h-full' : 'min-h-full'} ${currentView === 'loops' || currentView === 'samples' ? `block ${slideClass}` : 'hidden'}`}>
+                        <LoopsPage setCurrentView={handleSetCurrentView} isActiveView={isLoopsView} />
                       </div>
                     )}
 
