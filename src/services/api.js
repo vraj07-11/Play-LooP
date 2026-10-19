@@ -139,9 +139,16 @@ export async function saveUserProfile(profileData) {
   try {
     const payload = {
       user_uuid: profileData.user_uuid || getUserUuid(),
-      display_name: profileData.display_name || 'Loopner',
-      avatar_url: profileData.avatar_url || ''
+      display_name: profileData.display_name !== undefined ? profileData.display_name : 'Loopner',
+      avatar_url: profileData.avatar_url !== undefined ? profileData.avatar_url : ''
     };
+    if (typeof window !== 'undefined') {
+      try {
+        if (payload.display_name) localStorage.setItem(PROFILE_NAME_KEY, payload.display_name);
+        if (payload.avatar_url !== undefined) localStorage.setItem(PROFILE_AVATAR_KEY, payload.avatar_url);
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent('playloop-profile-updated', { detail: payload }));
+    }
     const res = await fetchApi('/api/user/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -558,4 +565,46 @@ export async function fetchPopularArtists(languages = [], limit = 10) {
   }
 
   return pool.slice(0, limit);
+}
+
+export async function savePlaylistApi(playlist) {
+  try {
+    const userUuid = getUserUuid();
+    if (!userUuid || !playlist) return;
+    const pid = String(playlist.playlistId || playlist.id || '');
+    const title = playlist.title || playlist.name || 'Untitled Playlist';
+    if (!pid) return;
+    return await fetchApi('/api/playlist/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: userUuid,
+        playlist: {
+          id: pid,
+          name: title,
+          tracks: playlist.tracks || [],
+          updated_at: Date.now()
+        }
+      })
+    });
+  } catch (e) {
+    console.warn('savePlaylistApi failed:', e);
+  }
+}
+
+export async function unsavePlaylistApi(playlistId) {
+  try {
+    const userUuid = getUserUuid();
+    if (!userUuid || !playlistId) return;
+    return await fetchApi('/api/playlist/unsave', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: userUuid,
+        id: String(playlistId)
+      })
+    });
+  } catch (e) {
+    console.warn('unsavePlaylistApi failed:', e);
+  }
 }

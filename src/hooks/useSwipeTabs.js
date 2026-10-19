@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { navigateBack } from '../utils/navigationHistory';
 
-export const MOBILE_TABS = ['home', 'search', 'library', 'profile', 'settings'];
+export const MOBILE_TABS = ['home', 'search', 'library', 'settings'];
 
 export function useSwipeTabs({
   currentView,
@@ -14,8 +14,7 @@ export function useSwipeTabs({
   const getTabIndex = useCallback((view) => {
     if (view === 'liked-songs' || view === 'liked') return 0;
     if (view === 'download' || view === 'Download') return 2;
-    const idx = MOBILE_TABS.indexOf(view);
-    return idx !== -1 ? idx : 0;
+    return MOBILE_TABS.indexOf(view);
   }, []);
 
   const handleTouchStart = useCallback((e) => {
@@ -121,6 +120,7 @@ export function useSwipeTabs({
     }
 
     const currentIndex = getTabIndex(currentView);
+    if (currentIndex === -1) return;
 
     if (isSwipingLeft) {
       // Swiping LEFT -> Advance to next tab (forward)

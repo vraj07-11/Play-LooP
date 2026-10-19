@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { getAudioUrl } from '../services/api';
+import { getAudioUrl, savePlaylistApi, unsavePlaylistApi } from '../services/api';
 import { shareTrack } from '../services/shareService';
 
 export default function FullPlayer({
@@ -28,7 +28,7 @@ export default function FullPlayer({
   hasNext,
   formatTime
 }) {
-  const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime, setTrackQueue, setIsRightSidebarOpen } = usePlayer();
+  const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime, setTrackQueue, setIsRightSidebarOpen, activeContext } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(initialShowLyrics);
   const [coverAnim, setCoverAnim] = useState('');
   const [toastMessage, setToastMessage] = useState('');
@@ -51,8 +51,12 @@ export default function FullPlayer({
         const liked = JSON.parse(localStorage.getItem('playloop_liked_tracks') || '[]');
         setIsLiked(liked.includes(pendingTrack.videoId));
 
-        const saved = JSON.parse(localStorage.getItem('playloop_saved_tracks') || '[]');
-        setIsSaved(saved.some(t => (t.videoId || t) === pendingTrack.videoId));
+        const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+        if (activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs') {
+          setIsSaved(saved.some(p => String(p.playlistId || p.id) === String(activeContext.id)));
+        } else {
+          setIsSaved(liked.includes(pendingTrack.videoId));
+        }
       } catch (e) {
         setIsLiked(false);
         setIsSaved(false);
@@ -61,8 +65,12 @@ export default function FullPlayer({
 
     checkLikedAndSaved();
     window.addEventListener('playloop-liked-songs-updated', checkLikedAndSaved);
-    return () => window.removeEventListener('playloop-liked-songs-updated', checkLikedAndSaved);
-  }, [pendingTrack]);
+    window.addEventListener('playloop-saved-playlists-updated', checkLikedAndSaved);
+    return () => {
+      window.removeEventListener('playloop-liked-songs-updated', checkLikedAndSaved);
+      window.removeEventListener('playloop-saved-playlists-updated', checkLikedAndSaved);
+    };
+  }, [pendingTrack, activeContext]);
 
   const handleLike = () => {
     if (!pendingTrack?.videoId) return;
@@ -105,23 +113,43 @@ export default function FullPlayer({
   };
 
   const handleSave = () => {
-    if (!pendingTrack?.videoId) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem('playloop_saved_tracks') || '[]');
-      let updated;
-      if (isSaved) {
-        updated = saved.filter(t => (t.videoId || t) !== pendingTrack.videoId);
-        setIsSaved(false);
-        showToast("Removed from Your Library");
-      } else {
-        updated = [...saved, pendingTrack];
-        setIsSaved(true);
-        showToast("Added to Library");
+    // If playing from a playlist, toggle saving the playlist to Your Library
+    if (activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs') {
+      const pid = String(activeContext.id);
+      try {
+        const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+        const existsIndex = saved.findIndex(p => String(p.playlistId || p.id) === pid);
+        if (existsIndex >= 0) {
+          saved.splice(existsIndex, 1);
+          setIsSaved(false);
+          showToast("Removed playlist from Your Library");
+          unsavePlaylistApi(pid).catch(() => {});
+        } else {
+          const playlistToSave = {
+            playlistId: pid,
+            id: pid,
+            title: activeContext.title || activeContext.name || 'Playlist',
+            author: activeContext.author || activeContext.artist || 'Play LooP',
+            thumbnail: activeContext.thumbnail || activeContext.cover || pendingTrack?.thumbnail,
+            description: activeContext.description || '',
+            count: activeContext.tracks ? activeContext.tracks.length : (activeContext.count || 0),
+            tracks: activeContext.tracks || []
+          };
+          saved.unshift(playlistToSave);
+          setIsSaved(true);
+          showToast("Saved playlist to Your Library");
+          savePlaylistApi(playlistToSave).catch(() => {});
+        }
+        localStorage.setItem('playloop_saved_playlists', JSON.stringify(saved));
+        window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+      } catch (e) {
+        console.error(e);
       }
-      localStorage.setItem('playloop_saved_tracks', JSON.stringify(updated));
-    } catch (e) {
-      setIsSaved(!isSaved);
+      return;
     }
+
+    // Otherwise, toggle saving the song to Liked Songs (in Your Library)
+    handleLike();
   };
 
   const handleDownload = async () => {
@@ -853,10 +881,14 @@ export default function FullPlayer({
               type="button"
               onClick={handleSave}
               className="p-2 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-              title={isSaved ? "Saved in Playlist" : "Save to Playlist"}
-              aria-label="Save to Playlist"
+              title={
+                activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs'
+                  ? (isSaved ? "Saved in Your Library" : "Save Playlist to Library")
+                  : (isLiked ? "Saved in Liked Songs" : "Save to Liked Songs")
+              }
+              aria-label="Save to Library"
             >
-              {isSaved ? (
+              {(activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs' ? isSaved : isLiked) ? (
                 <Check className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
               ) : (
                 <Bookmark className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white" />

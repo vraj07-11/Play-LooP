@@ -259,11 +259,13 @@ export function PlayerProvider({ children }) {
       localStorage.setItem(PLAYLIST_HISTORY_KEY, JSON.stringify(historyList.slice(0, 50)));
 
       // Also update playloop_saved_playlists if present
+      let wasInSavedList = false;
       try {
         const savedList = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
         if (Array.isArray(savedList)) {
           const sIdx = savedList.findIndex((p) => String(p.playlistId) === id);
           if (sIdx >= 0) {
+            wasInSavedList = true;
             savedList[sIdx] = {
               ...savedList[sIdx],
               lastPlayedAt: nowIso,
@@ -276,7 +278,9 @@ export function PlayerProvider({ children }) {
       } catch (_) {}
 
       window.dispatchEvent(new CustomEvent('playloop-playlist-activity', { detail: historyEntry }));
-      window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+      if (wasInSavedList) {
+        window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+      }
 
       // Sync activity to backend
       const uuid = getUserUuid();

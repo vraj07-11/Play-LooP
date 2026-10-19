@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Link, FileText, Upload, CheckCircle, AlertCircle, Trash2, Check, RefreshCw, Copy } from 'lucide-react';
-import { fetchApi, getUserUuid, LAST_SYNC_KEY, USER_UUID_KEY } from '../services/api';
+import { Download, Link, FileText, Upload, CheckCircle, AlertCircle, Trash2, Check, RefreshCw, Copy, User, ChevronRight } from 'lucide-react';
+import { fetchApi, getUserUuid, fetchUserProfile, LAST_SYNC_KEY, USER_UUID_KEY, PROFILE_NAME_KEY, PROFILE_AVATAR_KEY } from '../services/api';
 import { usePlayer } from '../context/PlayerContext';
 import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
@@ -66,6 +66,63 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
   const [idCopied, setIdCopied] = useState(false);
   const [isLinkingDevice, setIsLinkingDevice] = useState(false);
   const [linkMessage, setLinkMessage] = useState('');
+
+  // Profile Preview State
+  const [profileName, setProfileName] = useState(() => {
+    try {
+      return localStorage.getItem(PROFILE_NAME_KEY) || 'Loopner';
+    } catch (_) {
+      return 'Loopner';
+    }
+  });
+  const [avatarUrl, setAvatarUrl] = useState(() => {
+    try {
+      return localStorage.getItem(PROFILE_AVATAR_KEY) || '';
+    } catch (_) {
+      return '';
+    }
+  });
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchUserProfile(getUserUuid())
+      .then((profile) => {
+        if (!isMounted || !profile) return;
+        if (profile.display_name) {
+          setProfileName(profile.display_name);
+          try {
+            localStorage.setItem(PROFILE_NAME_KEY, profile.display_name);
+          } catch (_) {}
+        }
+        if (profile.avatar_url !== undefined) {
+          setAvatarUrl(profile.avatar_url || '');
+          setAvatarError(false);
+          try {
+            localStorage.setItem(PROFILE_AVATAR_KEY, profile.avatar_url || '');
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
+    const handleProfileUpdate = (e) => {
+      const name = e?.detail?.display_name !== undefined
+        ? e.detail.display_name
+        : (localStorage.getItem(PROFILE_NAME_KEY) || 'Loopner');
+      const url = e?.detail?.avatar_url !== undefined
+        ? e.detail.avatar_url
+        : (localStorage.getItem(PROFILE_AVATAR_KEY) || '');
+      setProfileName(name);
+      setAvatarUrl(url || '');
+      setAvatarError(false);
+    };
+
+    window.addEventListener('playloop-profile-updated', handleProfileUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('playloop-profile-updated', handleProfileUpdate);
+    };
+  }, [refreshKey]);
 
   useEffect(() => {
     try {
@@ -436,12 +493,63 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
     }
   };
 
+  const handleNavigateToProfile = () => {
+    if (typeof setCurrentView === 'function') {
+      setCurrentView('profile');
+    }
+    window.location.hash = '#/profile';
+  };
+
   return (
     <div className="max-w-[1200px] mx-auto space-y-6 sm:space-y-8 pb-24 px-4 sm:px-6 lg:px-8 mt-6">
       {/* Play LooP Page Header */}
       <div className="page-header">
         <h2>Settings</h2>
         <p>Manage your Play LooP preferences and import music from external apps.</p>
+      </div>
+
+      {/* --- USER PROFILE PREVIEW CARD --- */}
+      <div
+        onClick={handleNavigateToProfile}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleNavigateToProfile();
+          }
+        }}
+        className="group relative flex items-center justify-between p-3.5 sm:p-4.5 rounded-2xl bg-zinc-900/80 hover:bg-zinc-850/90 border border-zinc-800/80 hover:border-zinc-700/80 transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl select-none"
+      >
+        <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-zinc-800 border border-white/10 shrink-0 flex items-center justify-center shadow-md">
+            {avatarUrl && !avatarError ? (
+              <img
+                src={avatarUrl}
+                alt={profileName}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onError={() => setAvatarError(true)}
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center text-white font-bold text-lg sm:text-xl">
+                {profileName ? profileName.charAt(0).toUpperCase() : <User className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400" />}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base sm:text-lg font-bold text-white truncate tracking-tight group-hover:text-white transition-colors">
+              {profileName}
+            </h3>
+            <p className="text-xs text-zinc-400 truncate flex items-center gap-1.5 mt-0.5">
+              <span>View Profile &amp; Listening Stats</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-zinc-400 group-hover:text-white transition-colors pl-2 shrink-0">
+          <span className="text-xs font-medium text-zinc-400 group-hover:text-zinc-200 hidden sm:inline">View profile</span>
+          <ChevronRight className="w-5 h-5 transition-transform duration-200 group-hover:translate-x-0.5" />
+        </div>
       </div>
 
       {/* --- IMPORT PLAYLISTS CARD --- */}

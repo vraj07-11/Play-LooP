@@ -11,7 +11,8 @@ import {
   Pencil, 
   Camera, 
   X, 
-  ExternalLink 
+  ExternalLink,
+  User 
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { 
@@ -145,6 +146,7 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
           try {
             localStorage.setItem(PROFILE_AVATAR_KEY, profile.avatar_url || '');
           } catch (_) {}
+          window.dispatchEvent(new CustomEvent('playloop-profile-updated', { detail: profile }));
         }
       })
       .catch((err) => {
@@ -431,12 +433,16 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
               className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-900 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer group shadow-md"
               title="Change profile avatar"
             >
-              <img
-                src={avatarUrl || '/default-cover.svg'}
-                alt={displayName}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                onError={(e) => { e.target.src = '/default-cover.svg'; }}
-              />
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  onError={() => setAvatarUrl('')}
+                />
+              ) : (
+                <User className="w-8 h-8 sm:w-10 sm:h-10 text-zinc-400 group-hover:text-white transition-colors" />
+              )}
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <Camera className="w-5 h-5 text-white" />
               </div>
@@ -982,21 +988,32 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
                   onChange={(e) => setCustomAvatarInput(e.target.value)}
                   className="w-full bg-black border border-zinc-800 focus:border-white focus:outline-none text-white text-xs sm:text-sm px-3.5 py-2.5 rounded-xl placeholder-zinc-500"
                 />
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsAvatarModalOpen(false)}
-                    className="bg-zinc-800/80 text-zinc-300 rounded-full px-4 py-1.5 text-sm hover:text-white border border-transparent hover:border-zinc-700 transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!customAvatarInput.trim()}
-                    className="bg-white text-black font-medium rounded-full px-5 py-1.5 text-sm hover:bg-zinc-200 transition disabled:opacity-40 cursor-pointer"
-                  >
-                    Apply URL
-                  </button>
+                <div className="flex items-center justify-between gap-2 pt-2">
+                  {avatarUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAvatar('')}
+                      className="text-red-400 hover:text-red-300 text-xs sm:text-sm font-medium transition cursor-pointer"
+                    >
+                      Remove Avatar
+                    </button>
+                  ) : <div />}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAvatarModalOpen(false)}
+                      className="bg-zinc-800/80 text-zinc-300 rounded-full px-4 py-1.5 text-sm hover:text-white border border-transparent hover:border-zinc-700 transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={!customAvatarInput.trim()}
+                      className="bg-white text-black font-medium rounded-full px-5 py-1.5 text-sm hover:bg-zinc-200 transition disabled:opacity-40 cursor-pointer"
+                    >
+                      Apply URL
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

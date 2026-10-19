@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS } from '../services/api.js';
+import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS, savePlaylistApi, unsavePlaylistApi } from '../services/api.js';
 import Carousel from '../components/Carousel';
 import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
 import { navigateBack } from '../utils/navigationHistory';
@@ -298,9 +298,13 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   }, [handleOpenLikedSongs]);
 
   function checkIfSaved(playlistId) {
+    if (!playlistId) {
+      setIsSaved(false);
+      return;
+    }
     try {
       const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-      setIsSaved(saved.some(p => p.playlistId === playlistId));
+      setIsSaved(saved.some(p => String(p.playlistId || p.id) === String(playlistId)));
     } catch (e) {
       setIsSaved(false);
     }
@@ -312,7 +316,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     if (!playlistId) return false;
     try {
       const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-      return saved.some(p => p.playlistId === playlistId);
+      return saved.some(p => String(p.playlistId || p.id) === String(playlistId));
     } catch (e) {
       return false;
     }
@@ -321,36 +325,44 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   useEffect(() => {
     const handleSavedUpdated = () => {
       setSavedPlaylistsVersion(v => v + 1);
+      if (selectedPlaylistRef.current?.playlistId) {
+        checkIfSaved(selectedPlaylistRef.current.playlistId);
+      }
     };
     window.addEventListener('playloop-saved-playlists-updated', handleSavedUpdated);
     return () => window.removeEventListener('playloop-saved-playlists-updated', handleSavedUpdated);
   }, []);
 
   const handleToggleSave = (targetPlaylist) => {
-    const target = targetPlaylist || selectedPlaylist;
+    const target = (targetPlaylist && targetPlaylist.playlistId) ? targetPlaylist : selectedPlaylist;
     if (!target || !target.playlistId) return;
     try {
+      const pid = String(target.playlistId);
       const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-      const existsIndex = saved.findIndex(p => p.playlistId === target.playlistId);
+      const existsIndex = saved.findIndex(p => String(p.playlistId || p.id) === pid);
       if (existsIndex >= 0) {
         saved.splice(existsIndex, 1);
-        if (selectedPlaylist?.playlistId === target.playlistId) {
+        if (selectedPlaylist && String(selectedPlaylist.playlistId) === pid) {
           setIsSaved(false);
         }
+        unsavePlaylistApi(pid).catch(() => {});
       } else {
         const playlistToSave = {
-          playlistId: target.playlistId,
-          title: target.title,
+          playlistId: pid,
+          id: pid,
+          title: target.title || target.name || 'Playlist',
           author: target.author || target.artist || 'Play LooP',
-          thumbnail: target.thumbnail,
-          description: target.description,
-          count: target.tracks ? target.tracks.length : target.count,
+          thumbnail: target.thumbnail || target.cover,
+          description: target.description || '',
+          count: target.tracks ? target.tracks.length : (target.count || 0),
+          tracks: target.tracks || [],
           isArtist: target.isArtist
         };
         saved.unshift(playlistToSave);
-        if (selectedPlaylist?.playlistId === target.playlistId) {
+        if (selectedPlaylist && String(selectedPlaylist.playlistId) === pid) {
           setIsSaved(true);
         }
+        savePlaylistApi(playlistToSave).catch(() => {});
       }
       localStorage.setItem('playloop_saved_playlists', JSON.stringify(saved));
       window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
@@ -741,9 +753,25 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                 <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play
               </button>
               {!selectedPlaylist.isLikedPlaylist && (
-                <button onClick={handleToggleSave} className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-zinc-600 hover:border-zinc-400 text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px]">
-                  {selectedPlaylist.isArtist ? 'Follow' : (
-                    isSaved ? <span className="text-zinc-300">Saved</span> : <><span className="text-lg leading-none">+</span> Save</>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSave()}
+                  className={`inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px] ${
+                    isSaved
+                      ? 'border-emerald-500/50 hover:border-red-500/70 hover:text-red-400 group/savebtn'
+                      : 'border-zinc-600 hover:border-zinc-400'
+                  }`}
+                >
+                  {selectedPlaylist.isArtist ? (isSaved ? 'Following' : '+ Follow') : (
+                    isSaved ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400 group-hover/savebtn:hidden" />
+                        <span className="text-zinc-200 group-hover/savebtn:hidden">Saved</span>
+                        <span className="hidden group-hover/savebtn:inline">Remove</span>
+                      </>
+                    ) : (
+                      <><span className="text-lg leading-none">+</span> Save</>
+                    )
                   )}
                 </button>
               )}

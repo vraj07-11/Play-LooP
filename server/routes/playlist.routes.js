@@ -475,8 +475,8 @@ router.post("/api/playlist/save", async (req, res) => {
 	try {
 		const user_uuid = req.body?.user_uuid;
 		const playlist = req.body?.playlist || {};
-		const id = playlist.id;
-		const name = playlist.name;
+		const id = String(playlist.id || playlist.playlistId || req.body?.id || req.body?.playlist_id || "");
+		const name = playlist.name || playlist.title || req.body?.name || req.body?.title;
 
 		if (!user_uuid || !id || !name) {
 			return res.status(400).json({ error: "user_uuid, playlist.id, and playlist.name are required" });
@@ -511,38 +511,55 @@ router.post("/api/playlist/save", async (req, res) => {
 	}
 });
 
+router.post("/api/playlist/unsave", async (req, res) => {
+	try {
+		const user_uuid = req.body?.user_uuid;
+		const id = String(req.body?.id || req.body?.playlist_id || "");
+
+		if (!user_uuid || !id) {
+			return res.status(400).json({ error: "user_uuid and id are required" });
+		}
+
+		await db.execute({
+			sql: `DELETE FROM playlists WHERE id = ? AND user_uuid = ?`,
+			args: [id, user_uuid]
+		});
+
+		return res.status(200).json({ success: true, message: "Playlist removed" });
+	} catch (error) {
+		console.error("Playlist unsave failed:", error);
+		return res.status(500).json({ error: "Failed to unsave playlist" });
+	}
+});
+
 router.post("/api/playlist/activity", async (req, res) => {
 	try {
 		const user_uuid = req.body?.user_uuid;
 		const playlist = req.body?.playlist || {};
-		const id = req.body?.id || req.body?.playlist_id || playlist.id || playlist.playlist_id;
-		const name = req.body?.name || req.body?.title || playlist.name || playlist.title;
-		const tracks = req.body?.tracks || playlist.tracks || [];
+		const id = String(req.body?.id || req.body?.playlist_id || playlist.id || playlist.playlist_id || "");
 
 		if (!user_uuid || !id) {
 			return res.status(400).json({ error: "user_uuid and id are required" });
 		}
 
 		const now = Date.now();
-		const tracks_json = typeof tracks === "string" ? tracks : JSON.stringify(tracks);
 
+		// ONLY update last_played_at and play_count if the user has this playlist in their saved playlists
 		try {
 			await db.execute({
-				sql: `INSERT INTO playlists (id, user_uuid, name, tracks_json, updated_at, last_played_at, play_count)
-					VALUES (?, ?, ?, ?, ?, ?, 1)
-					ON CONFLICT(id) DO UPDATE SET
-						last_played_at = excluded.last_played_at,
-						play_count = COALESCE(playlists.play_count, 0) + 1,
-						updated_at = excluded.updated_at`,
-				args: [id, user_uuid, name || "Playlist", tracks_json, now, now]
+				sql: `UPDATE playlists
+					SET last_played_at = ?,
+						play_count = COALESCE(play_count, 0) + 1,
+						updated_at = ?
+					WHERE id = ? AND user_uuid = ?`,
+				args: [now, now, id, user_uuid]
 			});
 		} catch (columnErr) {
 			await db.execute({
-				sql: `INSERT INTO playlists (id, user_uuid, name, tracks_json, updated_at)
-					VALUES (?, ?, ?, ?, ?)
-					ON CONFLICT(id) DO UPDATE SET
-						updated_at = excluded.updated_at`,
-				args: [id, user_uuid, name || "Playlist", tracks_json, now]
+				sql: `UPDATE playlists
+					SET updated_at = ?
+					WHERE id = ? AND user_uuid = ?`,
+				args: [now, id, user_uuid]
 			});
 		}
 

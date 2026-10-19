@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Library, Play, Heart, ArrowUpDown, Check, Download } from 'lucide-react';
+import { Library, Play, Heart, ArrowUpDown, Check, Download, X } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { unsavePlaylistApi } from '../services/api';
 
 
 
@@ -77,6 +78,21 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
   const handleImportClick = () => {
     if (setCurrentView) setCurrentView('settings');
     window.location.hash = '#/settings#import';
+  };
+
+  const handleRemovePlaylist = (e, playlistId) => {
+    e.stopPropagation();
+    try {
+      const pid = String(playlistId);
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      const updated = saved.filter(p => String(p.playlistId || p.id) !== pid);
+      localStorage.setItem('playloop_saved_playlists', JSON.stringify(updated));
+      setSavedPlaylists(updated);
+      window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
+      unsavePlaylistApi(pid).catch(() => {});
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleKeyDown = (e, action, param) => {
@@ -238,6 +254,15 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                 onError={(e) => { e.target.src = '/default-cover.svg'; }}
                 loading="lazy"
               />
+              <button
+                type="button"
+                onClick={(e) => handleRemovePlaylist(e, item.playlistId || item.id)}
+                title="Remove from Your Library"
+                aria-label="Remove from Your Library"
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/80 hover:bg-red-600/90 text-zinc-300 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 cursor-pointer shadow-md hover:scale-110 active:scale-95"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
               <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
                 <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
                   <Play className="w-5 h-5 fill-current translate-x-[2px]" />

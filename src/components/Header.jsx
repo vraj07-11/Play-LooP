@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { usePlayer, fetchApi } from '../context/PlayerContext';
 import { Menu, X, Search, User } from 'lucide-react';
+import { getUserUuid, fetchUserProfile, PROFILE_AVATAR_KEY } from '../services/api';
 
 export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView }) {
   const [query, setQuery] = useState('');
@@ -11,6 +12,14 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [avatarUrl, setAvatarUrl] = useState(() => {
+    try {
+      return localStorage.getItem(PROFILE_AVATAR_KEY) || '';
+    } catch (_) {
+      return '';
+    }
+  });
+  const [avatarError, setAvatarError] = useState(false);
 
   const searchTimeout = useRef(null);
   const searchFormRef = useRef(null);
@@ -19,6 +28,45 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
   useEffect(() => {
     setSelectedIndex(-1);
   }, [suggestions]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchUserProfile(getUserUuid())
+      .then((profile) => {
+        if (!isMounted || !profile) return;
+        if (profile.avatar_url !== undefined) {
+          setAvatarUrl(profile.avatar_url || '');
+          setAvatarError(false);
+          try {
+            localStorage.setItem(PROFILE_AVATAR_KEY, profile.avatar_url || '');
+          } catch (_) {}
+        }
+      })
+      .catch(() => {});
+
+    const handleProfileUpdate = (e) => {
+      const url = e?.detail?.avatar_url !== undefined
+        ? e.detail.avatar_url
+        : (localStorage.getItem(PROFILE_AVATAR_KEY) || '');
+      setAvatarUrl(url || '');
+      setAvatarError(false);
+    };
+
+    const handleStorage = (e) => {
+      if (e.key === PROFILE_AVATAR_KEY) {
+        setAvatarUrl(e.newValue || '');
+        setAvatarError(false);
+      }
+    };
+
+    window.addEventListener('playloop-profile-updated', handleProfileUpdate);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('playloop-profile-updated', handleProfileUpdate);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     const handlePointerDown = (e) => {
@@ -342,14 +390,28 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
           </form>
           <button 
             type="button" 
-            className="profile-button bg-zinc-900 p-0 sm:p-2 rounded-full hover:bg-zinc-800 transition-colors cursor-pointer" 
+            className={`profile-button ${
+              avatarUrl && !avatarError 
+                ? 'has-avatar' 
+                : 'bg-zinc-900 p-0 sm:p-2 rounded-full hover:bg-zinc-800 transition-colors cursor-pointer'
+            }`}
             aria-label="Profile"
+            title="Profile"
             onClick={() => {
               if (typeof setCurrentView === 'function') setCurrentView('profile');
               window.location.hash = '#/profile';
             }}
           >
-            <User className="w-6 h-6 text-white shrink-0" />
+            {avatarUrl && !avatarError ? (
+              <img 
+                src={avatarUrl} 
+                alt="Profile" 
+                className="profile-avatar-img"
+                onError={() => setAvatarError(true)}
+              />
+            ) : (
+              <User className="w-6 h-6 text-white shrink-0" />
+            )}
           </button>
         </div>
       </nav>
