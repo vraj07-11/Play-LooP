@@ -53,10 +53,23 @@ async function initDb() {
 			played_at INTEGER NOT NULL
 		)
 	`);
+	await db.execute(`
+		CREATE TABLE IF NOT EXISTS liked_songs (
+			user_uuid TEXT NOT NULL,
+			track_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			artist TEXT NOT NULL,
+			thumbnail TEXT,
+			duration INTEGER,
+			liked_at INTEGER NOT NULL,
+			PRIMARY KEY (user_uuid, track_id)
+		)
+	`);
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_scrobbles_user ON scrobbles(user_uuid)");
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_uuid)");
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_user_profiles ON user_profiles(user_uuid)");
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_user_history_user ON user_history(user_uuid, played_at DESC)");
+	await db.execute("CREATE INDEX IF NOT EXISTS idx_liked_songs_user ON liked_songs(user_uuid, liked_at DESC)");
 	try {
 		await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_history_unique ON user_history(user_uuid, track_id)");
 	} catch (_) {}

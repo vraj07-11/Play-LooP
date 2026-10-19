@@ -608,3 +608,52 @@ export async function unsavePlaylistApi(playlistId) {
     console.warn('unsavePlaylistApi failed:', e);
   }
 }
+
+export async function saveLikedTrackApi(track, isLiked = true, user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    if (!uuid || !track) return;
+    const trackObj = typeof track === 'string' ? { videoId: track } : track;
+    return await fetchApi('/api/user/liked', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: uuid,
+        track: trackObj,
+        is_liked: isLiked
+      })
+    });
+  } catch (e) {
+    console.warn('saveLikedTrackApi failed:', e);
+  }
+}
+
+export async function syncLikedTracksBatch(likedTracks, user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    if (!uuid) return null;
+    return await fetchApi('/api/user/liked/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: uuid,
+        liked_tracks: Array.isArray(likedTracks) ? likedTracks : []
+      })
+    });
+  } catch (e) {
+    console.warn('syncLikedTracksBatch failed:', e);
+    return null;
+  }
+}
+
+export async function fetchLikedTracksApi(user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    if (!uuid) return { liked_tracks: [] };
+    return await fetchApi(`/api/user/liked?user_uuid=${encodeURIComponent(uuid)}`);
+  } catch (e) {
+    console.warn('fetchLikedTracksApi failed:', e);
+    return { liked_tracks: [] };
+  }
+}
+

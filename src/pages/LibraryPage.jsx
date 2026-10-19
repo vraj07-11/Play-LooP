@@ -32,7 +32,11 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
 
     fetchSaved();
     window.addEventListener('playloop-saved-playlists-updated', fetchSaved);
-    return () => window.removeEventListener('playloop-saved-playlists-updated', fetchSaved);
+    window.addEventListener('playloop-liked-songs-updated', fetchSaved);
+    return () => {
+      window.removeEventListener('playloop-saved-playlists-updated', fetchSaved);
+      window.removeEventListener('playloop-liked-songs-updated', fetchSaved);
+    };
   }, [refreshKey]);
 
   useEffect(() => {
@@ -259,7 +263,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                 onClick={(e) => handleRemovePlaylist(e, item.playlistId || item.id)}
                 title="Remove from Your Library"
                 aria-label="Remove from Your Library"
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/80 hover:bg-red-600/90 text-zinc-300 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 cursor-pointer shadow-md hover:scale-110 active:scale-95"
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 cursor-pointer shadow-md hover:scale-110 active:scale-95"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

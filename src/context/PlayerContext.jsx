@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { fetchApi, getAudioUrl, sendScrobble, saveHistoryItem, syncHistoryBatch, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, getUserUuid } from '../services/api.js';
+import { fetchApi, getAudioUrl, sendScrobble, saveHistoryItem, syncHistoryBatch, syncLikedTracksBatch, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, getUserUuid } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
 import { filterValidDurationTracks } from '../utils/durationUtils.js';
@@ -448,6 +448,45 @@ export function PlayerProvider({ children }) {
     });
   }, []);
 
+  const mergeIncomingLikedTracks = useCallback((incomingLiked = []) => {
+    if (!Array.isArray(incomingLiked) || incomingLiked.length === 0) return;
+    try {
+      const localLikedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+      const trackMap = new Map();
+
+      for (const t of localLikedList) {
+        const id = t.videoId || t.track_id;
+        if (id) trackMap.set(id, t);
+      }
+
+      for (const t of incomingLiked) {
+        const id = t.videoId || t.track_id;
+        if (!id) continue;
+        const existing = trackMap.get(id);
+        trackMap.set(id, {
+          videoId: id,
+          track_id: id,
+          title: t.title || existing?.title || 'Liked Track',
+          artist: t.artist || existing?.artist || 'Unknown Artist',
+          thumbnail: (!t.thumbnail || t.thumbnail === '/logo.svg') ? (existing?.thumbnail || '/default-cover.svg') : t.thumbnail,
+          duration: t.duration || existing?.duration || 180,
+          liked_at: t.liked_at || existing?.liked_at || Date.now()
+        });
+      }
+
+      const mergedList = Array.from(trackMap.values()).sort(
+        (a, b) => (Number(b.liked_at) || 0) - (Number(a.liked_at) || 0)
+      );
+      const mergedIds = mergedList.map(t => t.videoId || t.track_id);
+
+      localStorage.setItem('playloop_liked_tracks', JSON.stringify(mergedIds));
+      localStorage.setItem('playloop_liked_tracks_list', JSON.stringify(mergedList));
+      window.dispatchEvent(new CustomEvent('playloop-liked-songs-updated'));
+    } catch (e) {
+      console.warn('Failed to merge incoming liked tracks', e);
+    }
+  }, []);
+
   const pullDeviceSync = useCallback(async () => {
     try {
       const lastSync = Number(localStorage.getItem(LAST_SYNC_KEY) || 0);
@@ -462,6 +501,9 @@ export function PlayerProvider({ children }) {
       if (Array.isArray(data.playlists)) {
         mergeIncomingPlaylists(data.playlists);
       }
+      if (Array.isArray(data.liked_tracks) && data.liked_tracks.length > 0) {
+        mergeIncomingLikedTracks(data.liked_tracks);
+      }
       localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
 
       // Sync local history to server if present
@@ -472,12 +514,20 @@ export function PlayerProvider({ children }) {
         }
       } catch (_) {}
 
+      // Sync local liked tracks to server if present
+      try {
+        const localLiked = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
+        if (Array.isArray(localLiked) && localLiked.length > 0) {
+          syncLikedTracksBatch(localLiked).catch(() => {});
+        }
+      } catch (_) {}
+
       return data;
     } catch (e) {
       console.warn('Device sync failed:', e);
       return null;
     }
-  }, [mergeIncomingHistory]);
+  }, [mergeIncomingHistory, mergeIncomingLikedTracks]);
 
   useEffect(() => {
     pullDeviceSync();

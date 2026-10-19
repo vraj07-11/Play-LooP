@@ -360,6 +360,133 @@ router.get("/api/history", async (req, res) => {
 	}
 });
 
+function mapLikedSongRow(row) {
+	return {
+		videoId: row.track_id,
+		track_id: row.track_id,
+		title: row.title,
+		artist: row.artist,
+		thumbnail: row.thumbnail || "/default-cover.svg",
+		cover: row.thumbnail || "/default-cover.svg",
+		duration: row.duration != null ? Number(row.duration) : null,
+		liked_at: Number(row.liked_at || Date.now())
+	};
+}
+
+// Like or Unlike a single track
+router.post("/api/user/liked", async (req, res) => {
+	try {
+		const user_uuid = String(req.body?.user_uuid || "").trim();
+		const track = req.body?.track || {};
+		const is_liked = req.body?.is_liked !== false && req.body?.action !== "unlike";
+		const track_id = String(track.videoId || track.track_id || req.body?.track_id || "").trim();
+
+		if (!user_uuid || !track_id) {
+			return res.status(400).json({ error: "user_uuid and track_id are required" });
+		}
+
+		if (is_liked) {
+			const title = String(track.title || "Liked Track");
+			const artist = String(track.artist || track.channelTitle || "Unknown Artist");
+			const thumbnail = track.thumbnail || track.cover || null;
+			const duration = track.duration != null && !isNaN(track.duration) ? Math.round(Number(track.duration)) : null;
+			const liked_at = Number(track.liked_at || Date.now());
+
+			await db.execute({
+				sql: `INSERT INTO liked_songs (user_uuid, track_id, title, artist, thumbnail, duration, liked_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT(user_uuid, track_id) DO UPDATE SET
+						title = excluded.title,
+						artist = excluded.artist,
+						thumbnail = excluded.thumbnail,
+						duration = excluded.duration,
+						liked_at = excluded.liked_at`,
+				args: [user_uuid, track_id, title, artist, thumbnail, duration, liked_at]
+			});
+			return res.json({ success: true, message: "Track liked", is_liked: true });
+		} else {
+			await db.execute({
+				sql: `DELETE FROM liked_songs WHERE user_uuid = ? AND track_id = ?`,
+				args: [user_uuid, track_id]
+			});
+			return res.json({ success: true, message: "Track unliked", is_liked: false });
+		}
+	} catch (error) {
+		console.error("Save liked track failed:", error);
+		return res.status(500).json({ error: "Failed to update liked track" });
+	}
+});
+
+// Batch sync liked tracks from device
+router.post("/api/user/liked/sync", async (req, res) => {
+	try {
+		const user_uuid = String(req.body?.user_uuid || "").trim();
+		const liked_tracks = req.body?.liked_tracks;
+		if (!user_uuid) {
+			return res.status(400).json({ error: "user_uuid is required" });
+		}
+
+		if (Array.isArray(liked_tracks) && liked_tracks.length > 0) {
+			for (const item of liked_tracks) {
+				if (!item) continue;
+				const track_id = String(item.videoId || item.track_id || (typeof item === "string" ? item : "")).trim();
+				if (!track_id) continue;
+				const title = String(item.title || "Liked Track");
+				const artist = String(item.artist || item.channelTitle || "Unknown Artist");
+				const thumbnail = item.thumbnail || item.cover || null;
+				const duration = item.duration != null && !isNaN(item.duration) ? Math.round(Number(item.duration)) : null;
+				const liked_at = Number(item.liked_at || Date.now());
+
+				await db.execute({
+					sql: `INSERT INTO liked_songs (user_uuid, track_id, title, artist, thumbnail, duration, liked_at)
+						VALUES (?, ?, ?, ?, ?, ?, ?)
+						ON CONFLICT(user_uuid, track_id) DO UPDATE SET
+							title = CASE WHEN excluded.title != 'Liked Track' THEN excluded.title ELSE liked_songs.title END,
+							artist = CASE WHEN excluded.artist != 'Unknown Artist' THEN excluded.artist ELSE liked_songs.artist END,
+							thumbnail = COALESCE(excluded.thumbnail, liked_songs.thumbnail),
+							duration = COALESCE(excluded.duration, liked_songs.duration),
+							liked_at = MAX(liked_songs.liked_at, excluded.liked_at)`,
+					args: [user_uuid, track_id, title, artist, thumbnail, duration, liked_at]
+				});
+			}
+		}
+
+		const result = await db.execute({
+			sql: `SELECT user_uuid, track_id, title, artist, thumbnail, duration, liked_at
+				FROM liked_songs
+				WHERE user_uuid = ?
+				ORDER BY liked_at DESC`,
+			args: [user_uuid]
+		});
+
+		return res.json({ success: true, liked_tracks: result.rows.map(mapLikedSongRow) });
+	} catch (error) {
+		console.error("Sync liked songs failed:", error);
+		return res.status(500).json({ error: "Failed to sync liked songs" });
+	}
+});
+
+// Get all liked tracks for user
+router.get("/api/user/liked", async (req, res) => {
+	try {
+		const user_uuid = String(req.query.user_uuid || "").trim();
+		if (!user_uuid) {
+			return res.status(400).json({ error: "user_uuid is required" });
+		}
+		const result = await db.execute({
+			sql: `SELECT user_uuid, track_id, title, artist, thumbnail, duration, liked_at
+				FROM liked_songs
+				WHERE user_uuid = ?
+				ORDER BY liked_at DESC`,
+			args: [user_uuid]
+		});
+		return res.json({ liked_tracks: result.rows.map(mapLikedSongRow) });
+	} catch (error) {
+		console.error("Fetch liked songs failed:", error);
+		return res.status(500).json({ error: "Failed to fetch liked songs" });
+	}
+});
+
 router.get("/api/sync", async (req, res) => {
 	try {
 		const user_uuid = String(req.query.user_uuid || "").trim();
@@ -371,7 +498,7 @@ router.get("/api/sync", async (req, res) => {
 			? Number(req.query.since)
 			: 0;
 
-		const [scrobblesResult, playlistsResult, historyResult] = await Promise.all([
+		const [scrobblesResult, playlistsResult, historyResult, likedSongsResult] = await Promise.all([
 			db.execute({
 				sql: `SELECT id, user_uuid, track_id, title, artist, album, genre, played_at, cover, duration
 					FROM scrobbles
@@ -399,6 +526,13 @@ router.get("/api/sync", async (req, res) => {
 					ORDER BY played_at DESC
 					LIMIT 20`,
 				args: [user_uuid]
+			}).catch(() => ({ rows: [] })),
+			db.execute({
+				sql: `SELECT user_uuid, track_id, title, artist, thumbnail, duration, liked_at
+					FROM liked_songs
+					WHERE user_uuid = ?
+					ORDER BY liked_at DESC`,
+				args: [user_uuid]
 			}).catch(() => ({ rows: [] }))
 		]);
 
@@ -425,8 +559,9 @@ router.get("/api/sync", async (req, res) => {
 		}));
 
 		const history = historyResult.rows.map(mapHistoryRow);
+		const liked_tracks = likedSongsResult.rows.map(mapLikedSongRow);
 
-		return res.json({ scrobbles, playlists, history });
+		return res.json({ scrobbles, playlists, history, liked_tracks });
 	} catch (error) {
 		console.error("Sync failed:", error);
 		return res.status(500).json({ error: "Failed to sync data" });

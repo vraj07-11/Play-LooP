@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import { Home, Search, Library, Settings } from 'lucide-react';
+import { Home, Repeat, Search, Library, Settings } from 'lucide-react';
 
 export default function MobileBottomNav({ currentView, setCurrentView, swipeHandlers = {} }) {
   const navItems = [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'loops', label: 'Loops', icon: Repeat },
     { id: 'search', label: 'Search', icon: Search },
     { id: 'library', label: 'Your Library', icon: Library },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -11,9 +12,10 @@ export default function MobileBottomNav({ currentView, setCurrentView, swipeHand
 
   const activeIndex = useMemo(() => {
     if (currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked') return 0;
-    if (currentView === 'search' || (typeof window !== 'undefined' && window.location.hash.includes('search'))) return 1;
-    if (currentView === 'library') return 2;
-    if (currentView === 'settings') return 3;
+    if (currentView === 'loops' || currentView === 'samples' || (typeof window !== 'undefined' && (window.location.hash.includes('loops') || window.location.hash.includes('samples')))) return 1;
+    if (currentView === 'search' || (typeof window !== 'undefined' && window.location.hash.includes('search'))) return 2;
+    if (currentView === 'library') return 3;
+    if (currentView === 'settings') return 4;
     return -1;
   }, [currentView]);
 

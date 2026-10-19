@@ -14,6 +14,7 @@ import { usePullToRefresh } from './hooks/usePullToRefresh';
 import { initNavigationHistory } from './utils/navigationHistory';
 
 const SearchPage = lazy(() => import('./pages/SearchPage'));
+const LoopsPage = lazy(() => import('./pages/LoopsPage'));
 const LibraryPage = lazy(() => import('./pages/LibraryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -28,6 +29,7 @@ function App() {
   const [visitedViews, setVisitedViews] = useState(() => new Set(['home']));
   const [pageRefreshKeys, setPageRefreshKeys] = useState({
     home: 0,
+    loops: 0,
     search: 0,
     library: 0,
     profile: 0,
@@ -150,6 +152,8 @@ function App() {
       } else if (hash.includes('track/')) {
         setCurrentView('home');
         if (contentRef.current) contentRef.current.scrollTop = 0;
+      } else if (hash.includes('loops') || hash.includes('samples')) {
+        setCurrentView('loops');
       } else if (hash.includes('search')) {
         setCurrentView('search');
       } else if (hash.includes('library')) {
@@ -265,7 +269,7 @@ function App() {
       {languagesReady && (
         <>
           <main className="relative flex min-h-0 flex-1 select-none">
-            <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} />
+            <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={handleSetIsSidebarOpen} setCurrentView={handleSetCurrentView} currentView={currentView} />
             <section 
               ref={contentRef}
               className="app-content select-none touch-pan-y relative" 
@@ -285,6 +289,12 @@ function App() {
                   </div>
 
                   <Suspense fallback={<div className="w-full min-h-full" />}>
+                    {(visitedViews.has('loops') || visitedViews.has('samples')) && (
+                      <div className={`w-full min-h-full ${currentView === 'loops' || currentView === 'samples' ? `block ${slideClass}` : 'hidden'}`}>
+                        <LoopsPage setCurrentView={handleSetCurrentView} isActiveView={currentView === 'loops' || currentView === 'samples'} />
+                      </div>
+                    )}
+
                     {visitedViews.has('search') && (
                       <div className={`w-full min-h-full ${currentView === 'search' ? `block ${slideClass}` : 'hidden'}`}>
                         <SearchPage refreshKey={pageRefreshKeys.search} />
@@ -315,7 +325,7 @@ function App() {
                       </div>
                     )}
 
-                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'library' && currentView !== 'profile' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'loops' && currentView !== 'samples' && currentView !== 'library' && currentView !== 'profile' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
                       <PlaceholderPage view={currentView} />
                     )}
                   </Suspense>

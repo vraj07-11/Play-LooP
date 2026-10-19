@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { getAudioUrl, savePlaylistApi, unsavePlaylistApi } from '../services/api';
+import { getAudioUrl, savePlaylistApi, unsavePlaylistApi, saveLikedTrackApi } from '../services/api';
 import { shareTrack } from '../services/shareService';
 
 export default function FullPlayer({
@@ -79,22 +79,25 @@ export default function FullPlayer({
       const likedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
       let updatedIds, updatedTracks;
 
+      const trackObj = {
+        videoId: pendingTrack.videoId,
+        title: pendingTrack.title || currentTitle || "Liked Track",
+        artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
+        thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail,
+        duration: pendingTrack.duration || duration || 180
+      };
+
       if (isLiked) {
         updatedIds = liked.filter(id => id !== pendingTrack.videoId);
         updatedTracks = likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId);
         setIsLiked(false);
+        saveLikedTrackApi(trackObj, false).catch(() => {});
         showToast("Removed from Liked Songs");
       } else {
         updatedIds = [...liked.filter(id => id !== pendingTrack.videoId), pendingTrack.videoId];
-        const trackObj = {
-          videoId: pendingTrack.videoId,
-          title: pendingTrack.title || currentTitle || "Liked Track",
-          artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
-          thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail,
-          duration: pendingTrack.duration || duration || 180
-        };
         updatedTracks = [trackObj, ...likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId)];
         setIsLiked(true);
+        saveLikedTrackApi(trackObj, true).catch(() => {});
         showToast("Added to Liked Songs");
       }
       localStorage.setItem('playloop_liked_tracks', JSON.stringify(updatedIds));
@@ -889,7 +892,7 @@ export default function FullPlayer({
               aria-label="Save to Library"
             >
               {(activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs' ? isSaved : isLiked) ? (
-                <Check className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                <Check className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]" />
               ) : (
                 <Bookmark className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white" />
               )}

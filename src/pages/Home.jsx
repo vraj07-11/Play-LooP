@@ -758,14 +758,14 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   onClick={() => handleToggleSave()}
                   className={`inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px] ${
                     isSaved
-                      ? 'border-emerald-500/50 hover:border-red-500/70 hover:text-red-400 group/savebtn'
+                      ? 'border-white/40 hover:border-zinc-400 hover:text-zinc-200 group/savebtn'
                       : 'border-zinc-600 hover:border-zinc-400'
                   }`}
                 >
                   {selectedPlaylist.isArtist ? (isSaved ? 'Following' : '+ Follow') : (
                     isSaved ? (
                       <>
-                        <Check className="w-4 h-4 text-emerald-400 group-hover/savebtn:hidden" />
+                        <Check className="w-4 h-4 text-white group-hover/savebtn:hidden" />
                         <span className="text-zinc-200 group-hover/savebtn:hidden">Saved</span>
                         <span className="hidden group-hover/savebtn:inline">Remove</span>
                       </>
@@ -1043,14 +1043,14 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     type="button"
                     className={`px-3.5 py-2 font-bold text-xs rounded-full flex items-center gap-1.5 backdrop-blur-md active:scale-95 transition cursor-pointer ${
                       isPlaylistSaved(featuredPlaylist.playlistId)
-                        ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/30'
+                        ? 'bg-zinc-800 text-white border border-white/30'
                         : 'bg-white/10 hover:bg-white/20 text-white border border-white/10'
                     }`}
                     onClick={(e) => { e.stopPropagation(); handleToggleSave(featuredPlaylist); }}
                   >
                     {isPlaylistSaved(featuredPlaylist.playlistId) ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" /> Saved
+                        <Check className="w-3.5 h-3.5 text-white" /> Saved
                       </>
                     ) : (
                       <>+ Save</>
@@ -1143,14 +1143,14 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     <button 
                       className={`px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-full font-bold text-sm flex items-center gap-2 transition cursor-pointer ${
                         isPlaylistSaved(featuredPlaylist.playlistId)
-                          ? 'bg-zinc-800 text-emerald-400 border border-emerald-500/40'
+                          ? 'bg-zinc-800 text-white border border-white/40'
                           : 'bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/10'
                       }`}
                       onClick={(e) => { e.stopPropagation(); handleToggleSave(featuredPlaylist); }}
                     >
                       {isPlaylistSaved(featuredPlaylist.playlistId) ? (
                         <>
-                          <Check className="w-4 h-4 text-emerald-400" /> Saved
+                          <Check className="w-4 h-4 text-white" /> Saved
                         </>
                       ) : (
                         <>+ Save</>

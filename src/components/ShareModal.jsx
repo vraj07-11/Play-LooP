@@ -227,7 +227,7 @@ export default function ShareModal() {
               onClick={handleCopy}
               className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer shrink-0 ${
                 copied
-                  ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                  ? 'bg-zinc-200 text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]'
                   : 'bg-white hover:bg-zinc-200 text-black'
               }`}
             >

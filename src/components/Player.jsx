@@ -3,9 +3,10 @@ import { usePlayer } from '../context/PlayerContext';
 import { 
   Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, 
   ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart, Share2,
-  Volume2, Volume1, VolumeX 
+  Volume2, Volume1, VolumeX, X 
 } from 'lucide-react';
 import { shareTrack } from '../services/shareService';
+import { saveLikedTrackApi } from '../services/api';
 
 const FullPlayer = lazy(() => import('./FullPlayer'));
 
@@ -32,7 +33,46 @@ export default function Player() {
   const [isMobileQueueOpen, setIsMobileQueueOpen] = useState(false);
   const [initialShowLyrics, setInitialShowLyrics] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [isClosed, setIsClosed] = useState(false);
+  const lastTrackIdRef = useRef(pendingTrack?.videoId);
   const progressRef = useRef(null);
+
+  // Auto restore miniplayer when a new track plays or playback starts
+  useEffect(() => {
+    if (pendingTrack?.videoId && pendingTrack.videoId !== lastTrackIdRef.current) {
+      setIsClosed(false);
+      lastTrackIdRef.current = pendingTrack.videoId;
+    }
+  }, [pendingTrack?.videoId]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      setIsClosed(false);
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    const handleOpenMini = () => setIsClosed(false);
+    const handleCloseMini = () => setIsClosed(true);
+    window.addEventListener('playloop-open-miniplayer', handleOpenMini);
+    window.addEventListener('playloop-close-miniplayer', handleCloseMini);
+    return () => {
+      window.removeEventListener('playloop-open-miniplayer', handleOpenMini);
+      window.removeEventListener('playloop-close-miniplayer', handleCloseMini);
+    };
+  }, []);
+
+  const handleClosePlayer = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (isPlaying) {
+      playPause();
+    }
+    if (typeof setIsRightSidebarOpen === 'function') {
+      setIsRightSidebarOpen(false);
+    }
+    setIsClosed(true);
+    window.dispatchEvent(new CustomEvent('playloop-player-closed'));
+  };
 
   // Top Progress Bar state for Desktop Miniplayer
   const topProgressContainerRef = useRef(null);
@@ -64,21 +104,24 @@ export default function Player() {
       const likedList = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
       let updatedIds, updatedTracks;
 
+      const trackObj = {
+        videoId: pendingTrack.videoId,
+        title: pendingTrack.title || currentTitle || "Liked Track",
+        artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
+        thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail,
+        duration: pendingTrack.duration || duration || 180
+      };
+
       if (isLiked) {
         updatedIds = liked.filter(id => id !== pendingTrack.videoId);
         updatedTracks = likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId);
         setIsLiked(false);
+        saveLikedTrackApi(trackObj, false).catch(() => {});
       } else {
         updatedIds = [...liked.filter(id => id !== pendingTrack.videoId), pendingTrack.videoId];
-        const trackObj = {
-          videoId: pendingTrack.videoId,
-          title: pendingTrack.title || currentTitle || "Liked Track",
-          artist: pendingTrack.artist || pendingTrack.channelTitle || "Play LooP",
-          thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail,
-          duration: pendingTrack.duration || duration || 180
-        };
         updatedTracks = [trackObj, ...likedList.filter(t => (t.videoId || t) !== pendingTrack.videoId)];
         setIsLiked(true);
+        saveLikedTrackApi(trackObj, true).catch(() => {});
       }
       localStorage.setItem('playloop_liked_tracks', JSON.stringify(updatedIds));
       localStorage.setItem('playloop_liked_tracks_list', JSON.stringify(updatedTracks));
@@ -256,7 +299,7 @@ export default function Player() {
   const touchStartY = useRef(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
-  const minSwipeDistance = 50;
+  const minSwipeDistance = 45;
   
   const queueTouchStartY = useRef(null);
   const [queueSwipeOffset, setQueueSwipeOffset] = useState(0);
@@ -297,7 +340,8 @@ export default function Player() {
     const currentY = e.targetTouches[0].clientY;
     const diffX = currentX - touchStartX.current;
     const diffY = currentY - touchStartY.current;
-    
+
+    // Disregard vertical scrolling/swiping so gesture is fast and non-blocking
     if (Math.abs(diffY) > Math.abs(diffX)) return;
     
     // Add resistance if they are swiping but can't go that way
@@ -310,9 +354,11 @@ export default function Player() {
 
   const onTouchEnd = (e) => {
     if (!touchStartX.current || !touchStartY.current) return;
+    const endX = e.changedTouches ? e.changedTouches[0].clientX : touchStartX.current;
     const endY = e.changedTouches ? e.changedTouches[0].clientY : touchStartY.current;
+    const diffX = endX - touchStartX.current;
     const diffY = endY - touchStartY.current;
-    
+
     const isUpSwipe = -diffY > minSwipeDistance;
     const distance = -swipeOffset; // positive = left swipe (finger moved left)
     
@@ -323,7 +369,12 @@ export default function Player() {
       openFullPlayer(false);
       setIsSwiping(false);
       setSwipeOffset(0);
-    } else if (isLeftSwipe && hasNext) {
+      touchStartX.current = null;
+      touchStartY.current = null;
+      return;
+    }
+
+    if (isLeftSwipe && hasNext) {
       // Animate out to the left
       setSwipeOffset(-window.innerWidth);
       setIsSwiping(false);
@@ -378,8 +429,9 @@ export default function Player() {
   return (
     <>
       {/* Desktop Player Bar */}
-      <footer 
-        className="hidden md:flex player-bar relative z-40 bg-zinc-900 border-t border-zinc-800 px-5 md:px-7 py-3.5 items-center justify-between gap-4 shrink-0 cursor-pointer select-none min-h-[5.5rem]"
+      {!isClosed && (
+        <footer 
+          className="hidden md:flex player-bar relative z-40 bg-zinc-900 border-t border-zinc-800 px-5 md:px-7 py-3.5 items-center justify-between gap-4 shrink-0 cursor-pointer select-none min-h-[5.5rem]"
         onClick={() => openFullPlayer(false)}
         onWheel={(e) => {
           if (e.deltaY > 0 || e.deltaY < 0) {
@@ -655,18 +707,29 @@ export default function Player() {
             >
               <ListMusic className="w-[22px] h-[22px]" />
             </button>
+            <button
+              type="button"
+              className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors cursor-pointer"
+              onClick={handleClosePlayer}
+              aria-label="Close miniplayer"
+              title="Close miniplayer"
+            >
+              <X className="w-[21px] h-[21px] stroke-[2.2]" />
+            </button>
           </div>
         </div>
       </footer>
+      )}
 
-      {/* Mobile Compact Miniplayer Bar (Sleek 64px Bar with Like & Play/Pause) */}
-      <div 
-        className="md:hidden z-40 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/80 px-3.5 py-2 flex items-center justify-between gap-3 relative shrink-0 select-none shadow-2xl h-[64px] cursor-pointer"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onClick={() => openFullPlayer(false)}
-      >
+      {/* Mobile Compact Miniplayer Bar (Sleek 64px Bar with Like, Play/Pause & Close) */}
+      {!isClosed && (
+        <div 
+          className="md:hidden z-40 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/80 px-3 py-2 flex items-center justify-between gap-2.5 relative shrink-0 select-none shadow-2xl h-[64px] cursor-pointer"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onClick={() => openFullPlayer(false)}
+        >
         {/* Top 2px Progress Line */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-zinc-800/60 pointer-events-none">
           <div 
@@ -677,13 +740,13 @@ export default function Player() {
 
         {/* Left Track Info & Artwork */}
         <div 
-          className={`flex items-center gap-3.5 min-w-0 flex-1 ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
+          className={`flex items-center gap-2.5 min-w-0 flex-1 ${isSwiping ? '' : 'transition-transform duration-300 ease-out'}`}
           style={{ transform: `translateX(${swipeOffset}px)` }}
         >
           <img 
             src={(!pendingTrack?.thumbnail || pendingTrack?.thumbnail === '/logo.svg') ? '/default-cover.svg' : pendingTrack.thumbnail} 
             alt="Track thumbnail" 
-            className="w-12 h-12 rounded-lg shrink-0 object-cover shadow-sm bg-black border border-white/5"
+            className="w-11 h-11 rounded-lg shrink-0 object-cover shadow-sm bg-black border border-white/5"
             onError={(e) => {
               e.target.src = '/default-cover.svg';
             }}
@@ -692,42 +755,52 @@ export default function Player() {
             <span className="text-sm font-semibold text-white truncate leading-tight">
               {currentTitle || "Unknown Track"}
             </span>
-            <span className="text-xs font-medium text-zinc-400 truncate leading-tight mt-0.5">
+            <span className="text-[11px] font-medium text-zinc-400 truncate leading-tight mt-0.5">
               {pendingTrack?.artist || pendingTrack?.channelTitle || 'Play LooP'}
             </span>
           </div>
         </div>
 
-        {/* Right Quick Action Buttons: 1st Like, 2nd Play/Pause */}
-        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+        {/* Right Quick Action Buttons: Like, Play/Pause, Close */}
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           <button 
             type="button" 
-            className="w-10 h-10 flex items-center justify-center transition-transform active:scale-90 cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white active:scale-90 transition-transform cursor-pointer"
             onClick={handleLikeClick}
             aria-label={isLiked ? "Unlike track" : "Like track"}
             title={isLiked ? "Unlike" : "Like"}
           >
-            <Heart className={`w-6 h-6 transition-colors ${isLiked ? 'fill-white text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]' : 'text-zinc-400 hover:text-white'}`} />
+            <Heart className={`w-5 h-5 transition-colors ${isLiked ? 'fill-white text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]' : 'text-zinc-400 hover:text-white'}`} />
           </button>
           <button 
             type="button" 
-            className="w-10 h-10 flex items-center justify-center text-white hover:text-zinc-200 active:scale-90 transition-transform cursor-pointer"
+            className="w-9 h-9 flex items-center justify-center text-white hover:text-zinc-200 active:scale-90 transition-transform cursor-pointer"
             onClick={playPause}
             aria-label="Play or Pause"
           >
             {isPlaying ? (
-              <svg className="w-7 h-7 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                 <rect x="6.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
                 <rect x="14.25" y="5.25" width="3.5" height="14.5" rx="0.75" />
               </svg>
             ) : (
-              <svg className="w-7 h-7 text-white translate-x-[1px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <svg className="w-6 h-6 text-white translate-x-[1px]" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                 <path d="M7 4.5v15l12-7.5z" />
               </svg>
             )}
           </button>
+          <button 
+            type="button" 
+            className="w-9 h-9 flex items-center justify-center text-zinc-400 hover:text-white active:scale-90 rounded-full hover:bg-zinc-800/60 transition-all cursor-pointer"
+            onClick={handleClosePlayer}
+            aria-label="Close player"
+            title="Close player"
+          >
+            <X className="w-5 h-5 sm:w-[22px] sm:h-[22px] stroke-[2.2]" />
+          </button>
         </div>
       </div>
+      )}
 
       {/* Mobile "Up Next" Queue Bottom Sheet */}
       <div 
@@ -859,7 +932,7 @@ export default function Player() {
               aria-label="Refresh recommendations"
               className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-full transition-colors flex items-center justify-center disabled:opacity-50 active:scale-95 group"
             >
-              <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-green-500' : 'group-hover:rotate-180 duration-500'}`} />
+              <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
             </button>
           </div>
           <div className="flex flex-col gap-1">
@@ -882,7 +955,7 @@ export default function Player() {
                   }}
                 />
                 <div className="flex flex-col flex-1 min-w-0">
-                  <span className="text-sm text-white font-medium truncate group-hover:text-green-400 transition-colors">{track.title}</span>
+                  <span className="text-sm text-white font-medium truncate group-hover:text-zinc-200 transition-colors">{track.title}</span>
                   <span className="text-xs text-zinc-400 truncate mt-0.5">{track.artist}</span>
                 </div>
               </div>

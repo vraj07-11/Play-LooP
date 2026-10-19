@@ -1,13 +1,18 @@
 import React from 'react';
-import { Home, Search, Library, Download, PlusSquare, Heart, User, Settings } from 'lucide-react';
+import { Home, Repeat, Search, Library, Download, PlusSquare, Heart, User, Settings } from 'lucide-react';
 
-export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentView }) {
+export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentView, currentView }) {
   const handleNavClick = (e, view) => {
     e.preventDefault();
     setCurrentView(view);
     if (window.innerWidth < 768) {
       setIsSidebarOpen(false);
     }
+  };
+
+  const getLinkClass = (view) => {
+    const isActive = currentView === view || (view === 'home' && (currentView === 'home' || currentView === 'liked-songs' || currentView === 'liked'));
+    return `underline-link flex items-center gap-3 transition-colors ${isActive ? 'text-white' : 'text-zinc-400 hover:text-white'}`;
   };
 
   return (
@@ -17,25 +22,31 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentVie
       <nav className="mt-1">
         <ul className="border-b border-zinc-800 pb-5">
           <li className="mb-5 border-white">
-            <a href="#" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'home')}>
+            <a href="#" className={getLinkClass('home')} onClick={(e) => handleNavClick(e, 'home')}>
               <Home className="w-6 h-6" />
               <span className="font-semibold">Home</span>
             </a>
           </li>
           <li className="mb-5">
-            <a href="#search" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'search')}>
+            <a href="#loops" className={getLinkClass('loops')} onClick={(e) => handleNavClick(e, 'loops')}>
+              <Repeat className="w-6 h-6" />
+              <span className="font-semibold">Loops</span>
+            </a>
+          </li>
+          <li className="mb-5">
+            <a href="#search" className={getLinkClass('search')} onClick={(e) => handleNavClick(e, 'search')}>
               <Search className="w-6 h-6" />
               <span className="font-semibold">Search</span>
             </a>
           </li>
           <li className="mb-5">
-            <a href="#library" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'library')}>
+            <a href="#library" className={getLinkClass('library')} onClick={(e) => handleNavClick(e, 'library')}>
               <Library className="w-6 h-6" />
               <span className="font-semibold">Your Library</span>
             </a>
           </li>
           <li className="">
-            <a href="#Download" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'download')}>
+            <a href="#Download" className={getLinkClass('download')} onClick={(e) => handleNavClick(e, 'download')}>
               <Download className="w-6 h-6" />
               <span className="font-semibold">Download App</span>
             </a>
@@ -43,13 +54,13 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentVie
         </ul>
         <ul className="mt-5 border-b border-zinc-800 pb-5">
           <li className="mb-5">
-            <a href="#create-playlist" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'create-playlist')}>
+            <a href="#create-playlist" className={getLinkClass('create-playlist')} onClick={(e) => handleNavClick(e, 'create-playlist')}>
               <PlusSquare className="w-6 h-6" />
               <span className="font-semibold">Create Playlist</span>
             </a>
           </li>
           <li className="">
-            <a href="#liked-songs" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'liked-songs')}>
+            <a href="#liked-songs" className={getLinkClass('liked-songs')} onClick={(e) => handleNavClick(e, 'liked-songs')}>
               <Heart className="w-6 h-6" />
               <span className="font-semibold">Liked Songs</span>
             </a>
@@ -58,13 +69,13 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen, setCurrentVie
       </nav>
       <ul className="mt-auto pt-5">
         <li className="mb-5">
-          <a href="#profile" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'profile')}>
+          <a href="#profile" className={getLinkClass('profile')} onClick={(e) => handleNavClick(e, 'profile')}>
             <User className="w-6 h-6" />
             <span className="font-semibold">Profile</span>
           </a>
         </li>
         <li className="">
-          <a href="#settings" className="underline-link flex items-center gap-3 text-zinc-400 hover:text-white transition-colors" onClick={(e) => handleNavClick(e, 'settings')}>
+          <a href="#settings" className={getLinkClass('settings')} onClick={(e) => handleNavClick(e, 'settings')}>
             <Settings className="w-6 h-6" />
             <span className="font-semibold">Settings</span>
           </a>

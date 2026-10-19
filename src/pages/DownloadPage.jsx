@@ -99,7 +99,7 @@ export default function DownloadPage() {
         </p>
 
         {isInstalled ? (
-          <div className="flex items-center gap-2 text-emerald-400 font-medium text-sm pt-2">
+          <div className="flex items-center gap-2 text-white font-medium text-sm pt-2">
             <CheckCircle className="w-5 h-5 shrink-0" />
             <span>Play LooP is installed on your device!</span>
           </div>
@@ -108,13 +108,13 @@ export default function DownloadPage() {
             <button
               type="button"
               onClick={handleInstallClick}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded-full transition-all duration-200 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white hover:bg-zinc-200 text-black font-semibold text-sm rounded-full transition-all duration-200 shadow-md hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Download className="w-5 h-5" />
               <span>Install Desktop / Mobile App</span>
             </button>
             {installStatusMsg && (
-              <p className="text-emerald-400 text-xs font-medium mt-3">{installStatusMsg}</p>
+              <p className="text-zinc-300 text-xs font-medium mt-3">{installStatusMsg}</p>
             )}
           </div>
         )}
@@ -123,7 +123,7 @@ export default function DownloadPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
         <div className="page-card flex flex-col justify-between">
           <div className="space-y-2">
-            <div className="p-2 w-fit rounded-lg bg-zinc-800 text-emerald-400 mb-3">
+            <div className="p-2 w-fit rounded-lg bg-zinc-800 text-white mb-3">
               <Smartphone className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-medium text-white">Mobile App</h3>
@@ -133,7 +133,7 @@ export default function DownloadPage() {
 
         <div className="page-card flex flex-col justify-between">
           <div className="space-y-2">
-            <div className="p-2 w-fit rounded-lg bg-zinc-800 text-emerald-400 mb-3">
+            <div className="p-2 w-fit rounded-lg bg-zinc-800 text-white mb-3">
               <Monitor className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-medium text-white">Desktop App</h3>
@@ -145,7 +145,7 @@ export default function DownloadPage() {
       {/* Mobile Background Playback Note */}
       <div className="p-5 bg-zinc-900/60 border border-zinc-800/80 rounded-xl space-y-2.5">
         <div className="flex items-center gap-2 text-zinc-300">
-          <Info className="w-4 h-4 text-red-500 shrink-0" />
+          <Info className="w-4 h-4 text-zinc-400 shrink-0" />
           <h4 className="text-sm font-medium text-zinc-200">Mobile Background Playback</h4>
         </div>
         <p className="text-xs text-zinc-400 leading-relaxed">

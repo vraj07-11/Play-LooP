@@ -113,7 +113,7 @@ export default function RightSidebar() {
             aria-label="Refresh recommendations"
             className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800/80 rounded-full transition-colors flex items-center justify-center disabled:opacity-50 group"
           >
-            <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-green-500' : 'group-hover:rotate-180 duration-500'}`} />
+            <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
           </button>
         </div>
         <div className="flex flex-col gap-1">

@@ -727,7 +727,7 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
 
             {saveSuccess && (
               <div className="flex items-center gap-2 text-zinc-200 text-xs font-medium">
-                <CheckCircle className="w-4 h-4 shrink-0 text-green-400" />
+                <CheckCircle className="w-4 h-4 shrink-0 text-white" />
                 <span>Playlist imported and saved to Your Library!</span>
               </div>
             )}
@@ -966,7 +966,7 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
           <button
             type="button"
             onClick={handleClearSavedPlaylists}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-800 text-zinc-300 hover:text-red-400 text-xs font-medium rounded-lg transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Clear Saved Playlists</span>
@@ -974,7 +974,7 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
           <button
             type="button"
             onClick={handleClearLikedSongs}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-red-950/40 border border-zinc-800 hover:border-red-800 text-zinc-300 hover:text-red-400 text-xs font-medium rounded-lg transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white text-xs font-medium rounded-lg transition cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Clear Liked Songs</span>
