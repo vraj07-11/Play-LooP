@@ -2,10 +2,6 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-# Environment configuration
-# Limit Node's memory if on Render Free tier, though it's much lighter now
-ENV NODE_OPTIONS="--max-old-space-size=256"
-
 # Copy dependency definitions and install all packages
 COPY package*.json ./
 RUN npm install
@@ -16,8 +12,12 @@ COPY . .
 # Build the React frontend
 RUN npm run build
 
-# Set production environment
+# Remove development dependencies to keep the image lightweight
+RUN npm prune --omit=dev
+
+# Set production environment and runtime memory limit
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=256"
 
 EXPOSE 3000
 

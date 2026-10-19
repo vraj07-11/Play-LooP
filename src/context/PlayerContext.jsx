@@ -1,8 +1,9 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { fetchApi, getAudioUrl, sendScrobble, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, getUserUuid } from '../services/api.js';
+import { fetchApi, getAudioUrl, sendScrobble, saveHistoryItem, syncHistoryBatch, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, getUserUuid } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
 import { filterValidDurationTracks } from '../utils/durationUtils.js';
+import { RECENTLY_PLAYED_KEY, MAX_HISTORY_ITEMS, normalizeHistoryTrack, mergeHistoryLists } from '../utils/historyManager.js';
 
 let hlsModulePromise = null;
 const getHlsModule = () => {
@@ -57,15 +58,15 @@ export function PlayerProvider({ children }) {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [recentlyPlayed, setRecentlyPlayed] = useState(() => {
     try {
-      const saved = localStorage.getItem("playloop_recently_played");
+      const saved = localStorage.getItem(RECENTLY_PLAYED_KEY);
       const parsed = saved ? JSON.parse(saved) : [];
       if (Array.isArray(parsed)) {
         // Drop old YouTube history to prevent playback crashes
         if (parsed.some(t => t.videoId && t.videoId.length === 11)) {
-           localStorage.removeItem("playloop_recently_played");
+           localStorage.removeItem(RECENTLY_PLAYED_KEY);
            return [];
         }
-        return parsed;
+        return parsed.slice(0, MAX_HISTORY_ITEMS);
       }
       return [];
     } catch (e) {
@@ -73,25 +74,28 @@ export function PlayerProvider({ children }) {
     }
   });
 
-  const addToRecentlyPlayed = (trackObj) => {
-    if (!trackObj || !trackObj.videoId) return;
-    // Normalise artwork: always keep both `thumbnail` and `cover` in sync so
-    // that the Carousel (reads thumbnail) and ProfilePage (reads cover) both
-    // resolve the correct CDN URL without falling back to the default cover.
-    const artUrl = trackObj.thumbnail || trackObj.cover || trackObj.artwork || trackObj.albumArt || trackObj.image || null;
-    const normalisedTrack = { ...trackObj, thumbnail: artUrl || trackObj.thumbnail, cover: artUrl || trackObj.cover };
+  const addToRecentlyPlayed = useCallback((trackObj, playlistContext = null) => {
+    if (!trackObj) return;
+    const historyItem = normalizeHistoryTrack(trackObj, playlistContext);
+    if (!historyItem) return;
+
     setRecentlyPlayed((prev) => {
       const currentList = Array.isArray(prev) ? prev : [];
-      const filtered = currentList.filter((t) => t.videoId !== normalisedTrack.videoId);
-      const updated = [normalisedTrack, ...filtered].slice(0, 20); // Cap at max 20
+      const updated = mergeHistoryLists([historyItem], currentList);
       try {
-        localStorage.setItem("playloop_recently_played", JSON.stringify(updated));
+        localStorage.setItem(RECENTLY_PLAYED_KEY, JSON.stringify(updated));
       } catch (e) {
         console.error("Failed to save history", e);
       }
+      window.dispatchEvent(new CustomEvent('playloop-history-updated', { detail: updated }));
       return updated;
     });
-  };
+
+    // Save history item directly to backend
+    saveHistoryItem(historyItem).catch((e) => {
+      console.warn('[PlayerContext] Failed to save history item to server:', e);
+    });
+  }, []);
   
   const recentlyPlayedRef = useRef(recentlyPlayed);
   useEffect(() => {
@@ -422,64 +426,54 @@ export function PlayerProvider({ children }) {
       local.sort((a, b) => (Number(b.played_at) || 0) - (Number(a.played_at) || 0));
       localStorage.setItem(LOCAL_SCROBBLES_KEY, JSON.stringify(local.slice(0, 100)));
 
-      const historyTracks = incoming
-        .filter((s) => s.title)
-        .map((s) => {
-          // Prefer the explicit CDN cover stored in `cover`; fall back through
-          // every known artwork alias before giving up to the default cover.
-          const artUrl = s.cover || s.thumbnail || s.artwork || s.albumArt || s.image_url || s.image || null;
-          return {
-            videoId: s.track_id || s.videoId,
-            title: s.title,
-            artist: s.artist,
-            // Keep both `thumbnail` (read by Carousel) and `cover` (read by
-            // ProfilePage / selectAndPlayTrack) pointing at the same CDN URL.
-            thumbnail: artUrl || '/default-cover.svg',
-            cover: artUrl || '/default-cover.svg',
-            album: s.album || null,
-            genre: s.genre || null,
-            duration: s.duration || null
-          };
-        });
-
-      if (historyTracks.length > 0) {
-        setRecentlyPlayed((prev) => {
-          const currentList = Array.isArray(prev) ? prev : [];
-          const merged = [...historyTracks, ...currentList];
-          const seenIds = new Set();
-          const unique = [];
-          for (const t of merged) {
-            const id = t.videoId || `${t.title}:${t.artist}`;
-            if (seenIds.has(id)) continue;
-            seenIds.add(id);
-            unique.push(t);
-            if (unique.length >= 20) break;
-          }
-          try {
-            localStorage.setItem('playloop_recently_played', JSON.stringify(unique));
-          } catch (e) {}
-          return unique;
-        });
-      }
     } catch (e) {
       console.warn('Failed to merge synced scrobbles', e);
     }
   };
+
+  const mergeIncomingHistory = useCallback((incomingHistory = []) => {
+    if (!Array.isArray(incomingHistory) || incomingHistory.length === 0) return;
+    setRecentlyPlayed((prev) => {
+      const currentList = Array.isArray(prev) ? prev : [];
+      const merged = mergeHistoryLists(currentList, incomingHistory);
+      try {
+        localStorage.setItem(RECENTLY_PLAYED_KEY, JSON.stringify(merged));
+      } catch (e) {}
+      window.dispatchEvent(new CustomEvent('playloop-history-updated', { detail: merged }));
+      return merged;
+    });
+  }, []);
 
   const pullDeviceSync = useCallback(async () => {
     try {
       const lastSync = Number(localStorage.getItem(LAST_SYNC_KEY) || 0);
       const data = await fetchSyncData(lastSync);
       if (!data) return data;
-      mergeIncomingScrobbles(data.scrobbles);
-      mergeIncomingPlaylists(data.playlists);
+      if (Array.isArray(data.history) && data.history.length > 0) {
+        mergeIncomingHistory(data.history);
+      }
+      if (Array.isArray(data.scrobbles)) {
+        mergeIncomingScrobbles(data.scrobbles);
+      }
+      if (Array.isArray(data.playlists)) {
+        mergeIncomingPlaylists(data.playlists);
+      }
       localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+
+      // Sync local history to server if present
+      try {
+        const local = JSON.parse(localStorage.getItem(RECENTLY_PLAYED_KEY) || '[]');
+        if (Array.isArray(local) && local.length > 0) {
+          syncHistoryBatch(local).catch(() => {});
+        }
+      } catch (_) {}
+
       return data;
     } catch (e) {
       console.warn('Device sync failed:', e);
       return null;
     }
-  }, []);
+  }, [mergeIncomingHistory]);
 
   useEffect(() => {
     pullDeviceSync();
@@ -1068,7 +1062,7 @@ export function PlayerProvider({ children }) {
     if (trackDuration > 0) setDuration(trackDuration);
     setPlayerStatus("Playing");
     setIsPlaying(true);
-    addToRecentlyPlayed(resolvedTrackObj);
+    addToRecentlyPlayed(resolvedTrackObj, activeContextRef.current);
     markTrackSeen(resolvedTrackObj);
     applyMediaSessionMetadata(resolvedTrackObj.title, resolvedTrackObj.artist, resolvedTrackObj.thumbnail, resolvedTrackObj.videoId);
 
@@ -1281,7 +1275,8 @@ export function PlayerProvider({ children }) {
         .catch(() => {});
     }
 
-    addToRecentlyPlayed(trackObj);
+    const currentPlaylistContext = context || (isAutoPlay || isHistoryNavigation ? activeContextRef.current : null);
+    addToRecentlyPlayed(trackObj, currentPlaylistContext);
     handleTrackHistoryAndRecommendations(trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay);
 
     applyMediaSessionMetadata(title, artist, thumbnail, videoId);

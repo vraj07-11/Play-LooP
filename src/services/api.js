@@ -58,6 +58,58 @@ export function sendScrobble(trackData) {
   }
 }
 
+export async function saveHistoryItem(item, user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    if (!uuid || !item) return null;
+    return await fetchApi('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: uuid,
+        item
+      })
+    });
+  } catch (err) {
+    console.warn('saveHistoryItem failed:', err);
+    return null;
+  }
+}
+
+export async function fetchHistory(user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    const res = await fetchApi(`/api/history?user_uuid=${encodeURIComponent(uuid)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data?.history || [];
+  } catch (err) {
+    console.warn('fetchHistory failed:', err);
+    return [];
+  }
+}
+
+export async function syncHistoryBatch(historyList, user_uuid = null) {
+  try {
+    const uuid = user_uuid || getUserUuid();
+    if (!uuid || !Array.isArray(historyList)) return [];
+    const res = await fetchApi('/api/history/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: uuid,
+        history: historyList
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data?.history || [];
+  } catch (err) {
+    console.warn('syncHistoryBatch failed:', err);
+    return [];
+  }
+}
+
 export async function fetchSyncData(sinceTimestamp = 0) {
   const since = Number(sinceTimestamp) || 0;
   const res = await fetchApi(

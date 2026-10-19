@@ -22,6 +22,11 @@ import {
   PROFILE_AVATAR_KEY,
   PLAYLIST_HISTORY_KEY 
 } from '../services/api';
+import { 
+  RECENTLY_PLAYED_KEY, 
+  deriveProfileHistory, 
+  mergeHistoryLists 
+} from '../utils/historyManager';
 
 const TIMEFRAMES = [
   { id: '7d',   label: 'Last 7 Days' },
@@ -187,108 +192,7 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
     setCustomAvatarInput('');
   };
 
-  // Build an aggregated map of all playlists (imported, local saved, and server synced)
-  const buildAggregatedPlaylistHistory = useCallback((serverPlaylists = [], serverHistory = []) => {
-    const allPlaylistsMap = new Map();
 
-    const mergePlaylist = (pl) => {
-      if (!pl) return;
-      const pid = String(pl.playlist_id || pl.playlistId || pl.id || '');
-      if (!pid) return;
-
-      const isImported = Boolean(
-        pl.isImported ||
-        pid.startsWith('imported_') ||
-        pl.author === 'Imported Playlist' ||
-        pl.artist === 'Imported Playlist'
-      );
-
-      const title = pl.title || pl.name || 'Untitled Playlist';
-      let tracks = [];
-      if (Array.isArray(pl.tracks)) {
-        tracks = pl.tracks;
-      } else if (typeof pl.tracks_json === 'string') {
-        try { tracks = JSON.parse(pl.tracks_json); } catch (_) {}
-      }
-
-      const firstCover = tracks[0]?.cover || tracks[0]?.thumbnail || pl.cover || pl.thumbnail || '/default-cover.svg';
-      const cleanCover = (!firstCover || firstCover === '/logo.svg') ? '/default-cover.svg' : firstCover;
-
-      const playedAt = Number(
-        pl.played_at ||
-        (pl.lastPlayedAt ? new Date(pl.lastPlayedAt).getTime() : 0) ||
-        pl.updated_at ||
-        0
-      );
-
-      const playCount = Number(pl.playCount || pl.play_count || 1);
-      const count = Number(pl.count || tracks.length || 0);
-
-      const existing = allPlaylistsMap.get(pid);
-      if (!existing) {
-        allPlaylistsMap.set(pid, {
-          id: `playlist_${pid}`,
-          type: 'playlist',
-          playlist_id: pid,
-          playlistId: pid,
-          title,
-          name: title,
-          artist: pl.artist || pl.author || (isImported ? 'Imported Playlist' : 'Playlist'),
-          author: pl.author || pl.artist || (isImported ? 'Imported Playlist' : 'Playlist'),
-          isImported,
-          cover: cleanCover,
-          thumbnail: cleanCover,
-          count,
-          tracks,
-          played_at: playedAt,
-          last_played_at: formatRelativeTime(playedAt),
-          playCount
-        });
-      } else {
-        const mostRecentPlayedAt = Math.max(existing.played_at || 0, playedAt || 0);
-        allPlaylistsMap.set(pid, {
-          ...existing,
-          title: title || existing.title,
-          name: title || existing.name,
-          cover: (cleanCover && cleanCover !== '/default-cover.svg') ? cleanCover : existing.cover,
-          thumbnail: (cleanCover && cleanCover !== '/default-cover.svg') ? cleanCover : existing.thumbnail,
-          count: count > 0 ? count : existing.count,
-          tracks: tracks.length > 0 ? tracks : existing.tracks,
-          isImported: isImported || existing.isImported,
-          played_at: mostRecentPlayedAt,
-          last_played_at: formatRelativeTime(mostRecentPlayedAt),
-          playCount: Math.max(existing.playCount || 0, playCount)
-        });
-      }
-    };
-
-    // 1. Ingest saved playlists (imported and native) from localStorage
-    try {
-      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-      if (Array.isArray(saved)) {
-        saved.forEach(mergePlaylist);
-      }
-    } catch (_) {}
-
-    // 2. Ingest playlist history (recent played playlists) from localStorage
-    try {
-      const history = JSON.parse(localStorage.getItem(PLAYLIST_HISTORY_KEY) || '[]');
-      if (Array.isArray(history)) {
-        history.forEach(mergePlaylist);
-      }
-    } catch (_) {}
-
-    // 3. Ingest server playlists and server history items
-    if (Array.isArray(serverPlaylists)) {
-      serverPlaylists.forEach(mergePlaylist);
-    }
-    if (Array.isArray(serverHistory)) {
-      serverHistory.filter((i) => i.type === 'playlist' || i.playlist_id).forEach(mergePlaylist);
-    }
-
-    return Array.from(allPlaylistsMap.values())
-      .sort((a, b) => (b.played_at || 0) - (a.played_at || 0));
-  }, []);
 
   // Fetch listening stats from backend with local fallback
   const fetchProfileStats = useCallback(async () => {
@@ -299,20 +203,25 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
       if (res.ok) {
         const data = await res.json();
         
-        // Extract song history from server response
-        const serverSongs = (data.history || []).filter(item => item.type === 'song' || (!item.playlist_id && item.track_id));
-        
-        // Build aggregated playlist history from all sources (local recent, local saved/imported, and server)
-        const aggregatedPlaylists = buildAggregatedPlaylistHistory(data.playlists, data.history);
-        
-        // Interleave song history with recent playlist activity
-        const combinedHistory = [...serverSongs, ...aggregatedPlaylists]
-          .sort((a, b) => (b.played_at || 0) - (a.played_at || 0));
+        let localRecently = [];
+        try {
+          localRecently = JSON.parse(localStorage.getItem(RECENTLY_PLAYED_KEY) || '[]');
+        } catch (_) {}
+
+        const mergedHistory = mergeHistoryLists(localRecently, data.history || []);
+        let savedPlaylists = [];
+        try {
+          savedPlaylists = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+        } catch (_) {}
+
+        const derived = deriveProfileHistory(mergedHistory, savedPlaylists);
 
         setStats({
           ...data,
-          history: combinedHistory,
-          playlistHistory: aggregatedPlaylists
+          history: derived.all,
+          songHistory: derived.songs,
+          playlistHistory: derived.playlists,
+          rawHistory: mergedHistory
         });
       } else {
         throw new Error(`HTTP ${res.status}`);
@@ -320,41 +229,37 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
     } catch (err) {
       console.warn('[ProfilePage] Server stats fetch failed, generating fallback:', err);
       try {
-        const localRecently = JSON.parse(localStorage.getItem('playloop_recently_played') || '[]');
-        const localScrobbles = JSON.parse(localStorage.getItem('playloop_scrobbles') || '[]');
+        let localRecently = [];
+        try {
+          localRecently = JSON.parse(localStorage.getItem(RECENTLY_PLAYED_KEY) || '[]');
+        } catch (_) {}
 
-        const allPlays = Array.isArray(localScrobbles) && localScrobbles.length > 0 
-          ? localScrobbles 
-          : localRecently.map((t) => ({
-              track_id: t.videoId || t.id,
-              title: t.title,
-              artist: t.artist,
-              album: t.album,
-              cover: t.cover || t.thumbnail || t.image,
-              duration: t.duration,
-              duration_listened: t.duration_listened || t.time_listened || 180,
-              played_at: t.played_at || Date.now()
-            }));
+        let savedPlaylists = [];
+        try {
+          savedPlaylists = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+        } catch (_) {}
 
-        const totalPlays = allPlays.length;
-        const uniqueTitles = new Set(allPlays.map((p) => `${p.title}||${p.artist}`));
+        const derived = deriveProfileHistory(localRecently, savedPlaylists);
+
+        const totalPlays = localRecently.length;
+        const uniqueTitles = new Set(localRecently.map((p) => `${p.title}||${p.artist}`));
         const totalSongs = uniqueTitles.size || totalPlays;
-        const totalSeconds = allPlays.reduce((acc, cur) => acc + (Number(cur.duration_listened || cur.time_listened || 180)), 0);
+        const totalSeconds = localRecently.reduce((acc, cur) => acc + (Number(cur.duration || 180)), 0);
 
         const artistMap = {};
         const trackMap = {};
-        allPlays.forEach((p) => {
+        localRecently.forEach((p) => {
           if (p.artist) {
             artistMap[p.artist] = (artistMap[p.artist] || 0) + 1;
           }
           if (p.title) {
-            const k = `${p.title}||${p.artist}||${p.track_id || ''}`;
+            const k = `${p.title}||${p.artist}||${p.track_id || p.videoId || ''}`;
             if (!trackMap[k]) {
               trackMap[k] = {
                 title: p.title,
                 artist: p.artist,
-                track_id: p.track_id,
-                cover: p.cover || '/default-cover.svg',
+                track_id: p.track_id || p.videoId,
+                cover: p.cover || p.thumbnail || '/default-cover.svg',
                 playCount: 0
               };
             }
@@ -371,22 +276,6 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
           .sort((a, b) => b.playCount - a.playCount)
           .slice(0, 5);
 
-        const songHistory = allPlays.slice(0, 30).map((p, idx) => ({
-          id: `song_local_${idx}`,
-          type: 'song',
-          track_id: p.track_id,
-          title: p.title,
-          artist: p.artist,
-          album: p.album,
-          cover: p.cover || '/default-cover.svg',
-          played_at: p.played_at || Date.now(),
-          last_played_at: formatRelativeTime(p.played_at || Date.now())
-        }));
-
-        const aggregatedPlaylists = buildAggregatedPlaylistHistory([], []);
-        const combinedHistory = [...songHistory, ...aggregatedPlaylists]
-          .sort((a, b) => (b.played_at || 0) - (a.played_at || 0));
-
         setStats({
           totalPlays,
           totalSongs,
@@ -394,8 +283,10 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
           listeningTimeFormatted: formatDurationText(totalSeconds),
           topArtists,
           topTracks,
-          history: combinedHistory,
-          playlistHistory: aggregatedPlaylists
+          history: derived.all,
+          songHistory: derived.songs,
+          playlistHistory: derived.playlists,
+          rawHistory: localRecently
         });
       } catch (fallbackErr) {
         console.error('[ProfilePage] Fallback generation error:', fallbackErr);
@@ -404,19 +295,37 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
     } finally {
       setLoading(false);
     }
-  }, [userUuid, timeframe, buildAggregatedPlaylistHistory]);
+  }, [userUuid, timeframe]);
 
   useEffect(() => {
     fetchProfileStats();
   }, [fetchProfileStats, refreshKey]);
 
   useEffect(() => {
+    const handleHistoryUpdated = (e) => {
+      const updated = e.detail;
+      if (Array.isArray(updated)) {
+        try {
+          const savedPlaylists = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+          const derived = deriveProfileHistory(updated, savedPlaylists);
+          setStats((prev) => prev ? {
+            ...prev,
+            rawHistory: updated,
+            history: derived.all,
+            songHistory: derived.songs,
+            playlistHistory: derived.playlists
+          } : prev);
+        } catch (_) {}
+      }
+    };
     const handlePlaylistActivity = () => {
       fetchProfileStats();
     };
+    window.addEventListener('playloop-history-updated', handleHistoryUpdated);
     window.addEventListener('playloop-playlist-activity', handlePlaylistActivity);
     window.addEventListener('playloop-saved-playlists-updated', handlePlaylistActivity);
     return () => {
+      window.removeEventListener('playloop-history-updated', handleHistoryUpdated);
       window.removeEventListener('playloop-playlist-activity', handlePlaylistActivity);
       window.removeEventListener('playloop-saved-playlists-updated', handlePlaylistActivity);
     };
@@ -495,15 +404,13 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
   // Filter history
   const filteredHistory = useMemo(() => {
     if (historyFilter === 'songs') {
-      return (stats?.history || []).filter((item) => item.type === 'song' || (!item.playlist_id && item.track_id));
+      return stats?.songHistory || [];
     }
     if (historyFilter === 'playlists') {
-      return (stats?.playlistHistory && stats.playlistHistory.length > 0)
-        ? stats.playlistHistory
-        : (stats?.history || []).filter((item) => item.type === 'playlist' || item.playlist_id);
+      return stats?.playlistHistory || [];
     }
     return stats?.history || [];
-  }, [stats?.history, stats?.playlistHistory, historyFilter]);
+  }, [stats?.history, stats?.songHistory, stats?.playlistHistory, historyFilter]);
 
   const isColdStart = !loading && totalPlays === 0 && historyItems.length === 0;
 
