@@ -35,8 +35,8 @@ Experience the application live here:
   Rich player interface with animated album art carousel, real-time synchronized lyrics parsing (`LRC`), volume controls, track scrubbing, and seamless crossfade transitions.
 * **Cloud Sync via Turso / LibSQL**  
   Synchronizes your scrobbles, listening history, and custom playlists across sessions with low-latency edge SQL databases.
-* **Last.fm Scrobbler Integration**  
-  Automatic track scrobbling to your Last.fm profile with live listening statistics and sync controls.
+* **Scrobbler Integration**  
+  Automatic track scrobbling with live listening statistics and sync controls.
 * **Offline Download Manager**  
   Save your favorite tracks locally for offline playback via the built-in streaming proxy download service.
 * **Mobile-First Gestures & PWA**  
@@ -140,8 +140,6 @@ Play-LooP/
    PORT=3000
    TURSO_DATABASE_URL=libsql://your-database-name.turso.io
    TURSO_AUTH_TOKEN=your_turso_auth_token_here
-   LASTFM_API_KEY=your_lastfm_api_key
-   LASTFM_SHARED_SECRET=your_lastfm_secret
    ```
 
 4. **Run the Development Application**
