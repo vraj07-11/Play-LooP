@@ -1,13 +1,13 @@
-# Play LooP 🎵
+# Play LooP 
 
 **Play LooP** is a modern, lightweight, and high-performance web music player designed for seamless, ad-free streaming. Built with a sleek dark aesthetic, responsive mobile-first gestures, and low-latency audio delivery, Play LooP bridges client-side elegance with an intelligent Express backend, real-time HLS proxying, and cloud database synchronization.
 
 ---
 
-## 🚀 Live Demo
+## Live Demo
 
 Experience the application live here:  
-👉 **[play-loop.onrender.com](https://play-loop.onrender.com)**
+ **[play-loop.onrender.com](https://play-loop.onrender.com)**
 
 ---
 
