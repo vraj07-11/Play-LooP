@@ -274,5 +274,36 @@
   animation: loops-lyrics-fade 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* Language Capsule Soundwave Visualizer */
+@keyframes soundwave-pulse {
+  0%, 100% {
+    height: 3px;
+    opacity: 0.6;
+  }
+  50% {
+    height: 12px;
+    opacity: 1;
+  }
+}
+
+.soundwave-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.soundwave-bars span {
+  width: 2px;
+  background-color: #ffffff;
+  border-radius: 9999px;
+  animation: soundwave-pulse 1s ease-in-out infinite;
+}
+
+.soundwave-bars span:nth-child(1) { animation-delay: 0.1s; height: 4px; }
+.soundwave-bars span:nth-child(2) { animation-delay: 0.35s; height: 11px; }
+.soundwave-bars span:nth-child(3) { animation-delay: 0.18s; height: 8px; }
+.soundwave-bars span:nth-child(4) { animation-delay: 0.45s; height: 6px; }
+
 
 

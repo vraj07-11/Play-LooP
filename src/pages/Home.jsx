@@ -1,11 +1,67 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS, savePlaylistApi, unsavePlaylistApi } from '../services/api.js';
+import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, fetchPopularSongs, DEFAULT_PLAYLISTS, savePlaylistApi, unsavePlaylistApi } from '../services/api.js';
 import Carousel from '../components/Carousel';
+import LanguageSongSection from '../components/LanguageSongSection';
+import SpeedDialSection from '../components/SpeedDialSection';
 import Footer from '../components/Footer';
 import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
 import { navigateBack } from '../utils/navigationHistory';
 import { filterValidDurationTracks } from '../utils/durationUtils';
+
+const LANGUAGE_POPULARITY_RANK = {
+  hindi: 1,
+  english: 2,
+  punjabi: 3,
+  telugu: 4,
+  tamil: 5,
+  bhojpuri: 6,
+  gujarati: 7,
+  marathi: 8,
+  malayalam: 9,
+  bengali: 10,
+  kannada: 11,
+  spanish: 12
+};
+
+const LANGUAGE_META = {
+  english: { label: 'English', native: 'English', tag: 'Global Pop & Billboard Hits', watermark: 'ENGLISH' },
+  hindi: { label: 'Hindi', native: 'हिन्दी', tag: 'Bollywood Top Charts & Indies', watermark: 'हिन्दी' },
+  gujarati: { label: 'Gujarati', native: 'ગુજરાતી', tag: 'Dhollywood & Folk Melodies', watermark: 'ગુજરાતી' },
+  punjabi: { label: 'Punjabi', native: 'ਪੰਜਾਬੀ', tag: 'Desi Hip-Hop & Bhangra Beats', watermark: 'ਪੰਜਾਬੀ' },
+  tamil: { label: 'Tamil', native: 'தமிழ்', tag: 'Kollywood Soundtracks & Melodies', watermark: 'தமிழ்' },
+  telugu: { label: 'Telugu', native: 'తెలుగు', tag: 'Tollywood Grooves & Hits', watermark: 'తెలుగు' },
+  spanish: { label: 'Spanish', native: 'Español', tag: 'Latin Reggaeton & Global Beats', watermark: 'ESPAÑOL' },
+  marathi: { label: 'Marathi', native: 'मराठी', tag: 'Marathi Classics & Pop', watermark: 'मराठी' },
+  bhojpuri: { label: 'Bhojpuri', native: 'भोजपुरी', tag: 'Desi Grooves & Folk Hits', watermark: 'भोजपुरी' },
+  malayalam: { label: 'Malayalam', native: 'മലയാളം', tag: 'Mollywood Vibes & Indie Tracks', watermark: 'മലയാളം' },
+  bengali: { label: 'Bengali', native: 'বাংলা', tag: 'Tollywood Classics & Hits', watermark: 'বাংলা' },
+  kannada: { label: 'Kannada', native: 'ಕನ್ನಡ', tag: 'Sandalwood Melodies & Beats', watermark: 'ಕನ್ನಡ' }
+};
+
+const getLanguageMeta = (lang) => {
+  const key = String(lang).toLowerCase().trim();
+  if (LANGUAGE_META[key]) return LANGUAGE_META[key];
+  const capitalized = key.charAt(0).toUpperCase() + key.slice(1);
+  return {
+    label: capitalized,
+    native: capitalized,
+    tag: 'Trending Hits'
+  };
+};
+
+const getInitialLanguages = () => {
+  try {
+    const prefStr = localStorage.getItem('preferred_languages');
+    if (prefStr) {
+      const parsed = JSON.parse(prefStr);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(l => String(l).toLowerCase().trim()).filter(Boolean);
+      }
+    }
+  } catch (e) {}
+  return ['english', 'hindi'];
+};
 
 export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [greeting, setGreeting] = useState('');
@@ -70,6 +126,10 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [loadingMoreArtists, setLoadingMoreArtists] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
 
+  const [userPreferredLanguages, setUserPreferredLanguages] = useState(getInitialLanguages);
+  const [languageSongs, setLanguageSongs] = useState({});
+  const [loadingLanguages, setLoadingLanguages] = useState({});
+
   const [sortBy, setSortBy] = useState('recent');
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef(null);
@@ -129,8 +189,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
   useEffect(() => {
     const handleLanguagesUpdated = () => {
-      const prefStr = localStorage.getItem('preferred_languages');
-      const langs = prefStr ? JSON.parse(prefStr) : [];
+      const langs = getInitialLanguages();
+      setUserPreferredLanguages(langs);
+
       setPopularArtists([]);
       fetchPopularArtists(langs, 10).then(artists => {
         if (artists && artists.length > 0) {
@@ -139,8 +200,173 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
       });
     };
     window.addEventListener('playloop-languages-updated', handleLanguagesUpdated);
-    return () => window.removeEventListener('playloop-languages-updated', handleLanguagesUpdated);
+    window.addEventListener('storage', handleLanguagesUpdated);
+    return () => {
+      window.removeEventListener('playloop-languages-updated', handleLanguagesUpdated);
+      window.removeEventListener('storage', handleLanguagesUpdated);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!userPreferredLanguages || userPreferredLanguages.length === 0) return;
+
+    userPreferredLanguages.forEach((lang) => {
+      if (languageSongs[lang] && languageSongs[lang].length > 0 && refreshKey === 0) return;
+
+      setLoadingLanguages(prev => ({ ...prev, [lang]: true }));
+      fetchPopularSongs([lang])
+        .then((songs) => {
+          if (Array.isArray(songs) && songs.length > 0) {
+            setLanguageSongs(prev => ({ ...prev, [lang]: songs }));
+          }
+        })
+        .catch((err) => {
+          console.error(`Failed to load popular songs for ${lang}:`, err);
+        })
+        .finally(() => {
+          setLoadingLanguages(prev => ({ ...prev, [lang]: false }));
+        });
+    });
+  }, [userPreferredLanguages, refreshKey]);
+
+  const handlePlayLanguageTrack = (track, index, lang) => {
+    const meta = getLanguageMeta(lang);
+    const songs = languageSongs[lang] || [];
+    const targetIdx = index >= 0 && index < songs.length ? index : songs.findIndex(s => s.videoId === track.videoId);
+    if (songs.length > 0) {
+      playPlaylist(songs, targetIdx !== -1 ? targetIdx : 0, {
+        playlistId: `popular-${lang}`,
+        title: `Popular in ${meta.label}`,
+        author: "Play LooP"
+      });
+    } else {
+      selectAndPlayTrack(
+        track.videoId,
+        track.title,
+        track.artist,
+        track.thumbnail || track.cover || track.artwork || track.albumArt,
+        false,
+        false,
+        track.duration
+      );
+    }
+  };
+
+  const handlePlayAllLanguage = (lang) => {
+    const meta = getLanguageMeta(lang);
+    const songs = languageSongs[lang];
+    if (songs && songs.length > 0) {
+      playPlaylist(songs, 0, {
+        playlistId: `popular-${lang}`,
+        title: `Popular in ${meta.label}`,
+        author: "Play LooP"
+      });
+    }
+  };
+
+  const handleShuffleLanguage = (lang) => {
+    const meta = getLanguageMeta(lang);
+    const songs = languageSongs[lang];
+    if (songs && songs.length > 0) {
+      const shuffled = [...songs].sort(() => 0.5 - Math.random());
+      playPlaylist(shuffled, 0, {
+        playlistId: `popular-${lang}-shuffle`,
+        title: `Popular in ${meta.label} (Shuffle)`,
+        author: "Play LooP"
+      });
+    }
+  };
+
+  // Selected languages to showcase as full sections (maximum 3)
+  const showcaseLanguages = useMemo(() => {
+    if (!userPreferredLanguages || userPreferredLanguages.length === 0) {
+      return ['hindi', 'english'];
+    }
+    const uniqueLangs = Array.from(new Set(userPreferredLanguages.map(l => String(l).toLowerCase().trim()))).filter(Boolean);
+    const sorted = uniqueLangs.sort((a, b) => {
+      const rankA = LANGUAGE_POPULARITY_RANK[a] || 99;
+      const rankB = LANGUAGE_POPULARITY_RANK[b] || 99;
+      return rankA - rankB;
+    });
+    return sorted.slice(0, 3);
+  }, [userPreferredLanguages]);
+
+  const renderLanguageSection = (lang) => {
+    if (!lang) return null;
+    const meta = getLanguageMeta(lang);
+    const songs = languageSongs[lang] || [];
+    const isLoading = Boolean(loadingLanguages[lang]) && songs.length === 0;
+
+    return (
+      <LanguageSongSection
+        key={`lang-showcase-${lang}`}
+        lang={lang}
+        meta={meta}
+        songs={songs}
+        isLoading={isLoading}
+        onPlayTrack={(track, index) => handlePlayLanguageTrack(track, index, lang)}
+        onPlayAll={() => handlePlayAllLanguage(lang)}
+        onShuffle={() => handleShuffleLanguage(lang)}
+      />
+    );
+  };
+
+  // Interleave popular tracks from all user's selected languages for Speed Dial
+  const speedDialSongs = useMemo(() => {
+    if (!userPreferredLanguages || userPreferredLanguages.length === 0) return [];
+
+    const langLists = userPreferredLanguages.map(l => ({
+      lang: l,
+      songs: (languageSongs[l] || []).map(s => ({ ...s, language: l }))
+    })).filter(item => item.songs.length > 0);
+
+    if (langLists.length === 0) return [];
+
+    const pooled = [];
+    const maxTracks = Math.max(...langLists.map(l => l.songs.length));
+
+    for (let i = 0; i < maxTracks; i++) {
+      for (const list of langLists) {
+        if (list.songs[i]) {
+          pooled.push(list.songs[i]);
+          if (pooled.length >= 27) break; // 3x3 x 3 pages max
+        }
+      }
+      if (pooled.length >= 27) break;
+    }
+
+    return pooled;
+  }, [userPreferredLanguages, languageSongs]);
+
+  const handlePlaySpeedDialTrack = (track, index) => {
+    if (speedDialSongs.length > 0) {
+      playPlaylist(speedDialSongs, index >= 0 && index < speedDialSongs.length ? index : 0, {
+        playlistId: 'speed-dial',
+        title: 'Speed Dial',
+        author: 'Play LooP'
+      });
+    } else {
+      selectAndPlayTrack(
+        track.videoId,
+        track.title,
+        track.artist,
+        track.thumbnail || track.cover || track.artwork || track.albumArt,
+        false,
+        false,
+        track.duration
+      );
+    }
+  };
+
+  const handlePlayAllSpeedDial = () => {
+    if (speedDialSongs.length > 0) {
+      playPlaylist(speedDialSongs, 0, {
+        playlistId: 'speed-dial',
+        title: 'Speed Dial',
+        author: 'Play LooP'
+      });
+    }
+  };
 
   useEffect(() => {
     const currentHour = new Date().getHours();
@@ -1252,6 +1478,22 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
       )}
 
+      {/* Speed Dial Section (YouTube Music Style 3-Row Grid from User's Selected Languages) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'songs') && (
+        <SpeedDialSection
+          songs={speedDialSongs}
+          isLoading={Object.values(loadingLanguages).some(Boolean) && speedDialSongs.length === 0}
+          onPlayTrack={handlePlaySpeedDialTrack}
+          onPlayAll={handlePlayAllSpeedDial}
+          currentPlayingTrackId={pendingTrack?.videoId}
+        />
+      )}
+
+      {/* 1st Language Showcase (Top Selected Language) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'songs') && showcaseLanguages[0] && (
+        renderLanguageSection(showcaseLanguages[0])
+      )}
+
       {/* Made For You Row (Wide Cards - Real or Skeleton) */}
       {(loadingPlaylists || madeForYouPlaylists.length > 0) && (activeCategoryFilter === 'all' || activeCategoryFilter === 'playlists') && (
         <div className="mb-10 sm:mb-12">
@@ -1269,6 +1511,11 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
       )}
 
+      {/* 2nd Language Showcase (Second Selected Language, if selected) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'songs') && showcaseLanguages[1] && (
+        renderLanguageSection(showcaseLanguages[1])
+      )}
+
       {/* Popular Artists Row (Real or Skeleton) */}
       {(popularArtists.length > 0 || loadingPlaylists) && (activeCategoryFilter === 'all' || activeCategoryFilter === 'artists') && (
         <div className="mb-10 sm:mb-12">
@@ -1284,6 +1531,11 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             isLoadingMore={loadingMoreArtists}
           />
         </div>
+      )}
+
+      {/* 3rd Language Showcase (Third Selected Language, if selected - maximum 3) */}
+      {(activeCategoryFilter === 'all' || activeCategoryFilter === 'songs') && showcaseLanguages[2] && (
+        renderLanguageSection(showcaseLanguages[2])
       )}
 
       {/* When filtering specifically by Artists: show a dedicated responsive grid */}

@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
 export default function Carousel({ 
   title, 
+  headerSubtitle,
+  headerAction,
   items, 
   onItemClick, 
   onPlayClick, 
@@ -88,8 +90,16 @@ export default function Carousel({
 
   return (
     <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-medium tracking-tight text-white">{title}</h3>
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0 flex-wrap">
+          {typeof title === 'string' ? (
+            <h3 className="text-xl font-medium tracking-tight text-white">{title}</h3>
+          ) : (
+            title
+          )}
+          {headerSubtitle}
+        </div>
+        {headerAction}
       </div>
 
       <div className="carousel-wrapper relative group/carousel">
@@ -109,7 +119,7 @@ export default function Carousel({
                 <div 
                   key={keyExtractor ? keyExtractor(item, index) : index} 
                   className="wide-card group"
-                  onClick={() => onItemClick && onItemClick(item)}
+                  onClick={() => onItemClick && onItemClick(item, index)}
                 >
                   <img 
                     src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
@@ -132,8 +142,8 @@ export default function Carousel({
                       className="wide-card-play-btn"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onPlayClick) onPlayClick(item);
-                        else if (onItemClick) onItemClick(item);
+                        if (onPlayClick) onPlayClick(item, index);
+                        else if (onItemClick) onItemClick(item, index);
                       }}
                       aria-label={`Play ${item.title}`}
                     >
@@ -149,77 +159,77 @@ export default function Carousel({
                 <div 
                   key={keyExtractor ? keyExtractor(item, index) : index} 
                   className="flex-none w-[150px] md:w-[170px] flex flex-col items-center gap-3 p-2 cursor-pointer group transition-transform hover:-translate-y-1"
-                  onClick={() => onItemClick && onItemClick(item)}
+                  onClick={() => onItemClick && onItemClick(item, index)}
                 >
                   <div className="relative w-full aspect-square rounded-full overflow-hidden shadow-xl bg-black border border-white/5">
                     <img 
-                      src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
-                      alt={item.title} 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      onError={(e) => {
-                        e.target.src = '/default-cover.svg';
-                      }}
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                      <button 
-                        type="button" 
-                        className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-transform"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onPlayClick) onPlayClick(item);
-                          else if (onItemClick) onItemClick(item);
-                        }}
-                        aria-label={`Play ${item.title}`}
-                      >
-                        <Play className="w-5 h-5 fill-current text-black translate-x-[2px]" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-center w-full px-1">
-                    <h4 className="text-[15px] font-bold text-white truncate">{item.title}</h4>
-                    <p className="text-[13px] text-zinc-400 font-medium truncate mt-0.5">
-                      {renderSubtitle ? renderSubtitle(item) : 'Artist'}
-                    </p>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div 
-                key={keyExtractor ? keyExtractor(item, index) : index} 
-                className="square-card"
-                onClick={() => onItemClick && onItemClick(item)}
-              >
-                <div className="square-card-art-wrapper">
-                  <div className="square-card-vinyl-container">
-                    <div className="square-card-vinyl"></div>
-                  </div>
-                  <div className="square-card-art-container bg-black border border-white/5">
-                    <img 
-                      src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
-                      alt={item.title} 
-                      className="square-card-art object-cover"
-                      onError={(e) => {
-                        e.target.src = '/default-cover.svg';
-                      }}
-                      loading="lazy"
-                    />
+                    src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
+                    alt={item.title} 
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    onError={(e) => {
+                      e.target.src = '/default-cover.svg';
+                    }}
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
                     <button 
                       type="button" 
-                      className="square-card-play-btn"
+                      className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-transform"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onPlayClick) onPlayClick(item);
-                        else if (onItemClick) onItemClick(item);
+                        if (onPlayClick) onPlayClick(item, index);
+                        else if (onItemClick) onItemClick(item, index);
                       }}
                       aria-label={`Play ${item.title}`}
                     >
-                      <Play className="w-5 h-5 fill-current text-black translate-x-[1px]" />
+                      <Play className="w-5 h-5 fill-current text-black translate-x-[2px]" />
                     </button>
                   </div>
                 </div>
+                <div className="text-center w-full px-1">
+                  <h4 className="text-[15px] font-bold text-white truncate">{item.title}</h4>
+                  <p className="text-[13px] text-zinc-400 font-medium truncate mt-0.5">
+                    {renderSubtitle ? renderSubtitle(item) : 'Artist'}
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div 
+              key={keyExtractor ? keyExtractor(item, index) : index} 
+              className="square-card"
+              onClick={() => onItemClick && onItemClick(item, index)}
+            >
+              <div className="square-card-art-wrapper">
+                <div className="square-card-vinyl-container">
+                  <div className="square-card-vinyl"></div>
+                </div>
+                <div className="square-card-art-container bg-black border border-white/5">
+                  <img 
+                    src={(!item.thumbnail && !item.cover && !item.artwork) ? '/default-cover.svg' : (item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg').replace('/logo.svg', '/default-cover.svg')} 
+                    alt={item.title} 
+                    className="square-card-art object-cover"
+                    onError={(e) => {
+                      e.target.src = '/default-cover.svg';
+                    }}
+                    loading="lazy"
+                  />
+                  <button 
+                    type="button" 
+                    className="square-card-play-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onPlayClick) onPlayClick(item, index);
+                      else if (onItemClick) onItemClick(item, index);
+                    }}
+                    aria-label={`Play ${item.title}`}
+                  >
+                    <Play className="w-5 h-5 fill-current text-black translate-x-[1px]" />
+                  </button>
+                </div>
+              </div>
                 <div className="square-card-info">
                   <h4 className="square-card-title">{item.title}</h4>
                   <p className="square-card-subtitle">
