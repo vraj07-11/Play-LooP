@@ -5,9 +5,10 @@ import Carousel from '../components/Carousel';
 import LanguageSongSection from '../components/LanguageSongSection';
 import SpeedDialSection from '../components/SpeedDialSection';
 import Footer from '../components/Footer';
-import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
+import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check, Edit3, Share2, MoreVertical, Trash2, GripVertical, ChevronUp, ChevronDown, ListPlus, FolderPlus, ListMusic } from 'lucide-react';
 import { navigateBack } from '../utils/navigationHistory';
 import { filterValidDurationTracks } from '../utils/durationUtils';
+import { removeSongFromPlaylist, reorderSongsInPlaylist, deleteUserPlaylist } from '../utils/playlistManager';
 
 const LANGUAGE_POPULARITY_RANK = {
   hindi: 1,
@@ -120,7 +121,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     : DEFAULT_PLAYLISTS;
   const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
-  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen } = usePlayer();
+  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen, addToUpNext, addToQueue } = usePlayer();
 
   const [popularArtists, setPopularArtists] = useState([]);
   const [loadingMoreArtists, setLoadingMoreArtists] = useState(false);
@@ -134,10 +135,22 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef(null);
 
+  const [openTrackMenuIndex, setOpenTrackMenuIndex] = useState(null);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const headerMenuRef = useRef(null);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target)) {
         setIsSortDropdownOpen(false);
+      }
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target)) {
+        setIsHeaderMenuOpen(false);
+      }
+      if (!e.target.closest('.track-menu-container')) {
+        setOpenTrackMenuIndex(null);
       }
     };
     document.addEventListener('pointerdown', handleClickOutside);
@@ -467,7 +480,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   useEffect(() => {
     const handleHashChange = async () => {
       const hash = window.location.hash || '';
-      const match = hash.match(/^#\/?playlist\/(.+)$/);
+      const match = hash.match(/^#\/?playlist\/([^?&]+)/);
       
       if (match) {
         const id = match[1];
@@ -498,7 +511,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                 }));
               }
               checkIfSaved(details.playlistId);
-              if (details.tracks && (details.tracks.length < 30 || String(details.playlistId).startsWith('imported_'))) {
+              if (details.tracks && (details.tracks.length < 30 || String(details.playlistId).startsWith('imported_') || String(details.playlistId).startsWith('user_pl_') || details.isUserCreated)) {
                 setHasMorePlaylist(false);
               }
             }
@@ -553,12 +566,160 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     const handleSavedUpdated = () => {
       setSavedPlaylistsVersion(v => v + 1);
       if (selectedPlaylistRef.current?.playlistId) {
-        checkIfSaved(selectedPlaylistRef.current.playlistId);
+        const curId = String(selectedPlaylistRef.current.playlistId);
+        checkIfSaved(curId);
+        try {
+          const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+          const match = saved.find(p => String(p.playlistId || p.id) === curId);
+          if (match) {
+            setSelectedPlaylist(prev => ({
+              ...prev,
+              ...match,
+              title: match.title || match.name,
+              tracks: match.tracks || []
+            }));
+          }
+        } catch (_) {}
       }
     };
     window.addEventListener('playloop-saved-playlists-updated', handleSavedUpdated);
     return () => window.removeEventListener('playloop-saved-playlists-updated', handleSavedUpdated);
   }, []);
+
+  const isSelectedUserPlaylist = useMemo(() => {
+    if (!selectedPlaylist || selectedPlaylist.isArtist || selectedPlaylist.isLikedPlaylist) return false;
+    const pid = String(selectedPlaylist.playlistId || '');
+    return Boolean(selectedPlaylist.isUserCreated || pid.startsWith('user_pl_') || isPlaylistSaved(pid));
+  }, [selectedPlaylist, isPlaylistSaved]);
+
+  const handleShareCurrentPlaylist = () => {
+    if (!selectedPlaylist) return;
+    setIsHeaderMenuOpen(false);
+    window.dispatchEvent(
+      new CustomEvent('playloop-open-share', {
+        detail: {
+          type: 'playlist',
+          isPlaylist: true,
+          playlistId: selectedPlaylist.playlistId,
+          title: selectedPlaylist.title,
+          author: selectedPlaylist.author || 'You',
+          thumbnail: selectedPlaylist.thumbnail || '/default-cover.svg',
+          count: selectedPlaylist.tracks?.length || 0
+        }
+      })
+    );
+  };
+
+  const handleEditCurrentPlaylist = () => {
+    if (!selectedPlaylist) return;
+    setIsHeaderMenuOpen(false);
+    window.dispatchEvent(
+      new CustomEvent('playloop-open-playlist-edit', {
+        detail: {
+          playlistId: selectedPlaylist.playlistId,
+          title: selectedPlaylist.title,
+          description: selectedPlaylist.description || ''
+        }
+      })
+    );
+  };
+
+  const handleDeleteCurrentPlaylist = () => {
+    if (!selectedPlaylist) return;
+    setIsHeaderMenuOpen(false);
+    const pid = String(selectedPlaylist.playlistId);
+    deleteUserPlaylist(pid);
+    window.dispatchEvent(new CustomEvent('playloop-toast', { detail: 'Playlist deleted' }));
+    handleBack();
+  };
+
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e, toIndex) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === toIndex || !sortedTracks || !selectedPlaylist?.tracks) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const fromTrack = sortedTracks[draggedIndex];
+    const toTrack = sortedTracks[toIndex];
+    if (!fromTrack || !toTrack) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const realFrom = selectedPlaylist.tracks.findIndex(t => String(t.videoId || t.id) === String(fromTrack.videoId || fromTrack.id));
+    const realTo = selectedPlaylist.tracks.findIndex(t => String(t.videoId || t.id) === String(toTrack.videoId || toTrack.id));
+    if (realFrom === -1 || realTo === -1 || realFrom === realTo) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    if (sortBy !== 'recent') {
+      setSortBy('recent');
+    }
+
+    const pid = selectedPlaylist?.playlistId;
+    if (pid) {
+      const updated = reorderSongsInPlaylist(pid, realFrom, realTo);
+      if (updated) {
+        setSelectedPlaylist(prev => ({ ...prev, ...updated }));
+      }
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleMoveSong = (fromIndex, direction) => {
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (!sortedTracks || !selectedPlaylist?.tracks || toIndex < 0 || toIndex >= sortedTracks.length) return;
+
+    const fromTrack = sortedTracks[fromIndex];
+    const toTrack = sortedTracks[toIndex];
+    if (!fromTrack || !toTrack) return;
+
+    const realFrom = selectedPlaylist.tracks.findIndex(t => String(t.videoId || t.id) === String(fromTrack.videoId || fromTrack.id));
+    const realTo = selectedPlaylist.tracks.findIndex(t => String(t.videoId || t.id) === String(toTrack.videoId || toTrack.id));
+    if (realFrom === -1 || realTo === -1 || realFrom === realTo) return;
+
+    if (sortBy !== 'recent') {
+      setSortBy('recent');
+    }
+
+    const pid = selectedPlaylist?.playlistId;
+    if (pid) {
+      const updated = reorderSongsInPlaylist(pid, realFrom, realTo);
+      if (updated) {
+        setSelectedPlaylist(prev => ({ ...prev, ...updated }));
+      }
+    }
+  };
+
+  const handleRemoveTrackFromPlaylist = (e, videoId) => {
+    e.stopPropagation();
+    const pid = selectedPlaylist?.playlistId;
+    if (pid) {
+      const updated = removeSongFromPlaylist(pid, videoId);
+      if (updated) {
+        setSelectedPlaylist(prev => ({ ...prev, ...updated }));
+        window.dispatchEvent(new CustomEvent('playloop-toast', { detail: 'Song removed from playlist' }));
+      }
+    }
+  };
 
   const handleToggleSave = (targetPlaylist) => {
     const target = (targetPlaylist && targetPlaylist.playlistId) ? targetPlaylist : selectedPlaylist;
@@ -979,7 +1140,16 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               >
                 <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play
               </button>
-              {!selectedPlaylist.isLikedPlaylist && (
+              {isSelectedUserPlaylist ? (
+                <button
+                  type="button"
+                  onClick={handleEditCurrentPlaylist}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-white font-medium text-sm rounded-full transition cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
+                >
+                  <Edit3 className="w-4 h-4 text-zinc-400" />
+                  <span>Edit Playlist</span>
+                </button>
+              ) : !selectedPlaylist.isLikedPlaylist && (
                 <button
                   type="button"
                   onClick={() => handleToggleSave()}
@@ -1002,13 +1172,69 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   )}
                 </button>
               )}
-              <button className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer">
-                <span className="flex gap-1">
-                  <span className="w-1 h-1 rounded-full bg-current"></span>
-                  <span className="w-1 h-1 rounded-full bg-current"></span>
-                  <span className="w-1 h-1 rounded-full bg-current"></span>
-                </span>
-              </button>
+
+              {/* Share Playlist Button */}
+              {!selectedPlaylist.isLikedPlaylist && (
+                <button
+                  type="button"
+                  onClick={handleShareCurrentPlaylist}
+                  title="Share Playlist"
+                  aria-label="Share Playlist"
+                  className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer hover:scale-105 active:scale-95"
+                >
+                  <Share2 className="w-5 h-5" />
+                </button>
+              )}
+
+              {/* Playlist Header More Menu */}
+              {!selectedPlaylist.isLikedPlaylist && (
+                <div className="relative" ref={headerMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsHeaderMenuOpen(!isHeaderMenuOpen)}
+                    aria-label="More playlist options"
+                    className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer hover:scale-105 active:scale-95"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+
+                  {isHeaderMenuOpen && (
+                    <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                      {isSelectedUserPlaylist && (
+                        <button
+                          type="button"
+                          onClick={handleEditCurrentPlaylist}
+                          className="w-full px-4 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                        >
+                          <Edit3 className="w-4 h-4 text-zinc-400" />
+                          <span>Edit Details</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleShareCurrentPlaylist}
+                        className="w-full px-4 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <Share2 className="w-4 h-4 text-zinc-400" />
+                        <span>Share Playlist</span>
+                      </button>
+                      {isSelectedUserPlaylist && (
+                        <>
+                          <div className="my-1 border-t border-zinc-800" />
+                          <button
+                            type="button"
+                            onClick={handleDeleteCurrentPlaylist}
+                            className="w-full px-4 py-2.5 text-xs text-left text-red-400 hover:text-red-300 hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Delete Playlist</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1073,8 +1299,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-[36px_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
-              <span className="text-center">#</span>
+            <div className="grid grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
+              <span className="w-12 text-center">#</span>
               <span>Title</span>
               <span>Artist</span>
               <span>Album</span>
@@ -1088,21 +1314,55 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   <article
                     key={track.videoId || idx}
                     ref={idx === sortedTracks.length - 1 ? lastTrackElementRef : null}
-                    className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[36px_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-lg hover:bg-zinc-800/50 transition group cursor-pointer"
+                    draggable={isSelectedUserPlaylist && sortBy === 'recent'}
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    className={`grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-xl hover:bg-zinc-800/50 transition group cursor-pointer ${
+                      dragOverIndex === idx ? 'border-t-2 border-white bg-zinc-800/80' : ''
+                    }`}
                     onClick={() => handlePlayTrackInPlaylist(idx)}
                   >
-                    <span className="w-8 text-center text-sm font-medium text-zinc-500 group-hover:hidden">
-                      {idx + 1}
-                    </span>
-                    <span className="w-8 text-center hidden group-hover:flex justify-center items-center">
-                      <Play className="w-4 h-4 text-white fill-current" />
-                    </span>
+                    {/* Index / Play / Reorder Handle */}
+                    <div className="w-10 sm:w-12 flex items-center justify-center shrink-0" onClick={(e) => isSelectedUserPlaylist && e.stopPropagation()}>
+                      {isSelectedUserPlaylist && sortBy === 'recent' ? (
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveSong(idx, 'up')}
+                            className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition"
+                            title="Move up"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === sortedTracks.length - 1}
+                            onClick={() => handleMoveSong(idx, 'down')}
+                            className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition"
+                            title="Move down"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm font-medium text-zinc-500 group-hover:hidden">
+                            {idx + 1}
+                          </span>
+                          <span className="hidden group-hover:flex justify-center items-center">
+                            <Play className="w-4 h-4 text-white fill-current" />
+                          </span>
+                        </>
+                      )}
+                    </div>
                     
-                    <div className="flex items-center gap-4 min-w-0 pr-4">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 pr-2">
                       <img
                         src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail}
                         alt={track.title}
-                        className="w-10 h-10 md:w-12 md:h-12 rounded shrink-0 object-cover bg-black border border-white/5"
+                        className="w-10 h-10 md:w-12 md:h-12 rounded-lg shrink-0 object-cover bg-black border border-white/5 shadow-sm"
                         onError={(e) => {
                           e.target.src = '/default-cover.svg';
                         }}
@@ -1129,23 +1389,144 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                       {formatDuration(track.duration || (180 + Math.floor(Math.random() * 60)))}
                     </div>
 
-                    <div className="flex items-center justify-end text-zinc-500 opacity-0 group-hover:opacity-100 transition">
-                      <span className="flex gap-0.5 tracking-widest cursor-pointer hover:text-white px-2">•••</span>
+                    {/* Track Menu Dropdown */}
+                    <div className="track-menu-container relative flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenTrackMenuIndex(openTrackMenuIndex === idx ? null : idx);
+                        }}
+                        aria-label="Track options"
+                        className="p-1.5 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-700/50 transition cursor-pointer"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+
+                      {openTrackMenuIndex === idx && (
+                        <div
+                          className="absolute right-0 top-full mt-1 w-52 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenTrackMenuIndex(null);
+                              window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: track }));
+                            }}
+                            className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <ListPlus className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>Add to Playlist</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenTrackMenuIndex(null);
+                              addToUpNext(track);
+                            }}
+                            className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <Play className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>Play Next</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenTrackMenuIndex(null);
+                              addToQueue(track);
+                            }}
+                            className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <ListMusic className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>Add to Queue</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenTrackMenuIndex(null);
+                              window.dispatchEvent(new CustomEvent('playloop-open-share', { detail: track }));
+                            }}
+                            className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <Share2 className="w-3.5 h-3.5 text-zinc-400" />
+                            <span>Share Track</span>
+                          </button>
+
+                          {isSelectedUserPlaylist && (
+                            <>
+                              <div className="my-1 border-t border-zinc-800" />
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenTrackMenuIndex(null);
+                                    handleMoveSong(idx, 'up');
+                                  }}
+                                  className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                                  <span>Move Up</span>
+                                </button>
+                              )}
+                              {idx < sortedTracks.length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenTrackMenuIndex(null);
+                                    handleMoveSong(idx, 'down');
+                                  }}
+                                  className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                                  <span>Move Down</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  setOpenTrackMenuIndex(null);
+                                  handleRemoveTrackFromPlaylist(e, track.videoId);
+                                }}
+                                className="w-full px-3.5 py-2 text-xs text-left text-red-400 hover:text-red-300 hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove from Playlist</span>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </article>
                 ))
               ) : (
-                <div className="text-center py-16 px-4">
-                  <p className="text-zinc-400 text-base font-medium">
+                <div className="text-center py-20 px-4">
+                  <div className="w-16 h-16 rounded-full bg-zinc-900 border border-zinc-800 mx-auto flex items-center justify-center text-zinc-400 mb-4">
+                    <Music className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-white text-lg font-bold mb-1">
                     {selectedPlaylist.isLikedPlaylist 
-                      ? "You haven't liked any songs yet." 
-                      : "No tracks found in this playlist."}
+                      ? "You haven't liked any songs yet" 
+                      : (isSelectedUserPlaylist ? "This playlist is empty" : "No tracks found in this playlist")}
+                  </h3>
+                  <p className="text-zinc-400 text-xs sm:text-sm max-w-md mx-auto mb-6">
+                    {selectedPlaylist.isLikedPlaylist 
+                      ? "Tap the heart icon on any song or player to add it to your Liked Songs." 
+                      : (isSelectedUserPlaylist 
+                          ? "Find your favorite songs using Search or Home, tap the ••• menu or player button to add them here." 
+                          : "Try exploring other playlists or tracks.")}
                   </p>
-                  {selectedPlaylist.isLikedPlaylist && (
-                    <p className="text-zinc-500 text-xs sm:text-sm mt-1.5">
-                      Tap the heart icon on any song or player to add it to your Liked Songs.
-                    </p>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (setCurrentView) setCurrentView('search');
+                      window.location.hash = '#/search';
+                    }}
+                    className="px-6 py-2.5 bg-white text-black font-bold text-xs sm:text-sm rounded-full hover:bg-zinc-200 transition cursor-pointer shadow-md hover:scale-105 active:scale-95"
+                  >
+                    Explore Songs
+                  </button>
                 </div>
               )}
               {loadingMorePlaylist && (

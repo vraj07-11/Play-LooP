@@ -7,6 +7,17 @@ export default function ShareModal() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  useEffect(() => {
     const handleOpenShare = (e) => {
       if (e.detail) {
         setTrack(e.detail);
@@ -21,13 +32,20 @@ export default function ShareModal() {
 
   if (!isOpen || !track) return null;
 
-  const title = track.title || 'Track';
-  const artist = track.artist || track.channelTitle || 'Artist';
+  const isPlaylist = Boolean(track.isPlaylist || track.type === 'playlist' || (!track.videoId && (track.playlistId || track.id)));
+  const title = track.title || (isPlaylist ? 'Playlist' : 'Track');
+  const artist = isPlaylist 
+    ? (track.author || (track.count ? `${track.count} songs` : 'Play LooP'))
+    : (track.artist || track.channelTitle || 'Artist');
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://play-loop.onrender.com';
   
-  // Clean short URL without any third-party CDN or query parameters
-  const shareUrl = `${origin}/track/${encodeURIComponent(track.videoId)}`;
-  const shareMessage = `Listen to "${title}" by ${artist} on Play LooP:`;
+  // Clean URL for sharing
+  const shareUrl = isPlaylist
+    ? `${origin}/#/playlist/${encodeURIComponent(track.playlistId || track.id)}`
+    : `${origin}/track/${encodeURIComponent(track.videoId)}`;
+  const shareMessage = isPlaylist
+    ? `Check out the playlist "${title}" on Play LooP:`
+    : `Listen to "${title}" by ${artist} on Play LooP:`;
 
   const handleCopy = async () => {
     try {
@@ -140,12 +158,16 @@ export default function ShareModal() {
   const hasNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in select-none">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in select-none"
+      onClick={() => setIsOpen(false)}
+    >
       <div 
         className="relative w-full max-w-md bg-zinc-950/90 border border-white/10 rounded-3xl p-6 sm:p-7 shadow-[0_20px_70px_rgba(0,0,0,0.85)] backdrop-blur-2xl animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-label="Share music"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -154,8 +176,12 @@ export default function ShareModal() {
               <Share2 className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white tracking-tight">Share Song</h3>
-              <p className="text-xs text-zinc-400">Share with friends or copy clean link</p>
+              <h3 className="text-lg font-bold text-white tracking-tight">
+                {isPlaylist ? 'Share Playlist' : 'Share Song'}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                {isPlaylist ? 'Share this playlist with anyone' : 'Share with friends or copy clean link'}
+              </p>
             </div>
           </div>
           <button
@@ -171,7 +197,7 @@ export default function ShareModal() {
         {/* Track Preview Card */}
         <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-white/5 border border-white/5 mb-6">
           <img
-            src={track.thumbnail || `/api/cover?id=${encodeURIComponent(track.videoId)}`}
+            src={track.thumbnail || (track.videoId ? `/api/cover?id=${encodeURIComponent(track.videoId)}` : '/default-cover.svg')}
             alt={title}
             onError={(e) => { e.target.src = '/default-cover.svg'; }}
             className="w-14 h-14 rounded-xl object-cover shrink-0 border border-white/10 shadow-md"
@@ -180,7 +206,7 @@ export default function ShareModal() {
             <h4 className="text-sm font-bold text-white truncate">{title}</h4>
             <p className="text-xs text-zinc-400 truncate mt-0.5">{artist}</p>
             <span className="inline-block mt-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-              Play LooP
+              {isPlaylist ? 'Playlist' : 'Play LooP'}
             </span>
           </div>
         </div>

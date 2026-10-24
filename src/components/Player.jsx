@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { 
   Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, 
-  ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, Heart, Share2,
+  ChevronUp, ChevronDown, RotateCcw, RotateCw, ListMusic, ListPlus, Heart, Share2,
   Volume2, Volume1, VolumeX, X 
 } from 'lucide-react';
 import { shareTrack } from '../services/shareService';
@@ -959,6 +959,17 @@ export default function Player() {
                   <span className="text-sm text-white font-medium truncate group-hover:text-zinc-200 transition-colors">{track.title}</span>
                   <span className="text-xs text-zinc-400 truncate mt-0.5">{track.artist}</span>
                 </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: track }));
+                  }}
+                  className="p-2 text-zinc-400 hover:text-white transition cursor-pointer shrink-0"
+                  title="Add to playlist"
+                >
+                  <ListPlus className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>

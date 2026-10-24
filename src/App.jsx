@@ -22,6 +22,9 @@ const DownloadPage = lazy(() => import('./pages/DownloadPage'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
 const InfoPage = lazy(() => import('./pages/InfoPage'));
 const ShareModal = lazy(() => import('./components/ShareModal'));
+const AddToPlaylistModal = lazy(() => import('./components/AddToPlaylistModal'));
+const PlaylistEditModal = lazy(() => import('./components/PlaylistEditModal'));
+const GlobalToast = lazy(() => import('./components/GlobalToast'));
 
 const INFO_VIEWS = new Set([
   'how-it-works', 'features', 'faq', 'blog',
@@ -361,6 +364,9 @@ function App() {
       )}
       <Suspense fallback={null}>
         <ShareModal />
+        <AddToPlaylistModal />
+        <PlaylistEditModal />
+        <GlobalToast />
       </Suspense>
     </div>
   );

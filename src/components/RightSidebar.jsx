@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, RotateCw } from 'lucide-react';
+import { Play, RotateCw, ListPlus } from 'lucide-react';
 
 export default function RightSidebar() {
   const { 
@@ -142,9 +142,20 @@ export default function RightSidebar() {
                   <h4 className="text-sm font-medium text-zinc-200 group-hover:text-white truncate">{track.title}</h4>
                   <p className="text-xs text-zinc-500 truncate">{track.artist}</p>
                 </div>
-                <span className="text-xs text-zinc-500 font-medium">
+                <span className="text-xs text-zinc-500 font-medium group-hover:hidden">
                   {formatDuration(track.duration || (180 + Math.floor(Math.random() * 60)))}
                 </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: track }));
+                  }}
+                  className="hidden group-hover:flex p-1 text-zinc-400 hover:text-white transition cursor-pointer"
+                  title="Add to playlist"
+                >
+                  <ListPlus className="w-3.5 h-3.5" />
+                </button>
               </article>
             ))
           ) : (

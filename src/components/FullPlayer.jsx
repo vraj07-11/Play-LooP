@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, Check } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, ListPlus, Check } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { getAudioUrl, savePlaylistApi, unsavePlaylistApi, saveLikedTrackApi } from '../services/api';
 import { shareTrack } from '../services/shareService';
@@ -34,6 +34,7 @@ export default function FullPlayer({
   const [toastMessage, setToastMessage] = useState('');
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isInPlaylist, setIsInPlaylist] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const showToast = (msg) => {
@@ -57,9 +58,14 @@ export default function FullPlayer({
         } else {
           setIsSaved(liked.includes(pendingTrack.videoId));
         }
+
+        const trackVid = pendingTrack.videoId || pendingTrack.id;
+        const inAny = saved.some(p => Array.isArray(p.tracks) && p.tracks.some(t => String(t.videoId || t.id) === String(trackVid)));
+        setIsInPlaylist(inAny);
       } catch (e) {
         setIsLiked(false);
         setIsSaved(false);
+        setIsInPlaylist(false);
       }
     };
 
@@ -113,6 +119,21 @@ export default function FullPlayer({
       setIsRightSidebarOpen(true);
     }
     window.dispatchEvent(new CustomEvent('playloop-open-queue'));
+  };
+
+  const handleAddToPlaylist = () => {
+    const vid = pendingTrack?.videoId || pendingTrack?.id;
+    if (!vid) return;
+    window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', {
+      detail: {
+        videoId: vid,
+        title: pendingTrack.title || currentTitle || "Track",
+        artist: pendingTrack.artist || pendingTrack.channelTitle || "Artist",
+        thumbnail: (!pendingTrack.thumbnail || pendingTrack.thumbnail === '/logo.svg') ? (pendingTrack.image || '/default-cover.svg') : pendingTrack.thumbnail,
+        duration: pendingTrack.duration || duration || 180,
+        album: pendingTrack.album || ''
+      }
+    }));
   };
 
   const handleSave = () => {
@@ -879,23 +900,15 @@ export default function FullPlayer({
               <Heart className={`w-5 h-5 sm:w-6 sm:h-6 ${isLiked ? 'fill-white text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]' : 'text-zinc-400 hover:text-white'}`} />
             </button>
 
-            {/* Save */}
+            {/* Add to Playlist */}
             <button
               type="button"
-              onClick={handleSave}
+              onClick={handleAddToPlaylist}
               className="p-2 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-              title={
-                activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs'
-                  ? (isSaved ? "Saved in Your Library" : "Save Playlist to Library")
-                  : (isLiked ? "Saved in Liked Songs" : "Save to Liked Songs")
-              }
-              aria-label="Save to Library"
+              title={isInPlaylist ? "In playlists (Click to manage)" : "Add to playlist"}
+              aria-label="Add to playlist"
             >
-              {(activeContext?.id && !activeContext.isLikedPlaylist && activeContext.id !== 'liked_songs' && activeContext.id !== 'liked-songs' ? isSaved : isLiked) ? (
-                <Check className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]" />
-              ) : (
-                <Bookmark className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white" />
-              )}
+              <ListPlus className={`w-5 h-5 sm:w-6 sm:h-6 ${isInPlaylist ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 'text-zinc-400 hover:text-white'}`} />
             </button>
 
             {/* Download */}

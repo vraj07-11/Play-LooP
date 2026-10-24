@@ -400,41 +400,58 @@ export function cachePlaylistThumbnail(playlistId, thumbnail) {
   playlistDetailsCache.set(`${playlistId}:1`, { ...existing, playlistId, thumbnail });
 }
 
+export function invalidatePlaylistDetailsCache(playlistId = null) {
+  if (!playlistId) {
+    playlistDetailsCache.clear();
+    return;
+  }
+  const pid = String(playlistId);
+  for (const key of playlistDetailsCache.keys()) {
+    if (key.startsWith(`${pid}:`)) {
+      playlistDetailsCache.delete(key);
+    }
+  }
+}
+
 export async function fetchPlaylistDetails(playlistId, page = 1) {
   const cacheKey = `${playlistId}:${page}`;
-  if (playlistDetailsCache.has(cacheKey)) {
-    return playlistDetailsCache.get(cacheKey);
-  }
 
   // Check if it's an imported or locally saved playlist with tracks stored in localStorage
-  try {
-    const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-    const history = JSON.parse(localStorage.getItem(PLAYLIST_HISTORY_KEY) || '[]');
-    const localMatch = saved.find(p => String(p.playlistId || p.id) === String(playlistId))
-      || history.find(p => String(p.playlistId || p.id) === String(playlistId));
-    if (localMatch && Array.isArray(localMatch.tracks) && localMatch.tracks.length > 0) {
-      const validTracks = filterValidDurationTracks(localMatch.tracks);
-      const isImported = Boolean(
-        localMatch.isImported ||
-        String(localMatch.playlistId || localMatch.id).startsWith('imported_') ||
-        localMatch.author === 'Imported Playlist' ||
-        localMatch.artist === 'Imported Playlist'
-      );
-      const result = {
-        playlistId: localMatch.playlistId || localMatch.id,
-        title: localMatch.title || localMatch.name,
-        author: localMatch.author || (isImported ? 'Imported Playlist' : 'Playlist'),
-        isImported,
-        thumbnail: (!localMatch.thumbnail || localMatch.thumbnail === '/logo.svg') ? '/default-cover.svg' : localMatch.thumbnail,
-        description: localMatch.description || `Collection containing ${validTracks.length} tracks.`,
-        count: validTracks.length,
-        tracks: validTracks
-      };
-      if (page === 1) playlistDetailsCache.set(cacheKey, result);
-      return result;
+  if (page === 1) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
+      const history = JSON.parse(localStorage.getItem(PLAYLIST_HISTORY_KEY) || '[]');
+      const localMatch = saved.find(p => String(p.playlistId || p.id) === String(playlistId))
+        || history.find(p => String(p.playlistId || p.id) === String(playlistId));
+      if (localMatch && Array.isArray(localMatch.tracks)) {
+        const validTracks = filterValidDurationTracks(localMatch.tracks);
+        const isImported = Boolean(
+          localMatch.isImported ||
+          String(localMatch.playlistId || localMatch.id).startsWith('imported_') ||
+          localMatch.author === 'Imported Playlist' ||
+          localMatch.artist === 'Imported Playlist'
+        );
+        const result = {
+          playlistId: localMatch.playlistId || localMatch.id,
+          title: localMatch.title || localMatch.name,
+          author: localMatch.author || (isImported ? 'Imported Playlist' : 'Playlist'),
+          isImported,
+          isUserCreated: Boolean(localMatch.isUserCreated),
+          thumbnail: (!localMatch.thumbnail || localMatch.thumbnail === '/logo.svg') ? '/default-cover.svg' : localMatch.thumbnail,
+          description: localMatch.description || `Collection containing ${validTracks.length} tracks.`,
+          count: validTracks.length,
+          tracks: validTracks
+        };
+        playlistDetailsCache.set(cacheKey, result);
+        return result;
+      }
+    } catch (err) {
+      console.error("Error checking local saved playlists:", err);
     }
-  } catch (err) {
-    console.error("Error checking local saved playlists:", err);
+  }
+
+  if (playlistDetailsCache.has(cacheKey)) {
+    return playlistDetailsCache.get(cacheKey);
   }
 
   try {

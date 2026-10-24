@@ -1509,6 +1509,121 @@ export function PlayerProvider({ children }) {
     }
   };
 
+  const addToUpNext = useCallback((track) => {
+    const vid = track?.videoId || track?.id;
+    if (!vid) return;
+    const cleanTrack = {
+      videoId: vid,
+      title: track.title || track.name || 'Unknown Track',
+      artist: track.artist || track.channelTitle || track.singers || 'Unknown Artist',
+      thumbnail: (!track.thumbnail || track.thumbnail === '/logo.svg') ? (track.image || '/default-cover.svg') : track.thumbnail,
+      duration: Number(track.duration) || 180,
+      album: track.album || ''
+    };
+
+    setTrackQueue((prev) => {
+      const currentList = Array.isArray(prev) ? [...prev] : [];
+      if (currentList.length === 0) {
+        const base = pendingTrackRef.current ? [pendingTrackRef.current] : [];
+        const nextList = [...base, cleanTrack, ...(recommendationQueueRef.current?.slice(0, 15) || [])];
+        trackQueueRef.current = nextList;
+        return nextList;
+      }
+      
+      const cIdx = currentTrackIndexRef.current >= 0 ? currentTrackIndexRef.current : 0;
+      currentList.splice(cIdx + 1, 0, cleanTrack);
+      trackQueueRef.current = currentList;
+      return currentList;
+    });
+
+    window.dispatchEvent(new CustomEvent('playloop-toast', { detail: `"${cleanTrack.title}" added to Up Next` }));
+  }, []);
+
+  const addToQueue = useCallback((track) => {
+    const vid = track?.videoId || track?.id;
+    if (!vid) return;
+    const cleanTrack = {
+      videoId: vid,
+      title: track.title || track.name || 'Unknown Track',
+      artist: track.artist || track.channelTitle || track.singers || 'Unknown Artist',
+      thumbnail: (!track.thumbnail || track.thumbnail === '/logo.svg') ? (track.image || '/default-cover.svg') : track.thumbnail,
+      duration: Number(track.duration) || 180,
+      album: track.album || ''
+    };
+
+    setTrackQueue((prev) => {
+      const currentList = Array.isArray(prev) ? [...prev] : [];
+      if (currentList.length === 0 && pendingTrackRef.current) {
+        currentList.push(pendingTrackRef.current);
+      }
+      currentList.push(cleanTrack);
+      trackQueueRef.current = currentList;
+      return currentList;
+    });
+
+    window.dispatchEvent(new CustomEvent('playloop-toast', { detail: `"${cleanTrack.title}" added to queue` }));
+  }, []);
+
+  const removeFromQueue = useCallback((index) => {
+    setTrackQueue((prev) => {
+      if (!Array.isArray(prev) || index < 0 || index >= prev.length) return prev;
+      const updated = [...prev];
+      updated.splice(index, 1);
+      trackQueueRef.current = updated;
+
+      const cIdx = currentTrackIndexRef.current;
+      if (index < cIdx) {
+        currentTrackIndexRef.current = cIdx - 1;
+        setCurrentTrackIndex(cIdx - 1);
+      } else if (index === cIdx && cIdx >= updated.length) {
+        const newIdx = Math.max(0, updated.length - 1);
+        currentTrackIndexRef.current = newIdx;
+        setCurrentTrackIndex(newIdx);
+      }
+      return updated;
+    });
+  }, []);
+
+  const moveInQueue = useCallback((fromIndex, toIndex) => {
+    setTrackQueue((prev) => {
+      if (!Array.isArray(prev) || fromIndex === toIndex) return prev;
+      if (fromIndex < 0 || fromIndex >= prev.length || toIndex < 0 || toIndex >= prev.length) return prev;
+      const updated = [...prev];
+      const [item] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, item);
+      trackQueueRef.current = updated;
+
+      const cIdx = currentTrackIndexRef.current;
+      if (cIdx === fromIndex) {
+        currentTrackIndexRef.current = toIndex;
+        setCurrentTrackIndex(toIndex);
+      } else if (fromIndex < cIdx && toIndex >= cIdx) {
+        currentTrackIndexRef.current = cIdx - 1;
+        setCurrentTrackIndex(cIdx - 1);
+      } else if (fromIndex > cIdx && toIndex <= cIdx) {
+        currentTrackIndexRef.current = cIdx + 1;
+        setCurrentTrackIndex(cIdx + 1);
+      }
+
+      return updated;
+    });
+  }, []);
+
+  const clearQueue = useCallback(() => {
+    setTrackQueue((prev) => {
+      if (pendingTrackRef.current) {
+        const kept = [pendingTrackRef.current];
+        trackQueueRef.current = kept;
+        currentTrackIndexRef.current = 0;
+        setCurrentTrackIndex(0);
+        return kept;
+      }
+      trackQueueRef.current = [];
+      return [];
+    });
+    window.dispatchEvent(new CustomEvent('playloop-toast', { detail: 'Queue cleared' }));
+  }, []);
+
   const resolveNextTrack = useCallback((advanceTrackWindow = true) => {
     const tQueue = trackQueueRef.current;
     const isShuffle = isShuffleEnabledRef.current;
@@ -1983,6 +2098,11 @@ export function PlayerProvider({ children }) {
     duration,
     trackQueue,
     setTrackQueue,
+    addToUpNext,
+    addToQueue,
+    removeFromQueue,
+    moveInQueue,
+    clearQueue,
     recentlyPlayed,
     activeContext,
     recordPlaylistActivity,

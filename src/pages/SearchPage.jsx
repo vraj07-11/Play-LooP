@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPlaylistDetails, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
-import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
+import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft, ListPlus } from 'lucide-react';
 import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
 export default function SearchPage({ refreshKey = 0 }) {
@@ -21,7 +21,7 @@ export default function SearchPage({ refreshKey = 0 }) {
   const [visibleArtistsCount, setVisibleArtistsCount] = useState(6);
   const [playlistThumbnailMap, setPlaylistThumbnailMap] = useState({});
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const { selectAndPlayTrack, playPlaylist } = usePlayer();
+  const { selectAndPlayTrack, playPlaylist, addToUpNext, addToQueue } = usePlayer();
   const mainScrollRef = useRef(null);
   const mobileInputRef = useRef(null);
 
@@ -979,9 +979,27 @@ export default function SearchPage({ refreshKey = 0 }) {
                                     <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
                                   </div>
                                 </div>
-                                <span className="text-xs text-zinc-500 font-mono hidden sm:block">
-                                  {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
-                                </span>
+                                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }))}
+                                    className="p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                    title="Add to Playlist"
+                                  >
+                                    <ListPlus className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => addToUpNext(song)}
+                                    className="hidden sm:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                    title="Play Next"
+                                  >
+                                    <Play className="w-3.5 h-3.5 fill-current" />
+                                  </button>
+                                  <span className="text-xs text-zinc-500 font-mono hidden sm:block w-10 text-right">
+                                    {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                                  </span>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1123,9 +1141,27 @@ export default function SearchPage({ refreshKey = 0 }) {
                                   <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
                                 </div>
                               </div>
-                              <span className="text-xs text-zinc-500 font-mono">
-                                {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
-                              </span>
+                              <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }))}
+                                  className="p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                  title="Add to Playlist"
+                                >
+                                  <ListPlus className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => addToUpNext(song)}
+                                  className="hidden sm:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                  title="Play Next"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-current" />
+                                </button>
+                                <span className="text-xs text-zinc-500 font-mono w-10 text-right">
+                                  {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>

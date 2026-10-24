@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Library, Play, Heart, ArrowUpDown, Check, Download, X } from 'lucide-react';
+import { Library, Play, Heart, ArrowUpDown, Check, Download, Plus, MoreVertical, Edit3, Share2, Trash2, X } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { unsavePlaylistApi } from '../services/api';
-
-
-
+import { deleteUserPlaylist } from '../utils/playlistManager';
 
 // ---------------------------------------------------------------------------
 // Main LibraryPage
@@ -16,6 +13,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
   const [likedCount, setLikedCount]         = useState(0);
   const [sortOption, setSortOption]         = useState('recent');
   const [isSortOpen, setIsSortOpen]         = useState(false);
+  const [openMenuPlaylistId, setOpenMenuPlaylistId] = useState(null);
   const sortRef = useRef(null);
 
   useEffect(() => {
@@ -43,6 +41,9 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
     const handleClickOutside = (e) => {
       if (sortRef.current && !sortRef.current.contains(e.target)) {
         setIsSortOpen(false);
+      }
+      if (!e.target.closest('.playlist-menu-container')) {
+        setOpenMenuPlaylistId(null);
       }
     };
     document.addEventListener('pointerdown', handleClickOutside);
@@ -72,7 +73,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
   }, [savedPlaylists, sortOption]);
 
   const handlePlaylistClick = (playlist) => {
-    window.location.hash = `#/playlist/${playlist.playlistId}`;
+    window.location.hash = `#/playlist/${playlist.playlistId || playlist.id}`;
   };
 
   const handleLikedClick = () => {
@@ -84,16 +85,54 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
     window.location.hash = '#/settings#import';
   };
 
-  const handleRemovePlaylist = (e, playlistId) => {
+  const handleCreatePlaylistClick = () => {
+    window.dispatchEvent(
+      new CustomEvent('playloop-open-playlist-edit', {
+        detail: { defaultName: `My Playlist #${savedPlaylists.length + 1}` }
+      })
+    );
+  };
+
+  const handleRenamePlaylist = (e, playlist) => {
     e.stopPropagation();
+    setOpenMenuPlaylistId(null);
+    window.dispatchEvent(
+      new CustomEvent('playloop-open-playlist-edit', {
+        detail: {
+          playlistId: playlist.playlistId || playlist.id,
+          title: playlist.title || playlist.name,
+          description: playlist.description || ''
+        }
+      })
+    );
+  };
+
+  const handleSharePlaylist = (e, playlist) => {
+    e.stopPropagation();
+    setOpenMenuPlaylistId(null);
+    window.dispatchEvent(
+      new CustomEvent('playloop-open-share', {
+        detail: {
+          type: 'playlist',
+          isPlaylist: true,
+          playlistId: playlist.playlistId || playlist.id,
+          title: playlist.title || playlist.name || 'Playlist',
+          author: playlist.author || 'You',
+          thumbnail: playlist.thumbnail || '/default-cover.svg',
+          count: playlist.tracks ? playlist.tracks.length : (playlist.count || 0)
+        }
+      })
+    );
+  };
+
+  const handleDeletePlaylist = (e, playlistId) => {
+    e.stopPropagation();
+    setOpenMenuPlaylistId(null);
     try {
       const pid = String(playlistId);
-      const saved = JSON.parse(localStorage.getItem('playloop_saved_playlists') || '[]');
-      const updated = saved.filter(p => String(p.playlistId || p.id) !== pid);
-      localStorage.setItem('playloop_saved_playlists', JSON.stringify(updated));
+      const updated = deleteUserPlaylist(pid);
       setSavedPlaylists(updated);
-      window.dispatchEvent(new Event('playloop-saved-playlists-updated'));
-      unsavePlaylistApi(pid).catch(() => {});
+      window.dispatchEvent(new CustomEvent('playloop-toast', { detail: 'Playlist removed from library' }));
     } catch (err) {
       console.error(err);
     }
@@ -104,6 +143,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
       e.preventDefault();
       if (action === 'liked') handleLikedClick();
       else if (action === 'playlist') handlePlaylistClick(param);
+      else if (action === 'create') handleCreatePlaylistClick();
     }
   };
 
@@ -121,8 +161,19 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
           </h2>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-2.5 ml-auto shrink-0">
-          {/* Import button (desktop only) */}
+        <div className="flex items-center gap-2 sm:gap-2.5 ml-auto shrink-0 flex-wrap sm:flex-nowrap">
+          {/* Create Playlist Button */}
+          <button
+            type="button"
+            onClick={handleCreatePlaylistClick}
+            className="text-xs sm:text-sm font-bold text-black bg-white hover:bg-zinc-200 rounded-full px-3.5 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5 sm:gap-2 transition cursor-pointer shadow-md hover:scale-105 active:scale-95 shrink-0"
+            title="Create a new playlist"
+          >
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+            <span>New Playlist</span>
+          </button>
+
+          {/* Import button */}
           <button
             type="button"
             onClick={handleImportClick}
@@ -174,7 +225,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                     }`}
                   >
                     <span>{opt.label}</span>
-                    {sortOption === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                    {sortOption === opt.id && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
                   </button>
                 ))}
               </div>
@@ -183,11 +234,32 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
         </div>
       </div>
 
-
       {/* ------------------------------------------------------------------ */}
       {/* Playlist Grid                                                       */}
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
+
+        {/* Create Playlist Tile */}
+        <div
+          onClick={handleCreatePlaylistClick}
+          onKeyDown={(e) => handleKeyDown(e, 'create')}
+          tabIndex={0}
+          role="button"
+          aria-label="Create Playlist"
+          className="group flex flex-col p-3.5 rounded-2xl bg-[#141416] hover:bg-[#202024] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
+        >
+          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-800 to-zinc-950 border border-white/10 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+            <div className="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white text-zinc-300 group-hover:text-black flex items-center justify-center transition-colors duration-300">
+              <Plus className="w-7 h-7 stroke-[2.5]" />
+            </div>
+          </div>
+          <h4 className="font-bold text-white text-[15px] truncate mb-1 tracking-tight">
+            Create Playlist
+          </h4>
+          <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
+            Add your favorite songs
+          </p>
+        </div>
 
         {/* Liked Songs Card */}
         <div
@@ -196,20 +268,20 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
           tabIndex={0}
           role="button"
           aria-label="Liked Songs"
-          className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] focus:bg-[#282828] focus:outline-none focus:ring-2 focus:ring-white cursor-pointer transition-colors duration-300"
+          className="group flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
         >
-          <div className="relative w-full aspect-square rounded-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center">
-            <Heart className="w-16 h-16 text-white fill-current drop-shadow-md" />
+          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center">
+            <Heart className="w-16 h-16 text-white fill-current drop-shadow-md group-hover:scale-105 transition-transform duration-300" />
             <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
-              <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
+              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
                 <Play className="w-5 h-5 fill-current translate-x-[2px]" />
               </div>
             </div>
           </div>
-          <h4 className="font-bold text-white text-[15px] truncate mb-1.5 tracking-tight">
+          <h4 className="font-bold text-white text-[15px] truncate mb-1 tracking-tight">
             Liked Songs
           </h4>
-          <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
+          <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
             {likedCount} {likedCount === 1 ? 'song' : 'songs'}
           </p>
         </div>
@@ -221,66 +293,111 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
           tabIndex={0}
           role="button"
           aria-label="Import Playlist"
-          className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] focus:bg-[#282828] focus:outline-none focus:ring-2 focus:ring-white cursor-pointer transition-colors duration-300 sm:hidden"
+          className="group flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 sm:hidden shadow-lg"
         >
-          <div className="relative w-full aspect-square rounded-[2px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center">
+          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center">
             <Download className="w-12 h-12 text-white drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
-            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
-              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 text-black">
-                <Download className="w-4 h-4 text-black" />
-              </div>
-            </div>
           </div>
-          <h4 className="font-bold text-white text-[15px] truncate mb-1.5 tracking-tight">
+          <h4 className="font-bold text-white text-[15px] truncate mb-1 tracking-tight">
             Import Playlist
           </h4>
-          <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
+          <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
             Spotify, YT &amp; Files
           </p>
         </div>
 
         {/* Saved Playlists */}
-        {sortedSavedPlaylists.map((item, index) => (
-          <div
-            key={`${item.playlistId}-${index}`}
-            onClick={() => handlePlaylistClick(item)}
-            onKeyDown={(e) => handleKeyDown(e, 'playlist', item)}
-            tabIndex={0}
-            role="button"
-            aria-label={`Playlist: ${item.title}`}
-            className="group flex flex-col p-3.5 rounded bg-[#181818] hover:bg-[#282828] focus:bg-[#282828] focus:outline-none focus:ring-2 focus:ring-white cursor-pointer transition-colors duration-300"
-          >
-            <div className={`relative w-full aspect-square shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-black border border-white/5 ${item.isArtist ? 'rounded-full' : 'rounded-[2px]'}`}>
-              <img
-                src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail}
-                alt={item.title}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                onError={(e) => { e.target.src = '/default-cover.svg'; }}
-                loading="lazy"
-              />
-              <button
-                type="button"
-                onClick={(e) => handleRemovePlaylist(e, item.playlistId || item.id)}
-                title="Remove from Your Library"
-                aria-label="Remove from Your Library"
-                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 cursor-pointer shadow-md hover:scale-110 active:scale-95"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-              <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
-                <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
-                  <Play className="w-5 h-5 fill-current translate-x-[2px]" />
+        {sortedSavedPlaylists.map((item, index) => {
+          const pid = String(item.playlistId || item.id);
+          const isMenuOpen = openMenuPlaylistId === pid;
+          const count = item.tracks ? item.tracks.length : (item.count || 0);
+
+          return (
+            <div
+              key={`${pid}-${index}`}
+              onClick={() => handlePlaylistClick(item)}
+              onKeyDown={(e) => handleKeyDown(e, 'playlist', item)}
+              tabIndex={0}
+              role="button"
+              aria-label={`Playlist: ${item.title}`}
+              className="group relative flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
+            >
+              <div className={`relative w-full aspect-square shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-black border border-white/5 ${item.isArtist ? 'rounded-full' : 'rounded-xl'}`}>
+                <img
+                  src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail}
+                  alt={item.title}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  onError={(e) => { e.target.src = '/default-cover.svg'; }}
+                  loading="lazy"
+                />
+
+                {/* Top Options Menu trigger */}
+                <div className="playlist-menu-container absolute top-2 right-2 z-30">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenMenuPlaylistId(isMenuOpen ? null : pid);
+                    }}
+                    title="Playlist options"
+                    aria-label="Playlist options"
+                    className="w-8 h-8 rounded-full bg-black/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-white/10 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all duration-200 cursor-pointer shadow-md hover:scale-105 active:scale-95"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isMenuOpen && (
+                    <div
+                      className="absolute right-0 top-full mt-1.5 w-44 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => handleRenamePlaylist(e, item)}
+                        className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Edit Details</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleSharePlaylist(e, item)}
+                        className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <Share2 className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Share Playlist</span>
+                      </button>
+                      <div className="my-1 border-t border-zinc-800" />
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeletePlaylist(e, pid)}
+                        className="w-full px-3.5 py-2 text-xs text-left text-red-400 hover:text-red-300 hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Playlist</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Hover Play Button */}
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
+                  <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
+                    <Play className="w-5 h-5 fill-current translate-x-[2px]" />
+                  </div>
                 </div>
               </div>
+
+              <h4 className="font-bold text-white text-[15px] truncate mb-1 tracking-tight">
+                {item.title || item.name}
+              </h4>
+              <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
+                {item.author || (item.isUserCreated ? 'By You' : 'Collection')} • {count} {count === 1 ? 'song' : 'songs'}
+              </p>
             </div>
-            <h4 className="font-bold text-white text-[15px] truncate mb-1.5 tracking-tight">
-              {item.title}
-            </h4>
-            <p className="font-medium text-zinc-400 text-[13px] line-clamp-2 leading-snug">
-              {item.author || item.artist || 'Collection'}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

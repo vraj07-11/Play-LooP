@@ -126,6 +126,31 @@ router.get("/api/playlist", async (req, res) => {
 	}
 
 	try {
+		// 0. Check if this is a user-created or synced playlist stored in database
+		try {
+			const dbCheck = await db.execute({
+				sql: `SELECT id, user_uuid, name, tracks_json, updated_at FROM playlists WHERE id = ?`,
+				args: [playlistId]
+			});
+			if (dbCheck.rows && dbCheck.rows.length > 0) {
+				const row = dbCheck.rows[0];
+				const tracks = parsePlaylistTracks(row.tracks_json);
+				return res.json({
+					playlistId: row.id,
+					title: row.name,
+					author: "Play LooP User",
+					thumbnail: tracks[0]?.thumbnail || "/default-cover.svg",
+					description: `Playlist containing ${tracks.length} tracks.`,
+					count: tracks.length,
+					tracks: tracks,
+					isUserCreated: true,
+					updated_at: row.updated_at
+				});
+			}
+		} catch (dbErr) {
+			// Continue to external sources
+		}
+
 		if (playlistId.startsWith("ARTIST:")) {
 			const artistId = playlistId.replace("ARTIST:", "");
 			const pageStr = String(req.query.page || "1");
