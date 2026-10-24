@@ -29,8 +29,8 @@ export default function InfoPage({ currentView, setCurrentView }) {
 
     const descriptions = {
       'how-it-works': 'Technical breakdown of Play LooP audio streaming pipeline, adaptive HLS segmenting, and Turso LibSQL edge database sync.',
-      'features': 'Complete specifications of Play LooP features: zero-buffer HLS streaming, synchronized LRC lyrics, cloud database sync, Last.fm scrobbler, and offline PWA.',
-      'faq': 'Frequently asked questions regarding ad-free streaming, offline downloads, playlist importing, and Last.fm sync.',
+      'features': 'Complete specifications of Play LooP features: zero-buffer HLS streaming, synchronized LRC lyrics, cloud database sync, custom playlist management, and offline PWA.',
+      'faq': 'Frequently asked questions regarding ad-free streaming, offline downloads, playlist importing, and cloud database sync.',
       'blog': 'Technical articles on web audio streaming architecture, mobile background audio handling, and serverless edge databases.',
       'about': 'The developer story and principles behind Play LooP, an independent ad-free web music player.',
       'contact': 'Direct contact channels and feedback form for Play LooP listeners and developers.',
@@ -168,9 +168,9 @@ export default function InfoPage({ currentView, setCurrentView }) {
               </div>
 
               <div className="border-b border-white/10 pb-6 space-y-2">
-                <h2 className="text-lg font-bold text-white">Last.fm Scrobbler Integration</h2>
+                <h2 className="text-lg font-bold text-white">Custom Playlists & Queue Management</h2>
                 <p className="text-zinc-400">
-                  Accurately computes listen-time thresholds across pause and seek events to dispatch authentic scrobbles to your Last.fm profile.
+                  Create personal collections, reorder tracks on the fly with drag-and-drop, add songs to Up Next, and share your custom playlists with friends.
                 </p>
               </div>
 
@@ -218,8 +218,8 @@ export default function InfoPage({ currentView, setCurrentView }) {
             a: 'Certain mobile operating systems throttle network traffic and timers on background browser tabs to conserve battery. Installing Play LooP as a PWA on your home screen or allowing background activity in your browser app settings resolves this.'
           },
           {
-            q: 'How do I connect Last.fm scrobbling?',
-            a: 'Navigate to Settings, open the Last.fm configuration section, and input your Last.fm username and API key. Tracks played past 50% duration will scrobble automatically.'
+            q: 'How do I create and manage custom playlists?',
+            a: 'Go to Your Library and click New Playlist or tap the + playlist button on any track. You can add songs to multiple playlists simultaneously, reorder tracks, and share playlists via direct link.'
           }
         ];
 

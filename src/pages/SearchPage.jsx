@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPlaylistDetails, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
-import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft, ListPlus } from 'lucide-react';
+import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft, ListPlus, MoreVertical, ListMusic, Share2, ListStart, FolderPlus } from 'lucide-react';
 import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
 export default function SearchPage({ refreshKey = 0 }) {
@@ -24,6 +24,27 @@ export default function SearchPage({ refreshKey = 0 }) {
   const { selectAndPlayTrack, playPlaylist, addToUpNext, addToQueue } = usePlayer();
   const mainScrollRef = useRef(null);
   const mobileInputRef = useRef(null);
+
+  const [openSongMenuKey, setOpenSongMenuKey] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.search-song-menu-container')) {
+        setOpenSongMenuKey(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setOpenSongMenuKey(null);
+      }
+    };
+    document.addEventListener('pointerdown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const [popularArtists, setPopularArtists] = useState([]);
   const [popularSongsData, setPopularSongsData] = useState([]);
@@ -488,28 +509,97 @@ export default function SearchPage({ refreshKey = 0 }) {
                     const rawThumb = song.thumbnail || song.thumbnails?.find((item) => item?.url)?.url;
                     const thumbnail = (!rawThumb || rawThumb === '/logo.svg') ? '/default-cover.svg' : rawThumb;
 
+                    const songObj = { videoId: song.videoId, title, artist, thumbnail, duration: song.duration };
+                    const popKey = `pop-${song.videoId || idx}`;
+
                     return (
                       <div 
                         key={idx}
-                        className="group flex items-center gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] hover:bg-zinc-800/80 active:bg-zinc-800 border border-white/5 hover:border-white/10 transition-all cursor-pointer shadow-sm"
+                        className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] hover:bg-zinc-800/80 active:bg-zinc-800 border border-white/5 hover:border-white/10 transition-all cursor-pointer shadow-sm ${openSongMenuKey === popKey ? 'relative z-30' : 'relative z-0'}`}
                         onClick={() => selectAndPlayTrack(song.videoId, title, artist, thumbnail)}
                       >
-                        <span className="w-5 text-center text-xs sm:text-sm text-zinc-400 font-extrabold group-hover:text-white transition-colors shrink-0">
-                          {idx + 1}
-                        </span>
-                        <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
-                          <img src={thumbnail} className="w-full h-full object-cover" alt="" />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className="w-5 text-center text-xs sm:text-sm text-zinc-400 font-extrabold group-hover:text-white transition-colors shrink-0">
+                            {idx + 1}
+                          </span>
+                          <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
+                            <img src={thumbnail} className="w-full h-full object-cover" alt="" />
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0 pr-2">
+                            <h3 className="text-white font-bold text-sm sm:text-base group-hover:text-white transition-colors truncate leading-tight">{title}</h3>
+                            <p className="text-xs sm:text-sm text-zinc-400 font-medium truncate mt-1">{artist}</p>
                           </div>
                         </div>
-                        <div className="flex-1 min-w-0 pr-2">
-                          <h3 className="text-white font-bold text-sm sm:text-base group-hover:text-white transition-colors truncate leading-tight">{title}</h3>
-                          <p className="text-xs sm:text-sm text-zinc-400 font-medium truncate mt-1">{artist}</p>
-                        </div>
-                        <div className="shrink-0 p-1">
-                          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center sm:hidden">
-                            <Play className="w-3.5 h-3.5 fill-current text-white translate-x-0.5" />
+
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="search-song-menu-container relative flex items-center">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenSongMenuKey(openSongMenuKey === popKey ? null : popKey);
+                              }}
+                              aria-label="Track options"
+                              className="p-1.5 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-700/60 active:bg-zinc-700 transition cursor-pointer"
+                              title="More options"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {openSongMenuKey === popKey && (
+                              <div
+                                className="absolute right-0 top-full mt-1 w-48 sm:w-52 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenSongMenuKey(null);
+                                    window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: songObj }));
+                                  }}
+                                  className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                >
+                                  <FolderPlus className="w-4 h-4 text-zinc-400" />
+                                  <span>Add to Playlist</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenSongMenuKey(null);
+                                    addToUpNext(songObj);
+                                  }}
+                                  className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                >
+                                  <ListStart className="w-4 h-4 text-zinc-400" />
+                                  <span>Play Next</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenSongMenuKey(null);
+                                    addToQueue(songObj);
+                                  }}
+                                  className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                >
+                                  <ListMusic className="w-4 h-4 text-zinc-400" />
+                                  <span>Add to Queue</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenSongMenuKey(null);
+                                    window.dispatchEvent(new CustomEvent('playloop-open-share', { detail: songObj }));
+                                  }}
+                                  className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                >
+                                  <Share2 className="w-4 h-4 text-zinc-400" />
+                                  <span>Share Track</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -958,50 +1048,119 @@ export default function SearchPage({ refreshKey = 0 }) {
                             )}
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            {searchResults.songs.slice(0, 4).map((song, idx) => (
-                              <div 
-                                key={song.videoId || idx}
-                                className="flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] border border-white/5 cursor-pointer transition-all group"
-                                onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
-                              >
-                                <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                                  <span className="w-5 text-center text-xs font-bold text-zinc-500 shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
-                                    <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
-                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                            {searchResults.songs.slice(0, 4).map((song, idx) => {
+                              const menuKey = `top-${song.videoId || idx}`;
+                              return (
+                                <div 
+                                  key={song.videoId || idx}
+                                  className={`flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] border border-white/5 cursor-pointer transition-all group ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
+                                  onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                                >
+                                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                                    <span className="w-5 text-center text-xs font-bold text-zinc-500 shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
+                                      <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                      <h4 className="text-white font-bold text-sm sm:text-base truncate group-hover:text-white transition-colors">{song.title}</h4>
+                                      <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
                                     </div>
                                   </div>
-                                  <div className="flex flex-col min-w-0 flex-1">
-                                    <h4 className="text-white font-bold text-sm sm:text-base truncate group-hover:text-white transition-colors">{song.title}</h4>
-                                    <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
+                                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                    <span className="text-xs text-zinc-500 font-mono hidden sm:block w-10 text-right mr-1">
+                                      {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => addToUpNext(song)}
+                                      className="hidden md:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                      title="Play Next"
+                                    >
+                                      <ListStart className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }))}
+                                      className="hidden md:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                      title="Add to Playlist"
+                                    >
+                                      <FolderPlus className="w-4 h-4" />
+                                    </button>
+                                    <div className="search-song-menu-container relative flex items-center">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenSongMenuKey(openSongMenuKey === menuKey ? null : menuKey);
+                                        }}
+                                        aria-label="Track options"
+                                        className="p-2 sm:p-1.5 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 active:bg-zinc-700 transition cursor-pointer"
+                                        title="More options"
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </button>
+
+                                      {openSongMenuKey === menuKey && (
+                                        <div
+                                          className="absolute right-0 top-full mt-1 w-48 sm:w-52 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenSongMenuKey(null);
+                                              addToUpNext(song);
+                                            }}
+                                            className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                          >
+                                            <ListStart className="w-4 h-4 text-zinc-400" />
+                                            <span>Play Next</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenSongMenuKey(null);
+                                              window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }));
+                                            }}
+                                            className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                          >
+                                            <FolderPlus className="w-4 h-4 text-zinc-400" />
+                                            <span>Add to Playlist</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenSongMenuKey(null);
+                                              addToQueue(song);
+                                            }}
+                                            className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                          >
+                                            <ListMusic className="w-4 h-4 text-zinc-400" />
+                                            <span>Add to Queue</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenSongMenuKey(null);
+                                              window.dispatchEvent(new CustomEvent('playloop-open-share', { detail: song }));
+                                            }}
+                                            className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                          >
+                                            <Share2 className="w-4 h-4 text-zinc-400" />
+                                            <span>Share Track</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                                  <button
-                                    type="button"
-                                    onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }))}
-                                    className="p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
-                                    title="Add to Playlist"
-                                  >
-                                    <ListPlus className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => addToUpNext(song)}
-                                    className="hidden sm:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
-                                    title="Play Next"
-                                  >
-                                    <Play className="w-3.5 h-3.5 fill-current" />
-                                  </button>
-                                  <span className="text-xs text-zinc-500 font-mono hidden sm:block w-10 text-right">
-                                    {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
 
                           {searchResults.songs.length > 4 && (
@@ -1122,48 +1281,117 @@ export default function SearchPage({ refreshKey = 0 }) {
                           </button>
                         </div>
                         <div className="flex flex-col gap-1.5">
-                          {searchResults.songs.map((song, idx) => (
-                            <div 
-                              key={song.videoId || idx}
-                              className="flex items-center justify-between gap-4 p-3 rounded-xl bg-[#141416] hover:bg-[#202024] border border-white/5 cursor-pointer transition-all group"
-                              onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
-                            >
-                              <div className="flex items-center gap-4 min-w-0 flex-1">
-                                <span className="w-6 text-center text-xs font-bold text-zinc-500 shrink-0">{idx + 1}</span>
-                                <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
-                                  <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
-                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                          {searchResults.songs.map((song, idx) => {
+                            const menuKey = `all-${song.videoId || idx}`;
+                            return (
+                              <div 
+                                key={song.videoId || idx}
+                                className={`flex items-center justify-between gap-4 p-3 rounded-xl bg-[#141416] hover:bg-[#202024] border border-white/5 cursor-pointer transition-all group ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
+                                onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                              >
+                                <div className="flex items-center gap-4 min-w-0 flex-1">
+                                  <span className="w-6 text-center text-xs font-bold text-zinc-500 shrink-0">{idx + 1}</span>
+                                  <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
+                                    <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <h4 className="text-white font-bold text-base truncate">{song.title}</h4>
+                                    <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
                                   </div>
                                 </div>
-                                <div className="flex flex-col min-w-0 flex-1">
-                                  <h4 className="text-white font-bold text-base truncate">{song.title}</h4>
-                                  <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
+                                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                  <span className="text-xs text-zinc-500 font-mono hidden sm:block w-10 text-right mr-1">
+                                    {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => addToUpNext(song)}
+                                    className="hidden md:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                    title="Play Next"
+                                  >
+                                    <ListStart className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }))}
+                                    className="hidden md:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
+                                    title="Add to Playlist"
+                                  >
+                                    <FolderPlus className="w-4 h-4" />
+                                  </button>
+                                  <div className="search-song-menu-container relative flex items-center">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenSongMenuKey(openSongMenuKey === menuKey ? null : menuKey);
+                                      }}
+                                      aria-label="Track options"
+                                      className="p-2 sm:p-1.5 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 active:bg-zinc-700 transition cursor-pointer"
+                                      title="More options"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </button>
+
+                                    {openSongMenuKey === menuKey && (
+                                      <div
+                                        className="absolute right-0 top-full mt-1 w-48 sm:w-52 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenSongMenuKey(null);
+                                            addToUpNext(song);
+                                          }}
+                                          className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                        >
+                                          <ListStart className="w-4 h-4 text-zinc-400" />
+                                          <span>Play Next</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenSongMenuKey(null);
+                                            window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }));
+                                          }}
+                                          className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                        >
+                                          <FolderPlus className="w-4 h-4 text-zinc-400" />
+                                          <span>Add to Playlist</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenSongMenuKey(null);
+                                            addToQueue(song);
+                                          }}
+                                          className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                        >
+                                          <ListMusic className="w-4 h-4 text-zinc-400" />
+                                          <span>Add to Queue</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenSongMenuKey(null);
+                                            window.dispatchEvent(new CustomEvent('playloop-open-share', { detail: song }));
+                                          }}
+                                          className="w-full px-3.5 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800/80 flex items-center gap-2.5 transition cursor-pointer"
+                                        >
+                                          <Share2 className="w-4 h-4 text-zinc-400" />
+                                          <span>Share Track</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: song }))}
-                                  className="p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
-                                  title="Add to Playlist"
-                                >
-                                  <ListPlus className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => addToUpNext(song)}
-                                  className="hidden sm:inline-flex p-1.5 text-zinc-400 hover:text-white transition rounded-full hover:bg-zinc-800 cursor-pointer"
-                                  title="Play Next"
-                                >
-                                  <Play className="w-3.5 h-3.5 fill-current" />
-                                </button>
-                                <span className="text-xs text-zinc-500 font-mono w-10 text-right">
-                                  {Math.floor((song.duration || 180) / 60)}:{String(Math.floor((song.duration || 180) % 60)).padStart(2, '0')}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         {/* Bottom Show Less / Back Button */}

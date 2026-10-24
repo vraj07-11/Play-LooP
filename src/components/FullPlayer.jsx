@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, ListPlus, Check } from 'lucide-react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, ListPlus, FolderPlus, Check, X } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { getAudioUrl, savePlaylistApi, unsavePlaylistApi, saveLikedTrackApi } from '../services/api';
 import { shareTrack } from '../services/shareService';
@@ -28,14 +28,70 @@ export default function FullPlayer({
   hasNext,
   formatTime
 }) {
-  const { playerButtonStyle = 'white', lyricsData, isLyricsLoading, seekToTime, setTrackQueue, setIsRightSidebarOpen, activeContext } = usePlayer();
+  const { 
+    playerButtonStyle = 'white', 
+    lyricsData, 
+    isLyricsLoading, 
+    seekToTime, 
+    setTrackQueue, 
+    setIsRightSidebarOpen, 
+    activeContext,
+    trackQueue,
+    recommendationQueue,
+    upcomingTrack,
+    stableShuffledQueue,
+    trackHistory,
+    shuffleCycleStartIndex,
+    isRefreshingUpNext,
+    refreshUpNext,
+    selectAndPlayTrack
+  } = usePlayer();
   const [showLyrics, setShowLyrics] = useState(initialShowLyrics);
+  const [showQueue, setShowQueue] = useState(false);
   const [coverAnim, setCoverAnim] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isInPlaylist, setIsInPlaylist] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowQueue(false);
+    }
+  }, [isOpen]);
+
+  const nextUpTracks = useMemo(() => {
+    let tracks = [];
+    const activeQueue = trackQueue?.length > 0 ? trackQueue : recommendationQueue;
+    
+    if (!activeQueue || activeQueue.length === 0) return tracks;
+
+    if (isShuffleEnabled) {
+      if (upcomingTrack) {
+        tracks.push(upcomingTrack);
+      }
+      const currentCycleHistory = trackHistory?.slice(shuffleCycleStartIndex) || [];
+      const remaining = stableShuffledQueue?.filter(t => 
+        t.videoId !== pendingTrack?.videoId && 
+        t.videoId !== upcomingTrack?.videoId &&
+        !currentCycleHistory.some(ht => ht.videoId === t.videoId)
+      ) || [];
+      tracks = [...tracks, ...remaining].slice(0, 15);
+    } else {
+      if (pendingTrack) {
+        const currentIndex = activeQueue.findIndex(t => t.videoId === pendingTrack.videoId);
+        if (currentIndex !== -1) {
+          tracks = activeQueue.slice(currentIndex + 1, currentIndex + 16);
+        } else {
+          tracks = activeQueue.slice(0, 15);
+        }
+      } else {
+        tracks = activeQueue.slice(0, 15);
+      }
+    }
+    return tracks;
+  }, [trackQueue, recommendationQueue, pendingTrack, isShuffleEnabled, upcomingTrack, stableShuffledQueue, trackHistory, shuffleCycleStartIndex]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -115,6 +171,12 @@ export default function FullPlayer({
   };
 
   const handleOpenQueue = () => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      const next = !showQueue;
+      setShowQueue(next);
+      if (next) setShowLyrics(false);
+      return;
+    }
     if (typeof setIsRightSidebarOpen === 'function') {
       setIsRightSidebarOpen(true);
     }
@@ -656,18 +718,18 @@ export default function FullPlayer({
       )}
 
       {/* Main Content Area */}
-      <main className={`flex-1 flex flex-col md:flex-row items-center md:items-stretch justify-center px-4 sm:px-8 md:px-10 pt-4 pb-12 sm:pb-16 md:pb-14 mx-auto w-full h-full min-h-0 min-w-0 max-w-full transition-all duration-500 ease-in-out ${showLyrics
+      <main className={`flex-1 flex flex-col md:flex-row items-center md:items-stretch justify-center px-4 sm:px-8 md:px-10 pt-4 pb-12 sm:pb-16 md:pb-14 mx-auto w-full h-full min-h-0 min-w-0 max-w-full transition-all duration-500 ease-in-out ${showLyrics || showQueue
         ? 'max-w-lg md:max-w-5xl lg:max-w-6xl md:gap-12 lg:gap-20'
         : 'max-w-lg md:gap-0'
         }`}>
 
         {/* Left Side: Art & Controls */}
-        <div className={`w-full max-w-full min-w-0 flex flex-col items-center justify-center transition-all duration-500 ease-in-out shrink-0 ${showLyrics
+        <div className={`w-full max-w-full min-w-0 flex flex-col items-center justify-center transition-all duration-500 ease-in-out shrink-0 ${showLyrics || showQueue
           ? 'md:max-w-[360px] lg:max-w-[400px]'
           : 'md:max-w-[400px] lg:max-w-[440px]'
           }`}>
           {/* Animated Dual Viewport Container for Artwork & Lyrics */}
-          <div className={`relative w-full aspect-square overflow-hidden rounded-2xl select-none shadow-[0_25px_60px_rgba(0,0,0,0.9)] z-10 shrink-0 transition-all duration-500 ease-in-out mb-6 max-w-[340px] sm:max-w-[380px] ${showLyrics
+          <div className={`relative w-full aspect-square overflow-hidden rounded-2xl select-none shadow-[0_25px_60px_rgba(0,0,0,0.9)] z-10 shrink-0 transition-all duration-500 ease-in-out mb-6 max-w-[340px] sm:max-w-[380px] ${showLyrics || showQueue
             ? 'md:max-w-[260px] lg:max-w-[280px]'
             : 'md:max-w-[280px] lg:max-w-[300px]'
             }`}>
@@ -897,7 +959,7 @@ export default function FullPlayer({
               title={isLiked ? "Unlike" : "Like track"}
               aria-label="Like track"
             >
-              <Heart className={`w-5 h-5 sm:w-6 sm:h-6 ${isLiked ? 'fill-white text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.9)]' : 'text-zinc-400 hover:text-white'}`} />
+              <Heart className={`w-5 h-5 sm:w-6 sm:h-6 transition-colors ${isLiked ? 'fill-white text-white' : 'text-zinc-400 hover:text-white'}`} />
             </button>
 
             {/* Add to Playlist */}
@@ -908,7 +970,7 @@ export default function FullPlayer({
               title={isInPlaylist ? "In playlists (Click to manage)" : "Add to playlist"}
               aria-label="Add to playlist"
             >
-              <ListPlus className={`w-5 h-5 sm:w-6 sm:h-6 ${isInPlaylist ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 'text-zinc-400 hover:text-white'}`} />
+              <FolderPlus className={`w-5 h-5 sm:w-6 sm:h-6 transition-colors ${isInPlaylist ? 'text-zinc-300 hover:text-white' : 'text-zinc-400 hover:text-white'}`} />
             </button>
 
             {/* Download */}
@@ -920,7 +982,7 @@ export default function FullPlayer({
               title="Download Song"
               aria-label="Download Song"
             >
-              <Download className={`w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white ${isDownloading ? 'animate-bounce text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]' : ''}`} />
+              <Download className={`w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white transition-colors ${isDownloading ? 'animate-bounce text-white' : ''}`} />
             </button>
 
             {/* Share */}
@@ -931,50 +993,138 @@ export default function FullPlayer({
               title="Share Track"
               aria-label="Share Track"
             >
-              <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white" />
+              <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white transition-colors" />
             </button>
 
             {/* Lyrics Toggle */}
             <button
               type="button"
-              onClick={() => setShowLyrics(!showLyrics)}
+              onClick={() => {
+                const next = !showLyrics;
+                setShowLyrics(next);
+                if (next) setShowQueue(false);
+              }}
               className={`p-2 transition-transform hover:scale-110 active:scale-95 cursor-pointer ${showLyrics ? 'scale-110' : ''}`}
               title={showLyrics ? "Close Lyrics" : "Show Lyrics"}
               aria-label={showLyrics ? "Close Lyrics" : "Show Lyrics"}
             >
-              <ChartBar className={`w-5 h-5 sm:w-6 sm:h-6 ${showLyrics ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 'text-zinc-400 hover:text-white'}`} />
+              <ChartBar className={`w-5 h-5 sm:w-6 sm:h-6 transition-colors ${showLyrics ? 'text-white' : 'text-zinc-400 hover:text-white'}`} />
             </button>
 
             {/* Up Next */}
             <button
               type="button"
               onClick={handleOpenQueue}
-              className="p-2 transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-              title="Open Up Next Queue"
+              className={`p-2 transition-transform hover:scale-110 active:scale-95 cursor-pointer ${showQueue ? 'scale-110' : ''}`}
+              title={showQueue ? "Close Up Next Queue" : "Open Up Next Queue"}
               aria-label="Open Up Next Queue"
             >
-              <ListMusic className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-400 hover:text-white" />
+              <ListMusic className={`w-5 h-5 sm:w-6 sm:h-6 transition-colors ${showQueue ? 'text-white' : 'text-zinc-400 hover:text-white'}`} />
             </button>
           </div>
 
         </div>
 
-        {/* Right Side: Desktop Lyrics */}
-        <div className={`hidden md:flex flex-col h-full relative mt-8 md:mt-0 min-h-0 transition-all duration-500 ease-in-out overflow-hidden ${showLyrics
+        {/* Right Side: Desktop Side Panel (Lyrics or Up Next Queue) */}
+        <div className={`hidden md:flex flex-col h-full relative mt-8 md:mt-0 min-h-0 transition-all duration-500 ease-in-out overflow-hidden ${showLyrics || showQueue
           ? 'w-[50%] max-w-[500px] opacity-100 translate-x-0'
-          : 'w-0 opacity-0 translate-x-10'
+          : 'w-0 opacity-0 translate-x-10 pointer-events-none'
           }`}>
-          <div
-            ref={desktopLyricsScrollRef}
-            onScroll={handleUserInteraction}
-            onWheel={(e) => {
-              handleUserInteraction();
-            }}
-            className="w-full h-full overflow-y-auto scrollbar-none py-32 px-4 md:px-8 flex flex-col"
-            style={{ WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)' }}
-          >
-            {renderLyricsContent(desktopLyricsListRef)}
-          </div>
+          {showLyrics && (
+            <div
+              ref={desktopLyricsScrollRef}
+              onScroll={handleUserInteraction}
+              onWheel={(e) => {
+                handleUserInteraction();
+              }}
+              className="w-full h-full overflow-y-auto scrollbar-none py-32 px-4 md:px-8 flex flex-col animate-in fade-in duration-300"
+              style={{ WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)' }}
+            >
+              {renderLyricsContent(desktopLyricsListRef)}
+            </div>
+          )}
+
+          {showQueue && (
+            <div className="w-full h-full flex flex-col py-8 px-4 md:px-6 overflow-hidden animate-in fade-in duration-300">
+              {/* Queue Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <ListMusic className="w-5 h-5 text-white" />
+                  <h3 className="text-lg font-bold text-white tracking-tight">Up Next Queue</h3>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={refreshUpNext}
+                    disabled={isRefreshingUpNext}
+                    title="Refresh recommendations"
+                    aria-label="Refresh recommendations"
+                    className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors flex items-center justify-center disabled:opacity-50 group cursor-pointer"
+                  >
+                    <RotateCw className={`w-4 h-4 transition-transform ${isRefreshingUpNext ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowQueue(false)}
+                    title="Close Queue"
+                    aria-label="Close Queue"
+                    className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Queue Content (Scrollable) */}
+              <div className="flex-1 overflow-y-auto scrollbar-none pt-4 flex flex-col gap-1 pr-1">
+                {nextUpTracks.length > 0 ? (
+                  nextUpTracks.map((track, i) => (
+                    <article
+                      key={track.videoId || i}
+                      className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/10 transition group cursor-pointer select-none"
+                      onClick={() => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail, false, false, track.duration, activeContext, true)}
+                    >
+                      <span className="w-5 text-center text-xs font-semibold text-zinc-500 group-hover:hidden shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="w-5 text-center text-xs font-semibold text-white hidden group-hover:flex items-center justify-center shrink-0">
+                        <Play className="w-3.5 h-3.5 fill-current translate-x-0.5" />
+                      </span>
+                      <img
+                        src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail}
+                        alt={track.title}
+                        className="w-11 h-11 rounded-lg shrink-0 object-cover bg-black border border-white/5 shadow-sm"
+                        onError={(e) => { e.target.src = '/default-cover.svg'; }}
+                      />
+                      <div className="flex-1 min-w-0 pr-1">
+                        <h4 className="text-sm font-bold text-zinc-100 group-hover:text-white truncate">{track.title}</h4>
+                        <p className="text-xs text-zinc-400 group-hover:text-zinc-300 truncate mt-0.5">{track.artist}</p>
+                      </div>
+                      <span className="text-xs text-zinc-500 font-mono text-right group-hover:hidden shrink-0">
+                        {Math.floor((track.duration || 180) / 60)}:{String(Math.floor((track.duration || 180) % 60)).padStart(2, '0')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: track }));
+                        }}
+                        className="hidden group-hover:flex p-1.5 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-700 transition cursor-pointer shrink-0"
+                        title="Add to playlist"
+                      >
+                        <FolderPlus className="w-3.5 h-3.5" />
+                      </button>
+                    </article>
+                  ))
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-zinc-500 text-sm">
+                    <ListMusic className="w-8 h-8 text-zinc-600 mb-2" />
+                    <p>No tracks queued in Up Next.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

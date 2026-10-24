@@ -5,7 +5,7 @@ import Carousel from '../components/Carousel';
 import LanguageSongSection from '../components/LanguageSongSection';
 import SpeedDialSection from '../components/SpeedDialSection';
 import Footer from '../components/Footer';
-import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check, Edit3, Share2, MoreVertical, Trash2, GripVertical, ChevronUp, ChevronDown, ListPlus, FolderPlus, ListMusic } from 'lucide-react';
+import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check, Edit3, Share2, MoreVertical, Trash2, GripVertical, ChevronUp, ChevronDown, ListPlus, FolderPlus, ListMusic, ListStart } from 'lucide-react';
 import { navigateBack } from '../utils/navigationHistory';
 import { filterValidDurationTracks } from '../utils/durationUtils';
 import { removeSongFromPlaylist, reorderSongsInPlaylist, deleteUserPlaylist } from '../utils/playlistManager';
@@ -139,7 +139,16 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [touchDragIndex, setTouchDragIndex] = useState(null);
+  const [touchOverIndex, setTouchOverIndex] = useState(null);
+  const [isReorderMode, setIsReorderMode] = useState(false);
   const headerMenuRef = useRef(null);
+
+  useEffect(() => {
+    setIsReorderMode(false);
+    setTouchDragIndex(null);
+    setTouchOverIndex(null);
+  }, [selectedPlaylist?.playlistId]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -684,6 +693,61 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     setDragOverIndex(null);
   };
 
+  const handleTouchStart = (e, index) => {
+    if (!isSelectedUserPlaylist) return;
+    setTouchDragIndex(index);
+    setTouchOverIndex(index);
+    if (navigator.vibrate) {
+      try { navigator.vibrate(15); } catch (_) {}
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (touchDragIndex === null) return;
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    const touch = e.touches[0];
+    if (!touch) return;
+    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+    const rowEl = targetEl?.closest('[data-track-index]');
+    if (rowEl) {
+      const overIndex = parseInt(rowEl.getAttribute('data-track-index'), 10);
+      if (!isNaN(overIndex) && overIndex !== touchOverIndex) {
+        setTouchOverIndex(overIndex);
+        if (navigator.vibrate) {
+          try { navigator.vibrate(5); } catch (_) {}
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchDragIndex !== null && touchOverIndex !== null && touchDragIndex !== touchOverIndex) {
+      const fromTrack = sortedTracks[touchDragIndex];
+      const toTrack = sortedTracks[touchOverIndex];
+      if (fromTrack && toTrack && selectedPlaylist?.tracks) {
+        const realFrom = selectedPlaylist.tracks.findIndex(t => String(t.videoId || t.id) === String(fromTrack.videoId || fromTrack.id));
+        const realTo = selectedPlaylist.tracks.findIndex(t => String(t.videoId || t.id) === String(toTrack.videoId || toTrack.id));
+        if (realFrom !== -1 && realTo !== -1 && realFrom !== realTo) {
+          if (sortBy !== 'recent') {
+            setSortBy('recent');
+          }
+          const pid = selectedPlaylist?.playlistId;
+          if (pid) {
+            const updated = reorderSongsInPlaylist(pid, realFrom, realTo);
+            if (updated) {
+              setSelectedPlaylist(prev => ({ ...prev, ...updated }));
+              window.dispatchEvent(new CustomEvent('playloop-toast', { detail: 'Playlist order updated' }));
+            }
+          }
+        }
+      }
+    }
+    setTouchDragIndex(null);
+    setTouchOverIndex(null);
+  };
+
   const handleMoveSong = (fromIndex, direction) => {
     const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
     if (!sortedTracks || !selectedPlaylist?.tracks || toIndex < 0 || toIndex >= sortedTracks.length) return;
@@ -1064,42 +1128,42 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
   if (selectedPlaylist) {
     return (
-      <div className="max-w-[1400px] mx-auto pb-32 px-4 sm:px-6 lg:px-8 mt-4 select-none">
+      <div className="w-full max-w-[1400px] mx-auto pb-32 px-2 sm:px-6 lg:px-8 mt-2 sm:mt-4 select-none">
         <button
           type="button"
           onClick={handleBack}
           aria-label="Go back"
-          className="inline-flex items-center gap-2 mb-6 px-4 py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-sm font-medium transition cursor-pointer"
+          className="inline-flex items-center gap-2 mb-4 sm:mb-6 px-3.5 py-1.5 sm:px-4 sm:py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-full text-xs sm:text-sm font-medium transition cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" /> Back
+          <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Back
         </button>
 
         {/* Playlist Header */}
-        <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-6 md:gap-8 mb-8">
+        <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-5 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
           {selectedPlaylist.isLikedPlaylist ? (
-            <div className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-gradient-to-br from-indigo-700 via-purple-600 to-rose-500 border border-white/10 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(99,102,241,0.35)] relative overflow-hidden group select-none mx-auto md:mx-0">
-              <Heart className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 text-white fill-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-500" />
+            <div className="w-40 h-40 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-gradient-to-br from-indigo-700 via-purple-600 to-rose-500 border border-white/10 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(99,102,241,0.35)] relative overflow-hidden group select-none mx-auto md:mx-0">
+              <Heart className="w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 text-white fill-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-500" />
             </div>
           ) : (
             <img
               src={(!selectedPlaylist.thumbnail || selectedPlaylist.thumbnail === '/logo.svg') ? '/default-cover.svg' : selectedPlaylist.thumbnail}
               alt={selectedPlaylist.title}
-              className={`shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] mx-auto md:mx-0 bg-black border border-white/10 ${selectedPlaylist.isArtist ? 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full object-cover' : 'w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl object-cover'}`}
+              className={`shrink-0 shadow-[0_8px_30px_rgba(0,0,0,0.5)] mx-auto md:mx-0 bg-black border border-white/10 ${selectedPlaylist.isArtist ? 'w-40 h-40 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-full object-cover' : 'w-40 h-40 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-xl object-cover'}`}
               onError={(e) => {
                 e.target.src = '/default-cover.svg';
               }}
             />
           )}
-          <div className="flex flex-col min-w-0 items-center md:items-start">
-            <span className="flex items-center gap-2 text-xs uppercase font-bold text-zinc-400 tracking-widest mb-1.5">
+          <div className="flex flex-col min-w-0 items-center md:items-start w-full">
+            <span className="flex items-center gap-2 text-[11px] sm:text-xs uppercase font-bold text-zinc-400 tracking-widest mb-1.5">
               {selectedPlaylist.isArtist && selectedPlaylist.isVerified && (
-                <svg viewBox="0 0 24 24" className="w-5 h-5 text-blue-500 fill-current" xmlns="http://www.w3.org/2000/svg">
+                <svg viewBox="0 0 24 24" className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 fill-current" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                 </svg>
               )}
               {selectedPlaylist.isArtist ? (selectedPlaylist.isVerified ? 'Verified Artist' : 'Artist') : 'Playlist'}
             </span>
-            <h2 className="text-5xl md:text-7xl font-extrabold text-white mb-3 tracking-tight leading-tight">
+            <h2 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-white mb-2 sm:mb-3 tracking-tight leading-tight break-words max-w-full">
               {(() => {
                 try {
                   return decodeURIComponent(selectedPlaylist.title || '').replace(/%20/g, ' ');
@@ -1110,12 +1174,12 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             </h2>
             
             {selectedPlaylist.isArtist && selectedPlaylist.followerCount ? (
-              <p className="text-base text-zinc-300 mb-6 font-medium">
+              <p className="text-sm sm:text-base text-zinc-300 mb-4 sm:mb-6 font-medium">
                 {Number(selectedPlaylist.followerCount).toLocaleString()} monthly listeners
               </p>
             ) : (
               <>
-                <p className="text-base text-zinc-300 mb-2 max-w-2xl font-medium">
+                <p className="text-xs sm:text-sm md:text-base text-zinc-300 mb-2 max-w-2xl font-medium px-1 md:px-0 break-words">
                   {(() => {
                     try {
                       return decodeURIComponent(selectedPlaylist.description || '').replace(/%20/g, ' ');
@@ -1124,7 +1188,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     }
                   })() || 'Relax • Unwind • Repeat'}
                 </p>
-                <p className="text-sm text-zinc-400 mb-6 font-medium flex items-center gap-2">
+                <p className="text-xs sm:text-sm text-zinc-400 mb-4 sm:mb-6 font-medium flex items-center justify-center md:justify-start gap-2 flex-wrap">
                   <span>{selectedPlaylist.tracks ? selectedPlaylist.tracks.length : 0} songs</span>
                   <span className="w-1 h-1 rounded-full bg-zinc-600"></span>
                   <span>{Math.floor((selectedPlaylist.tracks?.length || 0) * 3.5 / 60)}h {Math.floor(((selectedPlaylist.tracks?.length || 0) * 3.5) % 60)}m</span>
@@ -1132,28 +1196,28 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               </>
             )}
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 sm:gap-4 w-full">
               <button
                 type="button"
                 onClick={handlePlayPlaylistAll}
-                className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-white hover:bg-zinc-200 text-black font-bold text-sm rounded-full transition hover:scale-105 active:scale-95 cursor-pointer shadow-md"
+                className="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 bg-white hover:bg-zinc-200 text-black font-bold text-xs sm:text-sm rounded-full transition hover:scale-105 active:scale-95 cursor-pointer shadow-md shrink-0"
               >
-                <Play className="w-5 h-5 fill-current translate-x-[1px]" /> Play
+                <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1px]" /> Play
               </button>
               {isSelectedUserPlaylist ? (
                 <button
                   type="button"
                   onClick={handleEditCurrentPlaylist}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-white font-medium text-sm rounded-full transition cursor-pointer hover:scale-105 active:scale-95 shadow-sm"
+                  className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-zinc-900 border border-zinc-700 hover:border-zinc-500 text-white font-medium text-xs sm:text-sm rounded-full transition cursor-pointer hover:scale-105 active:scale-95 shadow-sm shrink-0"
                 >
-                  <Edit3 className="w-4 h-4 text-zinc-400" />
+                  <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400" />
                   <span>Edit Playlist</span>
                 </button>
               ) : !selectedPlaylist.isLikedPlaylist && (
                 <button
                   type="button"
                   onClick={() => handleToggleSave()}
-                  className={`inline-flex items-center justify-center gap-2 px-6 py-3 bg-transparent border text-white font-bold text-sm rounded-full transition cursor-pointer min-w-[120px] ${
+                  className={`inline-flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-transparent border text-white font-bold text-xs sm:text-sm rounded-full transition cursor-pointer min-w-[100px] sm:min-w-[120px] shrink-0 ${
                     isSaved
                       ? 'border-white/40 hover:border-zinc-400 hover:text-zinc-200 group/savebtn'
                       : 'border-zinc-600 hover:border-zinc-400'
@@ -1180,35 +1244,52 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                   onClick={handleShareCurrentPlaylist}
                   title="Share Playlist"
                   aria-label="Share Playlist"
-                  className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer hover:scale-105 active:scale-95"
+                  className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer hover:scale-105 active:scale-95 shrink-0"
                 >
-                  <Share2 className="w-5 h-5" />
+                  <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               )}
 
               {/* Playlist Header More Menu */}
               {!selectedPlaylist.isLikedPlaylist && (
-                <div className="relative" ref={headerMenuRef}>
+                <div className="relative shrink-0" ref={headerMenuRef}>
                   <button
                     type="button"
                     onClick={() => setIsHeaderMenuOpen(!isHeaderMenuOpen)}
                     aria-label="More playlist options"
-                    className="w-12 h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer hover:scale-105 active:scale-95"
+                    className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 transition cursor-pointer hover:scale-105 active:scale-95"
                   >
-                    <MoreVertical className="w-5 h-5" />
+                    <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
                   </button>
 
                   {isHeaderMenuOpen && (
-                    <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
                       {isSelectedUserPlaylist && (
-                        <button
-                          type="button"
-                          onClick={handleEditCurrentPlaylist}
-                          className="w-full px-4 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
-                        >
-                          <Edit3 className="w-4 h-4 text-zinc-400" />
-                          <span>Edit Details</span>
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleEditCurrentPlaylist}
+                            className="w-full px-4 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <Edit3 className="w-4 h-4 text-zinc-400" />
+                            <span>Edit Details</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsHeaderMenuOpen(false);
+                              const next = !isReorderMode;
+                              setIsReorderMode(next);
+                              if (next && sortBy !== 'recent') {
+                                setSortBy('recent');
+                              }
+                            }}
+                            className="w-full px-4 py-2.5 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
+                          >
+                            <GripVertical className="w-4 h-4 text-zinc-400" />
+                            <span>{isReorderMode ? 'Done Reordering' : 'Reorder Tracks'}</span>
+                          </button>
+                        </>
                       )}
                       <button
                         type="button"
@@ -1240,21 +1321,53 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         </div>
 
 
-        <div className="flex flex-col lg:flex-row gap-10">
+        <div className="flex flex-col lg:flex-row gap-6 md:gap-10">
           {/* Main Tracklist */}
           <div className="flex-1 min-w-0">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white tracking-tight">{selectedPlaylist.isArtist ? 'Popular Tracks' : 'Tracks'}</h2>
+            <div className="flex justify-between items-center mb-4 sm:mb-6 gap-2 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight shrink-0">
+                  {selectedPlaylist.isArtist ? 'Popular Tracks' : 'Tracks'}
+                </h2>
+                {isReorderMode && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white text-black shrink-0">
+                    Reordering
+                  </span>
+                )}
+              </div>
               
-              <div className="relative z-20" ref={sortDropdownRef}>
+              <div className="flex items-center gap-2">
+                {isSelectedUserPlaylist && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isReorderMode;
+                      setIsReorderMode(next);
+                      if (next && sortBy !== 'recent') {
+                        setSortBy('recent');
+                      }
+                    }}
+                    className={`text-xs sm:text-sm font-semibold rounded-full px-3 py-1.5 flex items-center gap-1.5 transition cursor-pointer border shadow-sm ${
+                      isReorderMode
+                        ? 'bg-white text-black border-white hover:bg-zinc-200'
+                        : 'text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700/60'
+                    }`}
+                    title={isReorderMode ? 'Done Reordering' : 'Reorder Tracks'}
+                  >
+                    <GripVertical className="w-3.5 h-3.5" />
+                    <span>{isReorderMode ? 'Done' : 'Reorder'}</span>
+                  </button>
+                )}
+
+                <div className="relative z-20 shrink-0" ref={sortDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                  className="text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-3.5 py-1.5 flex items-center gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+                  className="text-xs sm:text-sm font-normal text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700/60 rounded-full px-3 py-1.5 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 sm:gap-2 transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
                 >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>
-                    Sort: {
+                  <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span className="truncate max-w-[120px] sm:max-w-none">
+                    {
                       sortBy === 'recent' ? 'Newest First' :
                       sortBy === 'recent-reverse' ? 'Oldest First' :
                       sortBy === 'title-asc' ? 'Title (A-Z)' :
@@ -1263,7 +1376,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                       sortBy === 'duration-desc' ? 'Longest' : 'Newest First'
                     }
                   </span>
-                  <span className="text-[10px] text-zinc-400">▼</span>
+                  <span className="text-[10px] text-zinc-400 shrink-0">▼</span>
                 </button>
 
                 {isSortDropdownOpen && (
@@ -1291,13 +1404,14 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                         }`}
                       >
                         <span>{opt.label}</span>
-                        {sortBy === opt.id && <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                        {sortBy === opt.id && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
             </div>
+          </div>
 
             <div className="grid grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-4 text-xs font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800/80 pb-3 mb-4 px-3 hidden md:grid">
               <span className="w-12 text-center">#</span>
@@ -1308,72 +1422,143 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               <span></span>
             </div>
 
+            {isReorderMode && isSelectedUserPlaylist && (
+              <div className="mb-3.5 p-3 rounded-2xl bg-zinc-900/95 border border-zinc-700/80 flex items-center justify-between gap-3 text-xs text-zinc-300 shadow-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                    <GripVertical className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <span className="truncate">Hold & drag handle <strong className="text-white">⠿</strong> or tap arrows to reorder</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsReorderMode(false)}
+                  className="px-3.5 py-1.5 rounded-full bg-white text-black font-bold text-xs hover:bg-zinc-200 transition shrink-0 cursor-pointer shadow"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col gap-1">
               {sortedTracks && sortedTracks.length > 0 ? (
                 sortedTracks.map((track, idx) => (
                   <article
                     key={track.videoId || idx}
+                    data-track-index={idx}
                     ref={idx === sortedTracks.length - 1 ? lastTrackElementRef : null}
-                    draggable={isSelectedUserPlaylist && sortBy === 'recent'}
+                    draggable={isSelectedUserPlaylist && (isReorderMode || sortBy === 'recent')}
                     onDragStart={(e) => handleDragStart(e, idx)}
                     onDragOver={(e) => handleDragOver(e, idx)}
                     onDrop={(e) => handleDrop(e, idx)}
-                    className={`grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-3 md:gap-4 items-center p-2 md:p-3 rounded-xl hover:bg-zinc-800/50 transition group cursor-pointer ${
-                      dragOverIndex === idx ? 'border-t-2 border-white bg-zinc-800/80' : ''
+                    className={`grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-2.5 sm:gap-4 items-center p-1.5 sm:p-2.5 md:p-3 rounded-xl hover:bg-zinc-800/50 transition group cursor-pointer ${
+                      dragOverIndex === idx || (touchOverIndex === idx && touchDragIndex !== null && touchDragIndex !== idx)
+                        ? 'border-t-2 border-white bg-zinc-800/80'
+                        : ''
+                    } ${
+                      touchDragIndex === idx ? 'opacity-40 scale-[0.98] bg-zinc-800/80 ring-1 ring-white/20' : ''
                     }`}
-                    onClick={() => handlePlayTrackInPlaylist(idx)}
+                    onClick={() => !isReorderMode && handlePlayTrackInPlaylist(idx)}
                   >
                     {/* Index / Play / Reorder Handle */}
-                    <div className="w-10 sm:w-12 flex items-center justify-center shrink-0" onClick={(e) => isSelectedUserPlaylist && e.stopPropagation()}>
-                      {isSelectedUserPlaylist && sortBy === 'recent' ? (
-                        <div className="flex items-center gap-0.5">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveSong(idx, 'up')}
-                            className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition"
-                            title="Move up"
+                    <div className="flex items-center justify-center shrink-0 min-w-[24px]" onClick={(e) => isSelectedUserPlaylist && e.stopPropagation()}>
+                      {isReorderMode && isSelectedUserPlaylist ? (
+                        <div className="flex items-center gap-1 sm:gap-1.5">
+                          {/* Touch/mouse drag handle */}
+                          <div
+                            className="touch-none select-none p-1.5 text-zinc-400 hover:text-white active:text-white cursor-grab active:cursor-grabbing flex items-center justify-center rounded-lg hover:bg-zinc-800 active:bg-zinc-700 transition"
+                            onTouchStart={(e) => handleTouchStart(e, idx)}
+                            onTouchMove={handleTouchMove}
+                            onTouchEnd={handleTouchEnd}
+                            onTouchCancel={handleTouchEnd}
+                            title="Drag to reorder"
                           >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === sortedTracks.length - 1}
-                            onClick={() => handleMoveSong(idx, 'down')}
-                            className="p-0.5 text-zinc-500 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition"
-                            title="Move down"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
+                            <GripVertical className="w-4 h-4 sm:w-5 sm:h-5 text-zinc-300" />
+                          </div>
+
+                          {/* Quick Up/Down arrows */}
+                          <div className="flex flex-col items-center justify-center -space-y-0.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveSong(idx, 'up')}
+                              className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition hover:scale-110 active:scale-95"
+                              title="Move up"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === sortedTracks.length - 1}
+                              onClick={() => handleMoveSong(idx, 'down')}
+                              className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition hover:scale-110 active:scale-95"
+                              title="Move down"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
+                      ) : isSelectedUserPlaylist && sortBy === 'recent' ? (
+                        <>
+                          {/* Mobile: clean track number */}
+                          <span className="text-xs font-semibold text-zinc-500 sm:hidden">
+                            {idx + 1}
+                          </span>
+
+                          {/* Tablet & Desktop: vertical stacked reorder arrows */}
+                          <div className="hidden sm:flex flex-col items-center justify-center -space-y-0.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveSong(idx, 'up')}
+                              className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition hover:scale-110 active:scale-95"
+                              title="Move up"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === sortedTracks.length - 1}
+                              onClick={() => handleMoveSong(idx, 'down')}
+                              className="p-1 text-zinc-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-default transition hover:scale-110 active:scale-95"
+                              title="Move down"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </>
                       ) : (
                         <>
-                          <span className="text-sm font-medium text-zinc-500 group-hover:hidden">
+                          <span className="text-xs sm:text-sm font-medium text-zinc-500 group-hover:hidden">
                             {idx + 1}
                           </span>
                           <span className="hidden group-hover:flex justify-center items-center">
-                            <Play className="w-4 h-4 text-white fill-current" />
+                            <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-current" />
                           </span>
                         </>
                       )}
                     </div>
                     
-                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 pr-2">
+                    <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 pr-1">
                       <img
                         src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail}
                         alt={track.title}
-                        className="w-10 h-10 md:w-12 md:h-12 rounded-lg shrink-0 object-cover bg-black border border-white/5 shadow-sm"
+                        className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-lg shrink-0 object-cover bg-black border border-white/5 shadow-sm"
                         onError={(e) => {
                           e.target.src = '/default-cover.svg';
                         }}
                         loading="lazy"
                       />
-                      <div className="flex flex-col min-w-0">
-                        <h3 className="text-sm md:text-base font-medium text-zinc-100 group-hover:text-white truncate">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <h3 className="text-xs sm:text-sm md:text-base font-medium text-zinc-100 group-hover:text-white truncate">
                           {track.title}
-                          {idx === 0 && <span className="inline-flex ml-2 px-1 rounded bg-zinc-200 text-black text-[10px] font-bold">E</span>}
+                          {Boolean(track.explicit) && (
+                            <span className="inline-flex ml-1.5 px-1 rounded bg-zinc-200 text-black text-[9px] font-bold">E</span>
+                          )}
                         </h3>
-                        <p className="text-xs md:text-sm text-zinc-400 truncate md:hidden">{track.artist}</p>
+                        <p className="text-[11px] sm:text-xs md:text-sm text-zinc-400 truncate md:hidden mt-0.5">
+                          {track.artist}
+                        </p>
                       </div>
                     </div>
 
@@ -1416,7 +1601,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                             }}
                             className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
                           >
-                            <ListPlus className="w-3.5 h-3.5 text-zinc-400" />
+                            <FolderPlus className="w-3.5 h-3.5 text-zinc-400" />
                             <span>Add to Playlist</span>
                           </button>
                           <button
@@ -1427,7 +1612,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                             }}
                             className="w-full px-3.5 py-2 text-xs text-left text-zinc-300 hover:text-white hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
                           >
-                            <Play className="w-3.5 h-3.5 text-zinc-400" />
+                            <ListStart className="w-3.5 h-3.5 text-zinc-400" />
                             <span>Play Next</span>
                           </button>
                           <button
@@ -1486,7 +1671,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                                 type="button"
                                 onClick={(e) => {
                                   setOpenTrackMenuIndex(null);
-                                  handleRemoveTrackFromPlaylist(e, track.videoId);
+                                  handleRemoveTrackFromPlaylist(e, track.videoId || track.id);
                                 }}
                                 className="w-full px-3.5 py-2 text-xs text-left text-red-400 hover:text-red-300 hover:bg-zinc-800 flex items-center gap-2.5 transition cursor-pointer"
                               >
@@ -1562,7 +1747,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const isAppDownloaded = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone);
 
   const quickAccessItems = [
-    { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/search' },
+    { title: 'Browse Songs', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/search' },
     { title: 'Liked Songs', subtitle: 'Your favorites', icon: <Heart className="w-5 h-5 xl:w-6 xl:h-6 transition-colors fill-current" />, action: handleOpenLikedSongs },
     isAppDownloaded
       ? { title: 'Settings', subtitle: 'App preferences', icon: <Settings className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/settings' }
@@ -1811,7 +1996,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             {[...Array(4)].map((_, index) => (
               <div 
                 key={index}
-                className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex items-center gap-3 h-14 skeleton-shimmer-card"
+                className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex items-center justify-center gap-2.5 h-14 skeleton-shimmer-card"
               >
                 <div className="w-5 h-5 rounded-md bg-zinc-800/80 shrink-0" />
                 <div className="w-20 h-3.5 bg-zinc-800/70 rounded" />
@@ -1831,12 +2016,12 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     window.location.hash = item.path;
                   }
                 }}
-                className="bg-white/[0.04] active:bg-white/[0.1] rounded-xl p-3 flex items-center gap-3.5 cursor-pointer transition-all border border-white/10 shadow-sm group h-14"
+                className="bg-white/[0.04] active:bg-white/[0.1] rounded-xl px-3 py-2.5 flex items-center justify-center gap-2.5 cursor-pointer transition-all border border-white/10 shadow-sm group h-14 text-center"
               >
-                <div className="text-zinc-300 group-active:scale-95 transition-transform shrink-0">
+                <div className="text-zinc-300 group-active:scale-95 transition-transform shrink-0 flex items-center justify-center">
                   {item.icon}
                 </div>
-                <div className="flex flex-col min-w-0 flex-1 justify-center">
+                <div className="flex items-center justify-center min-w-0">
                   <h3 className="text-white font-bold text-xs truncate leading-tight">{item.title}</h3>
                 </div>
               </div>
