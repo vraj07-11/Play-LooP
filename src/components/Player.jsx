@@ -25,7 +25,8 @@ export default function Player() {
     pendingTrack,
     isRightSidebarOpen, setIsRightSidebarOpen,
     trackQueue, recommendationQueue, selectAndPlayTrack,
-    isRefreshingUpNext, refreshUpNext
+    isRefreshingUpNext, refreshUpNext,
+    activeContext
   } = usePlayer();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -431,7 +432,7 @@ export default function Player() {
       {/* Desktop Player Bar */}
       {!isClosed && (
         <footer 
-          className="hidden md:flex player-bar relative z-40 bg-zinc-900 border-t border-zinc-800 px-5 md:px-7 py-3.5 items-center justify-between gap-4 shrink-0 cursor-pointer select-none min-h-[5.5rem]"
+          className="hidden md:flex player-bar relative z-50 bg-zinc-900 border-t border-zinc-800 px-5 md:px-7 py-3.5 items-center justify-between gap-4 shrink-0 cursor-pointer select-none min-h-[5.5rem]"
         onClick={() => openFullPlayer(false)}
         onWheel={(e) => {
           if (e.deltaY > 0 || e.deltaY < 0) {
@@ -489,7 +490,7 @@ export default function Player() {
               className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-white rounded-full shadow-[0_1px_6px_rgba(0,0,0,0.85)] border border-black/20 transition-transform duration-75 pointer-events-none ${
                 isDraggingProgress ? 'scale-125 ring-2 ring-white/30' : 'group-hover/progressbar:scale-125'
               }`}
-              style={{ left: `${Math.max(0, Math.min(100, activeProgress))}%` }}
+              style={{ left: `clamp(8px, ${Math.max(0, Math.min(100, activeProgress))}%, calc(100% - 8px))` }}
             />
           </div>
         </div>
@@ -724,7 +725,7 @@ export default function Player() {
       {/* Mobile Compact Miniplayer Bar (Sleek 64px Bar with Like, Play/Pause & Close) */}
       {!isClosed && (
         <div 
-          className="md:hidden z-40 bg-zinc-900/95 backdrop-blur-xl border-t border-zinc-800/80 px-3 py-2 flex items-center justify-between gap-2.5 relative shrink-0 select-none shadow-2xl h-[64px] cursor-pointer"
+          className="md:hidden z-40 bg-black border-t border-zinc-800/80 px-3 py-2 flex items-center justify-between gap-2.5 relative shrink-0 select-none shadow-2xl h-[64px] cursor-pointer"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -943,7 +944,7 @@ export default function Player() {
                 key={`${track.videoId}-${idx}`}
                 className="flex items-center gap-3 cursor-pointer group hover:bg-zinc-800/50 p-2 rounded-lg transition-colors"
                 onClick={() => {
-                  selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail);
+                  selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail, false, false, track.duration, activeContext, true);
                   setIsMobileQueueOpen(false);
                 }}
               >

@@ -1173,7 +1173,7 @@ export function PlayerProvider({ children }) {
     });
   }, [clearCrossfadeTimer, destroyHls, loadAudioSource]);
 
-  const handleTrackHistoryAndRecommendations = (trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay) => {
+  const handleTrackHistoryAndRecommendations = (trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay, isFromQueue = false) => {
     if (!isHistoryNavigation) {
       const hIndex = currentHistoryIndexRef.current;
       const newHistory = trackHistoryRef.current.slice(0, hIndex + 1);
@@ -1187,7 +1187,7 @@ export function PlayerProvider({ children }) {
     }
 
     let clickedFromQueueIndex = recommendationQueueRef.current.findIndex(t => t.videoId === videoId);
-    if (!isAutoPlay && !isHistoryNavigation && clickedFromQueueIndex !== -1 && trackQueueRef.current.length === 0) {
+    if (!isAutoPlay && !isHistoryNavigation && isFromQueue && clickedFromQueueIndex !== -1 && trackQueueRef.current.length === 0) {
       isAutoPlay = true; 
     }
 
@@ -1233,7 +1233,16 @@ export function PlayerProvider({ children }) {
       }).toString();
 
       fetchApi(`/api/recommendations?${queryParams}`)
-        .then((res) => (res.ok ? res.json() : []))
+        .then(async (res) => {
+          let data = res.ok ? await res.json() : [];
+          if (!Array.isArray(data) || data.length === 0) {
+            const cleanArtist = artist ? artist.split(",")[0].split("ft.")[0].split("feat.")[0].trim() : "";
+            const query = cleanArtist || "Top Hits";
+            const searchRes = await fetchApi(`/api/search?q=${encodeURIComponent(query)}`);
+            data = searchRes.ok ? await searchRes.json() : [];
+          }
+          return data;
+        })
         .then((data) => {
           const validData = filterValidDurationTracks(data);
           if (validData.length > 0) {
@@ -1266,14 +1275,34 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false, duration = null, context = null) => {
+  const selectAndPlayTrack = (videoId, title, artist, thumbnail, isHistoryNavigation = false, isAutoPlay = false, duration = null, context = null, isFromQueue = false) => {
     if (context) {
       setActiveContext(context);
       activeContextRef.current = context;
       recordPlaylistActivity(context);
+    } else if (isFromQueue && trackQueueRef.current.length > 0) {
+      // User clicked a track directly from the active playlist's Up Next queue
+      const queueIndex = trackQueueRef.current.findIndex(t => t.videoId === videoId);
+      if (queueIndex !== -1) {
+        currentTrackIndexRef.current = queueIndex;
+        setCurrentTrackIndex(queueIndex);
+      }
     } else if (!isHistoryNavigation && !isAutoPlay) {
+      // User explicitly played a song OUTSIDE the active playlist (search, history, home, etc.)
       setActiveContext(null);
       activeContextRef.current = null;
+      setTrackQueue([]);
+      trackQueueRef.current = [];
+      setCurrentTrackIndex(-1);
+      currentTrackIndexRef.current = -1;
+      setStableShuffledQueue([]);
+      stableShuffledQueueRef.current = [];
+      setTrackWindow([]);
+      setUpcoming(null);
+      upcomingTrackRef.current = null;
+      shuffleCycleStartIndexRef.current = trackHistoryRef.current.length;
+      setRecommendationQueue([]);
+      recommendationQueueRef.current = [];
     }
 
     let trackDuration = duration;
@@ -1298,7 +1327,7 @@ export function PlayerProvider({ children }) {
     if (crossfadeDurationRef.current > 0 && isCurrentlyPlaying && isDifferentTrack && !isHistoryNavigation) {
       const manualFadeSec = Math.min(crossfadeDurationRef.current, 2);
       performCrossfadeToTrack(trackObj, manualFadeSec);
-      handleTrackHistoryAndRecommendations(trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay);
+      handleTrackHistoryAndRecommendations(trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay, isFromQueue);
       return;
     }
 
@@ -1329,9 +1358,9 @@ export function PlayerProvider({ children }) {
         .catch(() => {});
     }
 
-    const currentPlaylistContext = context || (isAutoPlay || isHistoryNavigation ? activeContextRef.current : null);
+    const currentPlaylistContext = context || (isAutoPlay || isHistoryNavigation || isFromQueue ? activeContextRef.current : null);
     addToRecentlyPlayed(trackObj, currentPlaylistContext);
-    handleTrackHistoryAndRecommendations(trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay);
+    handleTrackHistoryAndRecommendations(trackObj, videoId, title, artist, thumbnail, isHistoryNavigation, isAutoPlay, isFromQueue);
 
     applyMediaSessionMetadata(title, artist, thumbnail, videoId);
 

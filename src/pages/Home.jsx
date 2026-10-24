@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { usePlayer } from '../context/PlayerContext';
 import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlaylists, fetchPopularArtists, DEFAULT_PLAYLISTS, savePlaylistApi, unsavePlaylistApi } from '../services/api.js';
 import Carousel from '../components/Carousel';
+import Footer from '../components/Footer';
 import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check } from 'lucide-react';
 import { navigateBack } from '../utils/navigationHistory';
 import { filterValidDurationTracks } from '../utils/durationUtils';
@@ -954,16 +955,16 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const isAppDownloaded = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone);
 
   const quickAccessItems = [
-    { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 text-white" />, color: 'bg-[#8938d2]', path: '#/search' },
-    { title: 'Liked Songs', subtitle: 'Your favorites', icon: <Heart className="w-5 h-5 text-white fill-current" />, color: 'bg-[#d2384a]', action: handleOpenLikedSongs },
+    { title: 'Browse', subtitle: 'Discover new music', icon: <Music className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/search' },
+    { title: 'Liked Songs', subtitle: 'Your favorites', icon: <Heart className="w-5 h-5 xl:w-6 xl:h-6 transition-colors fill-current" />, action: handleOpenLikedSongs },
     isAppDownloaded
-      ? { title: 'Settings', subtitle: 'App preferences', icon: <Settings className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]', path: '#/settings' }
-      : { title: 'Download App', subtitle: 'Install for offline', icon: <Download className="w-5 h-5 text-white" />, color: 'bg-[#1e864c]', path: '#/download' },
-    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 text-white" />, color: 'bg-[#d28238]', path: '#/library' }
+      ? { title: 'Settings', subtitle: 'App preferences', icon: <Settings className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/settings' }
+      : { title: 'Download App', subtitle: 'Install for offline', icon: <Download className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/download' },
+    { title: 'Your Library', subtitle: 'All your music', icon: <Library className="w-5 h-5 xl:w-6 xl:h-6 transition-colors" />, path: '#/library' }
   ];
 
   return (
-    <div className="max-w-[1400px] mx-auto pb-36 px-3.5 sm:px-6 lg:px-8 mt-2 sm:mt-6 select-none">
+    <div className="max-w-[1400px] mx-auto pb-6 sm:pb-8 px-3.5 sm:px-6 lg:px-8 mt-2 sm:mt-6 select-none">
 
       {/* Greeting & Mobile Header Bar */}
       {!loadingPlaylists && (
@@ -1094,8 +1095,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             {/* Quick Access Desktop Skeleton */}
             <div className="grid grid-cols-2 xl:flex xl:flex-col gap-3 xl:gap-4 xl:justify-between h-auto xl:h-[450px]">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="flex-1 bg-[#121212] rounded-xl p-3 xl:p-4 flex items-center gap-3 xl:gap-4 border border-white/5 skeleton-shimmer-card min-h-[70px] xl:min-h-[90px]">
-                  <div className="w-10 h-10 xl:w-14 xl:h-14 rounded-lg xl:rounded-xl bg-zinc-800/80 shrink-0" />
+                <div key={i} className="flex-1 bg-white/[0.02] rounded-2xl p-3 xl:px-5 xl:py-4 flex items-center gap-4 border border-white/5 skeleton-shimmer-card min-h-[70px] xl:min-h-[90px]">
+                  <div className="w-6 h-6 rounded bg-zinc-800/80 shrink-0" />
                   <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                     <div className="w-24 h-3.5 xl:h-4 bg-zinc-700/80 rounded" />
                     <div className="w-16 h-2.5 xl:h-3 bg-zinc-800/60 rounded" />
@@ -1177,17 +1178,17 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                       window.location.hash = item.path;
                     }
                   }}
-                  className="flex-1 bg-[#121212] hover:bg-[#1a1a1a] rounded-xl p-3 xl:p-4 flex items-center gap-3 xl:gap-4 cursor-pointer transition border border-white/5 hover:border-white/10 shadow-sm group"
+                  className="flex-1 bg-white/[0.03] hover:bg-white/[0.08] active:bg-white/[0.12] rounded-2xl p-3 xl:px-5 xl:py-4 flex items-center gap-4 cursor-pointer transition-all duration-200 border border-white/10 hover:border-white/20 shadow-sm hover:shadow-lg group backdrop-blur-sm"
                 >
-                  <div className={`w-10 h-10 xl:w-14 xl:h-14 rounded-lg xl:rounded-xl flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                  <div className="text-zinc-400 group-hover:text-white transition-all duration-200 shrink-0 group-hover:scale-110">
                     {item.icon}
                   </div>
                   <div className="flex flex-col min-w-0 flex-1">
-                    <h3 className="text-white font-bold text-xs xl:text-sm truncate">{item.title}</h3>
-                    <p className="text-zinc-400 text-[10px] xl:text-xs truncate mt-0.5">{item.subtitle}</p>
+                    <h3 className="text-white font-bold text-xs xl:text-sm tracking-tight truncate group-hover:translate-x-0.5 transition-transform">{item.title}</h3>
+                    <p className="text-zinc-400 group-hover:text-zinc-300 text-[10px] xl:text-xs truncate mt-0.5 transition-colors">{item.subtitle}</p>
                   </div>
-                  <div className="hidden xl:flex w-8 h-8 rounded-full items-center justify-center text-zinc-500 group-hover:text-white transition-colors mr-1">
-                    <ChevronRight className="w-5 h-5" />
+                  <div className="hidden xl:flex w-8 h-8 rounded-full items-center justify-center text-zinc-600 group-hover:text-white transition-colors mr-1">
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
               ))}
@@ -1203,9 +1204,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
             {[...Array(4)].map((_, index) => (
               <div 
                 key={index}
-                className="bg-[#161618] border border-white/5 rounded-xl p-2 flex items-center gap-3 h-14 skeleton-shimmer-card"
+                className="bg-white/[0.03] border border-white/5 rounded-xl p-3 flex items-center gap-3 h-14 skeleton-shimmer-card"
               >
-                <div className="w-10 h-10 rounded-lg bg-zinc-800/80 shrink-0" />
+                <div className="w-5 h-5 rounded-md bg-zinc-800/80 shrink-0" />
                 <div className="w-20 h-3.5 bg-zinc-800/70 rounded" />
               </div>
             ))}
@@ -1223,9 +1224,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     window.location.hash = item.path;
                   }
                 }}
-                className="bg-[#161618] hover:bg-[#202024] active:bg-[#25252a] rounded-xl p-2 flex items-center gap-3 cursor-pointer transition border border-white/5 shadow-md group h-14"
+                className="bg-white/[0.04] active:bg-white/[0.1] rounded-xl p-3 flex items-center gap-3.5 cursor-pointer transition-all border border-white/10 shadow-sm group h-14"
               >
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${item.color}`}>
+                <div className="text-zinc-300 group-active:scale-95 transition-transform shrink-0">
                   {item.icon}
                 </div>
                 <div className="flex flex-col min-w-0 flex-1 justify-center">
@@ -1451,6 +1452,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
           )}
         </div>
       )}
+
+      {/* Footer */}
+      <Footer setCurrentView={setCurrentView} />
     </div>
   );
 }

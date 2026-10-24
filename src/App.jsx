@@ -20,7 +20,14 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const DownloadPage = lazy(() => import('./pages/DownloadPage'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
+const InfoPage = lazy(() => import('./pages/InfoPage'));
 const ShareModal = lazy(() => import('./components/ShareModal'));
+
+const INFO_VIEWS = new Set([
+  'how-it-works', 'features', 'faq', 'blog',
+  'about', 'contact', 'privacy-policy', 'terms-of-service', 'terms',
+  'cookie-policy', 'dmca', 'disclaimer'
+]);
 
 function App() {
   const { selectAndPlayTrack } = usePlayer();
@@ -169,7 +176,13 @@ function App() {
       } else if (hash.includes('profile')) {
         setCurrentView('profile');
       } else {
-        setCurrentView('home');
+        const hashClean = hash.replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
+        if (INFO_VIEWS.has(hashClean)) {
+          setCurrentView(hashClean);
+          if (contentRef.current) contentRef.current.scrollTop = 0;
+        } else {
+          setCurrentView('home');
+        }
       }
     };
 
@@ -327,7 +340,13 @@ function App() {
                       </div>
                     )}
 
-                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'loops' && currentView !== 'samples' && currentView !== 'library' && currentView !== 'profile' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && (
+                    {INFO_VIEWS.has(currentView) && (
+                      <div className={`w-full min-h-full block ${slideClass}`}>
+                        <InfoPage currentView={currentView} setCurrentView={handleSetCurrentView} />
+                      </div>
+                    )}
+
+                    {currentView !== 'home' && currentView !== 'liked-songs' && currentView !== 'liked' && currentView !== 'loops' && currentView !== 'samples' && currentView !== 'library' && currentView !== 'profile' && currentView !== 'settings' && currentView !== 'search' && currentView !== 'download' && currentView !== 'Download' && !INFO_VIEWS.has(currentView) && (
                       <PlaceholderPage view={currentView} />
                     )}
                   </Suspense>

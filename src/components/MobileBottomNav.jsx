@@ -34,7 +34,7 @@ export default function MobileBottomNav({ currentView, setCurrentView, swipeHand
     <nav 
       aria-label="Mobile Bottom Navigation"
       {...swipeHandlers}
-      className="md:hidden z-30 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/80 px-2 py-1.5 flex items-center justify-around select-none shrink-0 shadow-[0_-8px_20px_rgba(0,0,0,0.7)] touch-pan-y"
+      className="md:hidden z-30 bg-black border-t border-zinc-800/80 px-2 py-1.5 flex items-center justify-around select-none shrink-0 shadow-[0_-8px_20px_rgba(0,0,0,0.7)] touch-pan-y"
     >
       {navItems.map((item, index) => {
         const Icon = item.icon;

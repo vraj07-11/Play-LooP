@@ -7,7 +7,7 @@
 @media (min-width: 768px) {
   .player-bar {
     position: relative;
-    z-index: 20;
+    z-index: 50;
     display: flex;
     align-items: center;
     justify-content: space-between;

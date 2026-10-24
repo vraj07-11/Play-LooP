@@ -7,7 +7,7 @@ export default function RightSidebar() {
     isRightSidebarOpen, pendingTrack, trackQueue, selectAndPlayTrack, 
     isShuffleEnabled, upcomingTrack, recommendationQueue,
     stableShuffledQueue, trackHistory, shuffleCycleStartIndex,
-    isRefreshingUpNext, refreshUpNext
+    isRefreshingUpNext, refreshUpNext, activeContext
   } = usePlayer();
 
   // We need the selectedPlaylist information if we are inside a playlist, 
@@ -122,7 +122,7 @@ export default function RightSidebar() {
               <article 
                 key={i}
                 className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/40 transition group cursor-pointer"
-                onClick={() => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail)}
+                onClick={() => selectAndPlayTrack(track.videoId, track.title, track.artist, track.thumbnail, false, false, track.duration, activeContext, true)}
               >
                 <span className="w-4 text-xs font-medium text-zinc-500 text-right group-hover:hidden">
                   {i + 1}
