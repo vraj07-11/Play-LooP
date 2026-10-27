@@ -2,7 +2,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const express = require("express");
 const { fetchJioSaavn, formatSong, cleanStr } = require("../services/jiosaavn");
-const { getSoundCloudClientId } = require("../services/soundcloud");
+const { getSoundCloudClientId, getSoundCloudTrackDetails } = require("../services/soundcloud");
 
 const router = express.Router();
 const ROOT_DIR = path.resolve(__dirname, "../../");
@@ -28,21 +28,15 @@ async function getSongDetailsForMeta(trackId) {
 	try {
 		if (trackId.startsWith("sc:")) {
 			const scId = trackId.replace(/^sc:/, "");
-			const clientId = await getSoundCloudClientId();
-			if (clientId) {
-				const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
-					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-				});
-				if (trackRes.ok) {
-					const track = await trackRes.json();
-					const details = {
-						title: cleanStr(track.title, "SoundCloud Track"),
-						artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
-						cover: track.artwork_url || track.user?.avatar_url || null
-					};
-					metaSongCache.set(trackId, details);
-					return details;
-				}
+			const track = await getSoundCloudTrackDetails(scId);
+			if (track) {
+				const details = {
+					title: track.title,
+					artist: track.artist,
+					cover: track.thumbnail
+				};
+				metaSongCache.set(trackId, details);
+				return details;
 			}
 			return null;
 		}

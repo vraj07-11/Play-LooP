@@ -239,17 +239,37 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-5">
 
-        {/* Create Playlist Tile */}
+        {/* 1. Import Playlist Card */}
+        <div
+          onClick={handleImportClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleImportClick(); } }}
+          tabIndex={0}
+          role="button"
+          aria-label="Import Playlist"
+          className="group flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
+        >
+          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center">
+            <Download className="w-12 h-12 text-white drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
+          </div>
+          <h4 className="font-bold text-white text-[15px] truncate mb-1 tracking-tight">
+            Import Playlist
+          </h4>
+          <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
+            Spotify, YT &amp; Files
+          </p>
+        </div>
+
+        {/* 2. Create Playlist Tile */}
         <div
           onClick={handleCreatePlaylistClick}
           onKeyDown={(e) => handleKeyDown(e, 'create')}
           tabIndex={0}
           role="button"
           aria-label="Create Playlist"
-          className="group flex flex-col p-3.5 rounded-2xl bg-[#141416] hover:bg-[#202024] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
+          className="group flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
         >
-          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-800 to-zinc-950 border border-white/10 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
-            <div className="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white text-zinc-300 group-hover:text-black flex items-center justify-center transition-colors duration-300">
+          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full bg-white/10 group-hover:bg-white text-zinc-300 group-hover:text-black flex items-center justify-center transition-all duration-300 group-hover:scale-105">
               <Plus className="w-7 h-7 stroke-[2.5]" />
             </div>
           </div>
@@ -261,7 +281,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
           </p>
         </div>
 
-        {/* Liked Songs Card */}
+        {/* 3. Liked Songs Card */}
         <div
           onClick={handleLikedClick}
           onKeyDown={(e) => handleKeyDown(e, 'liked')}
@@ -283,26 +303,6 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
           </h4>
           <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
             {likedCount} {likedCount === 1 ? 'song' : 'songs'}
-          </p>
-        </div>
-
-        {/* Import Playlist Card (mobile grid tile) */}
-        <div
-          onClick={handleImportClick}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleImportClick(); } }}
-          tabIndex={0}
-          role="button"
-          aria-label="Import Playlist"
-          className="group flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 sm:hidden shadow-lg"
-        >
-          <div className="relative w-full aspect-square rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-gradient-to-br from-zinc-700 via-zinc-850 to-black flex items-center justify-center">
-            <Download className="w-12 h-12 text-white drop-shadow-md transition-transform duration-300 group-hover:scale-110" />
-          </div>
-          <h4 className="font-bold text-white text-[15px] truncate mb-1 tracking-tight">
-            Import Playlist
-          </h4>
-          <p className="font-medium text-zinc-400 text-[13px] line-clamp-1 leading-snug">
-            Spotify, YT &amp; Files
           </p>
         </div>
 

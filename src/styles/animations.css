@@ -305,5 +305,83 @@
 .soundwave-bars span:nth-child(3) { animation-delay: 0.18s; height: 8px; }
 .soundwave-bars span:nth-child(4) { animation-delay: 0.45s; height: 6px; }
 
+/* Active Playing Song Animations */
+@keyframes music-equalizer-1 {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+@keyframes music-equalizer-2 {
+  0%, 100% { height: 15px; }
+  50% { height: 5px; }
+}
+
+@keyframes music-equalizer-3 {
+  0%, 100% { height: 7px; }
+  50% { height: 17px; }
+}
+
+@keyframes music-equalizer-4 {
+  0%, 100% { height: 13px; }
+  50% { height: 4px; }
+}
+
+.music-equalizer-bar-1 {
+  animation: music-equalizer-1 0.9s ease-in-out infinite;
+}
+
+.music-equalizer-bar-2 {
+  animation: music-equalizer-2 0.75s ease-in-out infinite 0.12s;
+}
+
+.music-equalizer-bar-3 {
+  animation: music-equalizer-3 1.1s ease-in-out infinite 0.25s;
+}
+
+.music-equalizer-bar-4 {
+  animation: music-equalizer-4 0.85s ease-in-out infinite 0.1s;
+}
+
+.music-equalizer-paused {
+  animation-play-state: paused !important;
+}
+
+/* Glowing outline and subtle ambient pulse on active playing track card */
+@keyframes playing-card-pulse {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.06), inset 0 0 10px rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(255, 255, 255, 0.15), inset 0 0 16px rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.42);
+  }
+}
+
+.playing-card-active {
+  animation: playing-card-pulse 3s ease-in-out infinite;
+}
+
+/* Flash highlight when scrolled into view */
+@keyframes playing-track-flash-anim {
+  0% {
+    background-color: rgba(255, 255, 255, 0.28);
+    box-shadow: 0 0 35px rgba(255, 255, 255, 0.35);
+    transform: scale(1.015);
+  }
+  60% {
+    background-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+    transform: scale(1.005);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.playing-track-flash {
+  animation: playing-track-flash-anim 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 
 

@@ -1,3 +1,7 @@
+header {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
 .brand-logo {
   display: inline-block;
   width: 38px;

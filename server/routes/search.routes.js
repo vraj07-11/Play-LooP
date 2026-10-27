@@ -11,7 +11,7 @@ const {
 	playlistCoverCache,
 	resolveCleanPlaylistThumbnail
 } = require("../services/jiosaavn");
-const { searchSoundCloud, getSoundCloudClientId } = require("../services/soundcloud");
+const { searchSoundCloud, getSoundCloudClientId, getSoundCloudTrackDetails } = require("../services/soundcloud");
 
 const router = express.Router();
 
@@ -333,25 +333,9 @@ router.get("/api/song", async (req, res) => {
 	if (videoId.startsWith("sc:")) {
 		try {
 			const scId = videoId.replace(/^sc:/, "");
-			const clientId = await getSoundCloudClientId();
-			if (!clientId) return res.status(502).json({ error: "SoundCloud client ID not available" });
-			const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
-				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-			});
-			if (!trackRes.ok) return res.status(404).json({ error: "SoundCloud track not found" });
-			const track = await trackRes.json();
-			const artwork = track.artwork_url || track.user?.avatar_url || "";
-			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/default-cover.svg";
-
-			return res.json({
-				videoId: `sc:${track.id}`,
-				title: cleanStr(track.title, "SoundCloud Track"),
-				artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
-				thumbnail: getValidImage(highResArt),
-				duration: Math.round((track.duration || 0) / 1000),
-				streamUrl: `/api/audio?id=sc:${track.id}`,
-				source: "soundcloud"
-			});
+			const track = await getSoundCloudTrackDetails(scId);
+			if (!track) return res.status(404).json({ error: "SoundCloud track not found" });
+			return res.json(track);
 		} catch (e) {
 			return res.status(500).json({ error: "Failed to fetch SoundCloud track details" });
 		}

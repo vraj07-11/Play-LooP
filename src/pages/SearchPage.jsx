@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../context/PlayerContext';
 import { fetchApi, fetchPlaylistDetails, fetchPopularArtists, fetchPopularSongs, fetchMoreDynamicPlaylists, DEFAULT_PLAYLISTS } from '../services/api';
-import { Search, Play, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft, ListPlus, MoreVertical, ListMusic, Share2, ListStart, FolderPlus } from 'lucide-react';
+import { Search, Play, Pause, Music, Mic2, Disc3, Radio, X, ChevronDown, ChevronUp, ArrowLeft, ListPlus, MoreVertical, ListMusic, Share2, ListStart, FolderPlus } from 'lucide-react';
 import { isValidSongDuration, filterValidDurationTracks } from '../utils/durationUtils';
 
 export default function SearchPage({ refreshKey = 0 }) {
@@ -21,11 +21,27 @@ export default function SearchPage({ refreshKey = 0 }) {
   const [visibleArtistsCount, setVisibleArtistsCount] = useState(6);
   const [playlistThumbnailMap, setPlaylistThumbnailMap] = useState({});
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const { selectAndPlayTrack, playPlaylist, addToUpNext, addToQueue } = usePlayer();
+  const { selectAndPlayTrack, playPlaylist, addToUpNext, addToQueue, pendingTrack, isPlaying, playPause } = usePlayer();
   const mainScrollRef = useRef(null);
   const mobileInputRef = useRef(null);
 
   const [openSongMenuKey, setOpenSongMenuKey] = useState(null);
+
+  const isSongPlaying = (song) => {
+    if (!pendingTrack || !song) return false;
+    const sId = String(song.videoId || song.track_id || song.id || '').trim();
+    const pId = String(pendingTrack.videoId || pendingTrack.track_id || pendingTrack.id || '').trim();
+    if (sId && pId && sId === pId) return true;
+    if (song.title && pendingTrack.title) {
+      const sTitle = String(song.title).toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+      const pTitle = String(pendingTrack.title).toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+      if (sTitle && pTitle && sTitle === pTitle) {
+        if (!song.artist || !pendingTrack.artist) return true;
+        return song.artist.toLowerCase().trim().slice(0, 10) === pendingTrack.artist.toLowerCase().trim().slice(0, 10);
+      }
+    }
+    return false;
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -511,25 +527,52 @@ export default function SearchPage({ refreshKey = 0 }) {
 
                     const songObj = { videoId: song.videoId, title, artist, thumbnail, duration: song.duration };
                     const popKey = `pop-${song.videoId || idx}`;
+                    const isCurrent = isSongPlaying(songObj);
 
                     return (
                       <div 
                         key={idx}
-                        className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl bg-[#141414] hover:bg-zinc-800/80 active:bg-zinc-800 border border-white/5 hover:border-white/10 transition-all cursor-pointer shadow-sm ${openSongMenuKey === popKey ? 'relative z-30' : 'relative z-0'}`}
-                        onClick={() => selectAndPlayTrack(song.videoId, title, artist, thumbnail)}
+                        className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer shadow-sm ${
+                          isCurrent
+                            ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
+                            : 'bg-[#141414] hover:bg-zinc-800/80 active:bg-zinc-800 border border-white/5 hover:border-white/10'
+                        } ${openSongMenuKey === popKey ? 'relative z-30' : 'relative z-0'}`}
+                        onClick={() => {
+                          if (isCurrent) {
+                            playPause();
+                          } else {
+                            selectAndPlayTrack(song.videoId, title, artist, thumbnail);
+                          }
+                        }}
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <span className="w-5 text-center text-xs sm:text-sm text-zinc-400 font-extrabold group-hover:text-white transition-colors shrink-0">
+                          <span className={`w-5 text-center text-xs sm:text-sm font-extrabold ${isCurrent ? 'text-white' : 'text-zinc-400'} group-hover:text-white transition-colors shrink-0`}>
                             {idx + 1}
                           </span>
                           <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden shrink-0 shadow-md bg-zinc-800">
                             <img src={thumbnail} className="w-full h-full object-cover" alt="" />
+                            {isCurrent && (
+                              <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] flex items-center justify-center gap-[2px] group-hover:opacity-0 transition-opacity">
+                                <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-1 ${!isPlaying ? 'music-equalizer-paused h-1.5' : ''}`} />
+                                <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-2 ${!isPlaying ? 'music-equalizer-paused h-3.5' : ''}`} />
+                                <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-3 ${!isPlaying ? 'music-equalizer-paused h-2' : ''}`} />
+                              </div>
+                            )}
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                              {isCurrent && isPlaying ? (
+                                <Pause className="w-5 h-5 text-white fill-current" />
+                              ) : (
+                                <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                              )}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0 pr-2">
-                            <h3 className="text-white font-bold text-sm sm:text-base group-hover:text-white transition-colors truncate leading-tight">{title}</h3>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <h3 className={`font-bold text-sm sm:text-base truncate leading-tight ${isCurrent ? 'text-white font-black' : 'text-white group-hover:text-white transition-colors'}`}>{title}</h3>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-full bg-white/20 text-white shrink-0 hidden sm:inline-block">Now Playing</span>
+                              )}
+                            </div>
                             <p className="text-xs sm:text-sm text-zinc-400 font-medium truncate mt-1">{artist}</p>
                           </div>
                         </div>
@@ -992,26 +1035,47 @@ export default function SearchPage({ refreshKey = 0 }) {
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
                       
                       {/* Top Result Card */}
-                      {searchResults.topResult && (
+                      {searchResults.topResult && (() => {
+                        const isTopPlaying = searchResults.topResult.videoId && isSongPlaying(searchResults.topResult);
+                        return (
                         <div className="lg:col-span-2 flex flex-col">
                           <h3 className="text-xl font-bold text-white mb-4">Top Result</h3>
                           <div 
-                            className="bg-[#141416] hover:bg-[#1c1c20] border border-white/10 rounded-2xl p-6 flex flex-col justify-between cursor-pointer transition-all duration-300 group relative shadow-2xl min-h-[220px]"
+                            className={`border rounded-2xl p-6 flex flex-col justify-between cursor-pointer transition-all duration-300 group relative shadow-2xl min-h-[220px] ${
+                              isTopPlaying
+                                ? 'bg-white/[0.07] border-white/30 ring-1 ring-white/15 playing-card-active'
+                                : 'bg-[#141416] hover:bg-[#1c1c20] border-white/10'
+                            }`}
                             onClick={() => {
                               if (searchResults.topResult.videoId) {
-                                selectAndPlayTrack(searchResults.topResult.videoId, searchResults.topResult.title, searchResults.topResult.artist, searchResults.topResult.thumbnail);
+                                if (isTopPlaying) {
+                                  playPause();
+                                } else {
+                                  selectAndPlayTrack(searchResults.topResult.videoId, searchResults.topResult.title, searchResults.topResult.artist, searchResults.topResult.thumbnail);
+                                }
                               } else {
                                 handleCardClick(searchResults.topResult);
                               }
                             }}
                           >
                             <div className="flex flex-col gap-4">
-                              <img 
-                                src={searchResults.topResult.thumbnail} 
-                                alt={searchResults.topResult.title}
-                                className={`shadow-2xl object-cover bg-black ${searchResults.topResult.isArtist ? 'w-24 h-24 sm:w-28 sm:h-28 rounded-full' : 'w-24 h-24 sm:w-28 sm:h-28 rounded-xl'}`}
-                                onError={(e) => { e.target.src = '/default-cover.svg'; }}
-                              />
+                              <div className="relative w-fit">
+                                <img 
+                                  src={searchResults.topResult.thumbnail} 
+                                  alt={searchResults.topResult.title}
+                                  className={`shadow-2xl object-cover bg-black ${searchResults.topResult.isArtist ? 'w-24 h-24 sm:w-28 sm:h-28 rounded-full' : 'w-24 h-24 sm:w-28 sm:h-28 rounded-xl'} ${
+                                    isTopPlaying ? 'ring-2 ring-white/40' : ''
+                                  }`}
+                                  onError={(e) => { e.target.src = '/default-cover.svg'; }}
+                                />
+                                {isTopPlaying && (
+                                  <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] flex items-center justify-center gap-1 rounded-xl">
+                                    <span className={`w-1 bg-white rounded-full music-equalizer-bar-1 ${!isPlaying ? 'music-equalizer-paused h-2' : ''}`} />
+                                    <span className={`w-1 bg-white rounded-full music-equalizer-bar-2 ${!isPlaying ? 'music-equalizer-paused h-5' : ''}`} />
+                                    <span className={`w-1 bg-white rounded-full music-equalizer-bar-3 ${!isPlaying ? 'music-equalizer-paused h-3' : ''}`} />
+                                  </div>
+                                )}
+                              </div>
                               <div>
                                 <h4 className="text-2xl sm:text-3xl font-black text-white tracking-tight line-clamp-2 leading-tight group-hover:text-white transition-colors">
                                   {searchResults.topResult.title}
@@ -1019,18 +1083,33 @@ export default function SearchPage({ refreshKey = 0 }) {
                                 <p className="text-sm text-zinc-400 font-medium mt-1">
                                   {searchResults.topResult.artist || searchResults.topResult.author || 'Result'}
                                 </p>
-                                <span className="inline-block mt-3 px-3 py-1 bg-white/10 text-white font-bold text-xs rounded-full uppercase tracking-wider">
-                                  {searchResults.topResult.category || (searchResults.topResult.isArtist ? 'Artist' : 'Song')}
-                                </span>
+                                <div className="flex items-center gap-2 mt-3">
+                                  <span className="inline-block px-3 py-1 bg-white/10 text-white font-bold text-xs rounded-full uppercase tracking-wider">
+                                    {searchResults.topResult.category || (searchResults.topResult.isArtist ? 'Artist' : 'Song')}
+                                  </span>
+                                  {isTopPlaying && (
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-black font-extrabold text-xs rounded-full uppercase tracking-wider shadow">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
+                                      Now Playing
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
-                            <div className="absolute bottom-6 right-6 w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center shadow-2xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 hover:scale-105">
-                              <Play className="w-6 h-6 text-black fill-current translate-x-0.5" />
+                            <div className={`absolute bottom-6 right-6 w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 hover:scale-105 ${
+                              isTopPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0'
+                            }`}>
+                              {isTopPlaying && isPlaying ? (
+                                <Pause className="w-6 h-6 text-black fill-current" />
+                              ) : (
+                                <Play className="w-6 h-6 text-black fill-current translate-x-0.5" />
+                              )}
                             </div>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Songs Section */}
                       {searchResults.songs.length > 0 && (
@@ -1050,24 +1129,53 @@ export default function SearchPage({ refreshKey = 0 }) {
                           <div className="flex flex-col gap-1.5">
                             {searchResults.songs.slice(0, 4).map((song, idx) => {
                               const menuKey = `top-${song.videoId || idx}`;
+                              const isCurrent = isSongPlaying(song);
                               return (
                                 <div 
                                   key={song.videoId || idx}
-                                  className={`flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] border border-white/5 cursor-pointer transition-all group ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
-                                  onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                                  className={`flex items-center justify-between gap-4 p-2.5 sm:p-3 rounded-xl transition-all group cursor-pointer ${
+                                    isCurrent
+                                      ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
+                                      : 'bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] border border-white/5'
+                                  } ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
+                                  onClick={() => {
+                                    if (isCurrent) {
+                                      playPause();
+                                    } else {
+                                      selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail);
+                                    }
+                                  }}
                                 >
                                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                                    <span className="w-5 text-center text-xs font-bold text-zinc-500 shrink-0">
+                                    <span className={`w-5 text-center text-xs font-bold ${isCurrent ? 'text-white' : 'text-zinc-500'} shrink-0`}>
                                       {idx + 1}
                                     </span>
                                     <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
                                       <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                      {isCurrent && (
+                                        <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] flex items-center justify-center gap-[2px] group-hover:opacity-0 transition-opacity">
+                                          <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-1 ${!isPlaying ? 'music-equalizer-paused h-1.5' : ''}`} />
+                                          <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-2 ${!isPlaying ? 'music-equalizer-paused h-3' : ''}`} />
+                                          <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-3 ${!isPlaying ? 'music-equalizer-paused h-2' : ''}`} />
+                                        </div>
+                                      )}
                                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                        {isCurrent && isPlaying ? (
+                                          <Pause className="w-5 h-5 text-white fill-current" />
+                                        ) : (
+                                          <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                        )}
                                       </div>
                                     </div>
                                     <div className="flex flex-col min-w-0 flex-1">
-                                      <h4 className="text-white font-bold text-sm sm:text-base truncate group-hover:text-white transition-colors">{song.title}</h4>
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <h4 className={`font-bold text-sm sm:text-base truncate transition-colors ${
+                                          isCurrent ? 'text-white font-black' : 'text-white group-hover:text-white'
+                                        }`}>{song.title}</h4>
+                                        {isCurrent && (
+                                          <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-full bg-white/20 text-white shrink-0 hidden sm:inline-block">Now Playing</span>
+                                        )}
+                                      </div>
                                       <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
                                     </div>
                                   </div>
@@ -1283,22 +1391,49 @@ export default function SearchPage({ refreshKey = 0 }) {
                         <div className="flex flex-col gap-1.5">
                           {searchResults.songs.map((song, idx) => {
                             const menuKey = `all-${song.videoId || idx}`;
+                            const isCurrent = isSongPlaying(song);
                             return (
                               <div 
                                 key={song.videoId || idx}
-                                className={`flex items-center justify-between gap-4 p-3 rounded-xl bg-[#141416] hover:bg-[#202024] border border-white/5 cursor-pointer transition-all group ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
-                                onClick={() => selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail)}
+                                className={`flex items-center justify-between gap-4 p-3 rounded-xl transition-all group cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
+                                    : 'bg-[#141416] hover:bg-[#202024] border border-white/5'
+                                } ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
+                                onClick={() => {
+                                  if (isCurrent) {
+                                    playPause();
+                                  } else {
+                                    selectAndPlayTrack(song.videoId, song.title, song.artist, song.thumbnail);
+                                  }
+                                }}
                               >
                                 <div className="flex items-center gap-4 min-w-0 flex-1">
-                                  <span className="w-6 text-center text-xs font-bold text-zinc-500 shrink-0">{idx + 1}</span>
+                                  <span className={`w-6 text-center text-xs font-bold ${isCurrent ? 'text-white' : 'text-zinc-500'} shrink-0`}>{idx + 1}</span>
                                   <div className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 shadow-md bg-black border border-white/5">
                                     <img src={song.thumbnail || '/default-cover.svg'} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.src = '/default-cover.svg'; }} />
+                                    {isCurrent && (
+                                      <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] flex items-center justify-center gap-[2px] group-hover:opacity-0 transition-opacity">
+                                        <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-1 ${!isPlaying ? 'music-equalizer-paused h-1.5' : ''}`} />
+                                        <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-2 ${!isPlaying ? 'music-equalizer-paused h-3.5' : ''}`} />
+                                        <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-3 ${!isPlaying ? 'music-equalizer-paused h-2' : ''}`} />
+                                      </div>
+                                    )}
                                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                      {isCurrent && isPlaying ? (
+                                        <Pause className="w-5 h-5 text-white fill-current" />
+                                      ) : (
+                                        <Play className="w-5 h-5 text-white fill-current translate-x-0.5" />
+                                      )}
                                     </div>
                                   </div>
                                   <div className="flex flex-col min-w-0 flex-1">
-                                    <h4 className="text-white font-bold text-base truncate">{song.title}</h4>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <h4 className={`font-bold text-base truncate ${isCurrent ? 'text-white font-black' : 'text-white'}`}>{song.title}</h4>
+                                      {isCurrent && (
+                                        <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-full bg-white/20 text-white shrink-0 hidden sm:inline-block">Now Playing</span>
+                                      )}
+                                    </div>
                                     <p className="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">{song.artist}</p>
                                   </div>
                                 </div>

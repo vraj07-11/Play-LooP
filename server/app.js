@@ -10,6 +10,7 @@ const audioRouter = require("./routes/audio.routes");
 const exploreRouter = require("./routes/explore.routes");
 const { playlistRouter } = require("./routes/playlist.routes");
 const userRouter = require("./routes/user.routes");
+const lyricsRouter = require("./routes/lyrics.routes");
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use(audioRouter);
 app.use(exploreRouter);
 app.use(playlistRouter);
 app.use(userRouter);
+app.use(lyricsRouter);
 
 // 5. SPA Fallback for client-side routing
 app.use(spaFallback);

@@ -3,7 +3,9 @@ const { fetchJioSaavn, formatSong, cleanStr } = require("../services/jiosaavn");
 const {
 	getSoundCloudClientId,
 	getSoundCloudStreamUrl,
-	searchSoundCloud
+	searchSoundCloud,
+	getSoundCloudTrackDetails,
+	fetchWithSoundCloudAuth
 } = require("../services/soundcloud");
 
 const router = express.Router();
@@ -99,12 +101,10 @@ router.get("/api/download", async (req, res) => {
 	if (videoId.startsWith("sc:")) {
 		try {
 			const scId = videoId.replace(/^sc:/, "");
-			const clientId = await getSoundCloudClientId();
-			if (!clientId) return res.status(502).send("SoundCloud client ID not available");
-
-			const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${scId}?client_id=${clientId}`, {
-				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-			});
+			const trackRes = await fetchWithSoundCloudAuth(
+				(cid) => `https://api-v2.soundcloud.com/tracks/${scId}?client_id=${cid}`,
+				{ headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } }
+			);
 			if (!trackRes.ok) return res.status(404).send("SoundCloud track not found");
 			const trackData = await trackRes.json();
 
@@ -118,9 +118,10 @@ router.get("/api/download", async (req, res) => {
 			// Prefer progressive MP3 stream if available
 			const prog = trans.find(t => t.format?.protocol === 'progressive');
 			if (prog && prog.url) {
-				const streamRes = await fetch(`${prog.url}?client_id=${clientId}`, {
-					headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-				});
+				const streamRes = await fetchWithSoundCloudAuth(
+					(cid) => `${prog.url}?client_id=${cid}`,
+					{ headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } }
+				);
 				if (streamRes.ok) {
 					const streamData = await streamRes.json();
 					if (streamData.url) {
@@ -146,9 +147,10 @@ router.get("/api/download", async (req, res) => {
 
 			if (!hlsTrans || !hlsTrans.url) return res.status(404).send("Stream URL not found");
 
-			const streamRes = await fetch(`${hlsTrans.url}?client_id=${clientId}`, {
-				headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }
-			});
+			const streamRes = await fetchWithSoundCloudAuth(
+				(cid) => `${hlsTrans.url}?client_id=${cid}`,
+				{ headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } }
+			);
 			if (!streamRes.ok) return res.status(404).send("Could not resolve SoundCloud stream");
 			const streamData = await streamRes.json();
 			const m3u8Url = streamData.url;

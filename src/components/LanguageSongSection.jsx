@@ -169,6 +169,7 @@ export default function LanguageSongSection({
                       e.target.src = '/default-cover.svg';
                     }}
                     loading="lazy"
+                    decoding="async"
                   />
 
                   {/* Gradient Vignette */}

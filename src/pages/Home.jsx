@@ -4,8 +4,8 @@ import { fetchRecommendedPlaylists, fetchPlaylistDetails, fetchMoreDynamicPlayli
 import Carousel from '../components/Carousel';
 import LanguageSongSection from '../components/LanguageSongSection';
 import SpeedDialSection from '../components/SpeedDialSection';
-import Footer from '../components/Footer';
-import { ArrowLeft, Play, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check, Edit3, Share2, MoreVertical, Trash2, GripVertical, ChevronUp, ChevronDown, ListPlus, FolderPlus, ListMusic, ListStart } from 'lucide-react';
+import Footer from '../components/Footer.jsx';
+import { ArrowLeft, Play, Pause, Music, Heart, Sparkles, Library, ChevronRight, Settings, Download, ArrowUpDown, Check, Edit3, Share2, MoreVertical, Trash2, GripVertical, ChevronUp, ChevronDown, ListPlus, FolderPlus, ListMusic, ListStart, Disc3, LocateFixed } from 'lucide-react';
 import { navigateBack } from '../utils/navigationHistory';
 import { filterValidDurationTracks } from '../utils/durationUtils';
 import { removeSongFromPlaylist, reorderSongsInPlaylist, deleteUserPlaylist } from '../utils/playlistManager';
@@ -121,7 +121,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     : DEFAULT_PLAYLISTS;
   const popularAlbumsPlaylists = [...initialPopular, ...extraPopularAlbums];
 
-  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, trackQueue, setIsRightSidebarOpen, addToUpNext, addToQueue } = usePlayer();
+  const { selectAndPlayTrack, playPlaylist, recentlyPlayed = [], pendingTrack, isPlaying, playPause, trackQueue, setIsRightSidebarOpen, addToUpNext, addToQueue } = usePlayer();
 
   const [popularArtists, setPopularArtists] = useState([]);
   const [loadingMoreArtists, setLoadingMoreArtists] = useState(false);
@@ -185,6 +185,39 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         return tracks;
     }
   }, [selectedPlaylist?.tracks, sortBy]);
+
+  const playingTrackIndex = useMemo(() => {
+    if (!pendingTrack || !sortedTracks || sortedTracks.length === 0) return -1;
+    const pId = String(pendingTrack.videoId || pendingTrack.id || '').trim();
+    const pTitle = String(pendingTrack.title || '').toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+
+    return sortedTracks.findIndex((t) => {
+      const tId = String(t.videoId || t.id || '').trim();
+      if (tId && pId && tId === pId) return true;
+      if (t.title && pTitle) {
+        const tTitle = String(t.title).toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+        if (tTitle && tTitle === pTitle) {
+          if (!t.artist || !pendingTrack.artist) return true;
+          return t.artist.toLowerCase().trim().slice(0, 10) === pendingTrack.artist.toLowerCase().trim().slice(0, 10);
+        }
+      }
+      return false;
+    });
+  }, [pendingTrack, sortedTracks]);
+
+  const isPlayingInThisPlaylist = playingTrackIndex !== -1;
+
+  const handleScrollToPlayingTrack = useCallback(() => {
+    if (playingTrackIndex === -1) return;
+    const trackEl = document.querySelector(`[data-track-index="${playingTrackIndex}"]`);
+    if (trackEl) {
+      trackEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      trackEl.classList.add('playing-track-flash');
+      setTimeout(() => {
+        trackEl.classList.remove('playing-track-flash');
+      }, 1600);
+    }
+  }, [playingTrackIndex]);
 
   const loadMoreArtists = async () => {
     if (loadingMoreArtists) return;
@@ -1141,8 +1174,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
         {/* Playlist Header */}
         <div className="flex flex-col md:flex-row items-center md:items-end text-center md:text-left gap-5 sm:gap-6 md:gap-8 mb-6 sm:mb-8">
           {selectedPlaylist.isLikedPlaylist ? (
-            <div className="w-40 h-40 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-gradient-to-br from-indigo-700 via-purple-600 to-rose-500 border border-white/10 flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(99,102,241,0.35)] relative overflow-hidden group select-none mx-auto md:mx-0">
-              <Heart className="w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 text-white fill-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.5)] group-hover:scale-105 transition-transform duration-500" />
+            <div className="w-40 h-40 sm:w-56 sm:h-56 md:w-64 md:h-64 rounded-2xl bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex items-center justify-center p-8 shrink-0 shadow-[0_12px_35px_rgba(69,10,245,0.35)] relative overflow-hidden group select-none mx-auto md:mx-0">
+              <Heart className="w-16 h-16 sm:w-24 sm:h-24 md:w-28 md:h-28 text-white fill-current drop-shadow-md group-hover:scale-105 transition-transform duration-500" />
             </div>
           ) : (
             <img
@@ -1204,6 +1237,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               >
                 <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current translate-x-[1px]" /> Play
               </button>
+
               {isSelectedUserPlaylist ? (
                 <button
                   type="button"
@@ -1234,6 +1268,19 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                       <><span className="text-lg leading-none">+</span> Save</>
                     )
                   )}
+                </button>
+              )}
+
+              {/* Find / Scroll to Currently Playing Song Button */}
+              {isPlayingInThisPlaylist && (
+                <button
+                  type="button"
+                  onClick={handleScrollToPlayingTrack}
+                  title={`Scroll to playing song: ${sortedTracks[playingTrackIndex]?.title || ''} (#${playingTrackIndex + 1})`}
+                  aria-label="Scroll to currently playing song"
+                  className="inline-flex items-center justify-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-zinc-900/90 hover:bg-zinc-800 border border-white/25 hover:border-white/50 text-white font-medium text-xs sm:text-sm rounded-full transition hover:scale-105 active:scale-95 cursor-pointer shadow-md shrink-0 group animate-in fade-in zoom-in-95 duration-200"
+                >
+                  <LocateFixed className="w-3.5 h-3.5 text-zinc-300 group-hover:text-white transition-colors" />
                 </button>
               )}
 
@@ -1442,7 +1489,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
             <div className="flex flex-col gap-1">
               {sortedTracks && sortedTracks.length > 0 ? (
-                sortedTracks.map((track, idx) => (
+                sortedTracks.map((track, idx) => {
+                  const isCurrentTrack = idx === playingTrackIndex;
+                  return (
                   <article
                     key={track.videoId || idx}
                     data-track-index={idx}
@@ -1451,14 +1500,25 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     onDragStart={(e) => handleDragStart(e, idx)}
                     onDragOver={(e) => handleDragOver(e, idx)}
                     onDrop={(e) => handleDrop(e, idx)}
-                    className={`grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-2.5 sm:gap-4 items-center p-1.5 sm:p-2.5 md:p-3 rounded-xl hover:bg-zinc-800/50 transition group cursor-pointer ${
+                    className={`grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,4fr)_minmax(0,2.5fr)_minmax(0,2fr)_70px_40px] gap-2.5 sm:gap-4 items-center p-1.5 sm:p-2.5 md:p-3 rounded-xl transition group cursor-pointer ${
+                      isCurrentTrack
+                        ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
+                        : 'hover:bg-zinc-800/50 border border-transparent'
+                    } ${
                       dragOverIndex === idx || (touchOverIndex === idx && touchDragIndex !== null && touchDragIndex !== idx)
                         ? 'border-t-2 border-white bg-zinc-800/80'
                         : ''
                     } ${
                       touchDragIndex === idx ? 'opacity-40 scale-[0.98] bg-zinc-800/80 ring-1 ring-white/20' : ''
                     }`}
-                    onClick={() => !isReorderMode && handlePlayTrackInPlaylist(idx)}
+                    onClick={() => {
+                      if (isReorderMode) return;
+                      if (isCurrentTrack) {
+                        playPause();
+                      } else {
+                        handlePlayTrackInPlaylist(idx);
+                      }
+                    }}
                   >
                     {/* Index / Play / Reorder Handle */}
                     <div className="flex items-center justify-center shrink-0 min-w-[24px]" onClick={(e) => isSelectedUserPlaylist && e.stopPropagation()}>
@@ -1529,33 +1589,58 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                         </>
                       ) : (
                         <>
-                          <span className="text-xs sm:text-sm font-medium text-zinc-500 group-hover:hidden">
+                          <span className={`text-xs sm:text-sm font-medium ${isCurrentTrack ? 'text-white font-bold' : 'text-zinc-500'} group-hover:hidden`}>
                             {idx + 1}
                           </span>
                           <span className="hidden group-hover:flex justify-center items-center">
-                            <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-current" />
+                            {isCurrentTrack && isPlaying ? (
+                              <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-current" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white fill-current" />
+                            )}
                           </span>
                         </>
                       )}
                     </div>
                     
                     <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 pr-1">
-                      <img
-                        src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail}
-                        alt={track.title}
-                        className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-lg shrink-0 object-cover bg-black border border-white/5 shadow-sm"
-                        onError={(e) => {
-                          e.target.src = '/default-cover.svg';
-                        }}
-                        loading="lazy"
-                      />
+                      <div className="relative shrink-0 w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12">
+                        <img
+                          src={(!track.thumbnail || track.thumbnail === '/logo.svg') ? '/default-cover.svg' : track.thumbnail}
+                          alt={track.title}
+                          className={`w-full h-full rounded-lg object-cover bg-black border shadow-sm ${
+                            isCurrentTrack ? 'border-white/40 ring-1 ring-white/30' : 'border-white/5'
+                          }`}
+                          onError={(e) => {
+                            e.target.src = '/default-cover.svg';
+                          }}
+                          loading="lazy"
+                        />
+                        {isCurrentTrack && (
+                          <div className="absolute inset-0 bg-black/40 backdrop-blur-[0.5px] flex items-center justify-center gap-[2px] rounded-lg">
+                            <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-1 ${!isPlaying ? 'music-equalizer-paused h-1.5' : ''}`} />
+                            <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-2 ${!isPlaying ? 'music-equalizer-paused h-3' : ''}`} />
+                            <span className={`w-[2px] bg-white rounded-full music-equalizer-bar-3 ${!isPlaying ? 'music-equalizer-paused h-2' : ''}`} />
+                          </div>
+                        )}
+                      </div>
                       <div className="flex flex-col min-w-0 flex-1">
-                        <h3 className="text-xs sm:text-sm md:text-base font-medium text-zinc-100 group-hover:text-white truncate">
-                          {track.title}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <h3 className={`text-xs sm:text-sm md:text-base font-semibold truncate ${
+                            isCurrentTrack ? 'text-white font-bold' : 'text-zinc-100 group-hover:text-white'
+                          }`}>
+                            {track.title}
+                          </h3>
                           {Boolean(track.explicit) && (
-                            <span className="inline-flex ml-1.5 px-1 rounded bg-zinc-200 text-black text-[9px] font-bold">E</span>
+                            <span className="inline-flex px-1 rounded bg-zinc-200 text-black text-[9px] font-bold shrink-0">E</span>
                           )}
-                        </h3>
+                          {isCurrentTrack && (
+                            <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded-full bg-white/20 text-white shrink-0 hidden sm:inline-flex items-center gap-1">
+                              <span className="w-1 h-1 rounded-full bg-white animate-ping" />
+                              Playing
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] sm:text-xs md:text-sm text-zinc-400 truncate md:hidden mt-0.5">
                           {track.artist}
                         </p>
@@ -1684,8 +1769,9 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                       )}
                     </div>
                   </article>
-                ))
-              ) : (
+                );
+              })
+            ) : (
                 <div className="text-center py-20 px-4">
                   <div className="w-16 h-16 rounded-full bg-zinc-900 border border-zinc-800 mx-auto flex items-center justify-center text-zinc-400 mb-4">
                     <Music className="w-8 h-8" />

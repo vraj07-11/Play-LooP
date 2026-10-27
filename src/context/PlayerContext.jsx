@@ -2042,46 +2042,53 @@ export function PlayerProvider({ children }) {
 
   const roundedDuration = Math.round(pendingTrack?.duration || duration || 0);
 
+  const previousTrackIdRef = useRef(null);
+
   useEffect(() => {
     if (!pendingTrack?.title) {
       setLyricsData(null);
       setIsLyricsLoading(false);
-      lastFetchedLyricsRef.current = { videoId: null, duration: 0 };
+      lastFetchedLyricsRef.current = { videoId: null, duration: 0, fetched: false };
+      previousTrackIdRef.current = null;
       return;
     }
 
     const trackId = pendingTrack.videoId || pendingTrack.title;
+    const isDifferentTrack = previousTrackIdRef.current !== trackId;
+    previousTrackIdRef.current = trackId;
 
-    // Skip refetch if already fetched with valid positive duration for this track
-    if (
-      lastFetchedLyricsRef.current.videoId === trackId &&
-      lastFetchedLyricsRef.current.duration > 0
-    ) {
+    if (isDifferentTrack) {
+      setLyricsData(null);
+      setIsLyricsLoading(true);
+      lastFetchedLyricsRef.current = { videoId: trackId, duration: roundedDuration, fetched: false };
+    } else if (lastFetchedLyricsRef.current.fetched && lastFetchedLyricsRef.current.duration > 0) {
       return;
     }
 
-    setIsLyricsLoading(true);
-    setLyricsData(null);
-    lastFetchedLyricsRef.current = { videoId: trackId, duration: roundedDuration };
+    // Debounce by 280ms so rapid track skipping in playlists does not hammer lyrics endpoints
+    const debounceTimer = setTimeout(() => {
+      fetchSyncedLyrics(
+        pendingTrack.title,
+        pendingTrack.artist || pendingTrack.channelTitle || '',
+        roundedDuration
+      )
+        .then((data) => {
+          if (lastFetchedLyricsRef.current.videoId === trackId) {
+            setLyricsData(data);
+            setIsLyricsLoading(false);
+            lastFetchedLyricsRef.current = { videoId: trackId, duration: roundedDuration, fetched: true };
+          }
+        })
+        .catch(() => {
+          if (lastFetchedLyricsRef.current.videoId === trackId) {
+            setLyricsData(null);
+            setIsLyricsLoading(false);
+            lastFetchedLyricsRef.current = { videoId: trackId, duration: roundedDuration, fetched: true };
+          }
+        });
+    }, 280);
 
-    fetchSyncedLyrics(
-      pendingTrack.title,
-      pendingTrack.artist || pendingTrack.channelTitle || '',
-      roundedDuration
-    )
-      .then((data) => {
-        if (lastFetchedLyricsRef.current.videoId === trackId) {
-          setLyricsData(data);
-          setIsLyricsLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.warn('Lyrics fetch failed:', err);
-        if (lastFetchedLyricsRef.current.videoId === trackId) {
-          setLyricsData(null);
-          setIsLyricsLoading(false);
-        }
-      });
+    return () => clearTimeout(debounceTimer);
   }, [pendingTrack?.videoId, pendingTrack?.title, roundedDuration]);
 
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
