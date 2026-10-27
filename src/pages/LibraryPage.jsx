@@ -320,19 +320,24 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
               tabIndex={0}
               role="button"
               aria-label={`Playlist: ${item.title}`}
-              className="group relative flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg"
+              className={`group relative flex flex-col p-3.5 rounded-2xl bg-[#181818] hover:bg-[#222222] focus:outline-none focus:ring-2 focus:ring-white border border-white/5 hover:border-white/15 cursor-pointer transition-all duration-300 shadow-lg ${
+                isMenuOpen ? 'z-40' : 'z-10'
+              }`}
             >
-              <div className={`relative w-full aspect-square shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden mb-4 bg-black border border-white/5 ${item.isArtist ? 'rounded-full' : 'rounded-xl'}`}>
-                <img
-                  src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail}
-                  alt={item.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  onError={(e) => { e.target.src = '/default-cover.svg'; }}
-                  loading="lazy"
-                />
+              <div className="relative w-full aspect-square mb-4">
+                {/* Cover Image Container */}
+                <div className={`w-full h-full shadow-[0_8px_24px_rgba(0,0,0,0.5)] overflow-hidden bg-black border border-white/5 ${item.isArtist ? 'rounded-full' : 'rounded-xl'}`}>
+                  <img
+                    src={(!item.thumbnail || item.thumbnail === '/logo.svg') ? '/default-cover.svg' : item.thumbnail}
+                    alt={item.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    onError={(e) => { e.target.src = '/default-cover.svg'; }}
+                    loading="lazy"
+                  />
+                </div>
 
-                {/* Top Options Menu trigger */}
-                <div className="playlist-menu-container absolute top-2 right-2 z-30">
+                {/* Top Options Menu trigger - Outside overflow-hidden so menu doesn't get clipped */}
+                <div className="playlist-menu-container absolute top-2 right-2 z-40">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -349,7 +354,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                   {/* Dropdown Menu */}
                   {isMenuOpen && (
                     <div
-                      className="absolute right-0 top-full mt-1.5 w-44 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150"
+                      className="absolute right-0 top-full mt-1.5 w-44 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
@@ -382,7 +387,7 @@ export default function LibraryPage({ setCurrentView, refreshKey = 0 }) {
                 </div>
 
                 {/* Hover Play Button */}
-                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20">
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 z-20 pointer-events-none">
                   <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-xl hover:scale-105 hover:bg-gray-50 text-black">
                     <Play className="w-5 h-5 fill-current translate-x-[2px]" />
                   </div>

@@ -27,6 +27,43 @@ export default function SearchPage({ refreshKey = 0 }) {
 
   const [openSongMenuKey, setOpenSongMenuKey] = useState(null);
 
+  const songLongPressTimerRef = useRef(null);
+  const songTouchStartPosRef = useRef({ x: 0, y: 0 });
+  const isSongLongPressActiveRef = useRef(false);
+
+  const handleSongTouchStart = (key, e) => {
+    const touch = e.touches[0];
+    songTouchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    isSongLongPressActiveRef.current = false;
+    if (songLongPressTimerRef.current) clearTimeout(songLongPressTimerRef.current);
+    songLongPressTimerRef.current = setTimeout(() => {
+      isSongLongPressActiveRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+      }
+      setOpenSongMenuKey(key);
+    }, 450);
+  };
+
+  const handleSongTouchMove = (e) => {
+    if (songLongPressTimerRef.current) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - songTouchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - songTouchStartPosRef.current.y);
+      if (dx > 8 || dy > 8) {
+        clearTimeout(songLongPressTimerRef.current);
+        songLongPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleSongTouchEnd = () => {
+    if (songLongPressTimerRef.current) {
+      clearTimeout(songLongPressTimerRef.current);
+      songLongPressTimerRef.current = null;
+    }
+  };
+
   const isSongPlaying = (song) => {
     if (!pendingTrack || !song) return false;
     const sId = String(song.videoId || song.track_id || song.id || '').trim();
@@ -537,7 +574,20 @@ export default function SearchPage({ refreshKey = 0 }) {
                             ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
                             : 'bg-[#141414] hover:bg-zinc-800/80 active:bg-zinc-800 border border-white/5 hover:border-white/10'
                         } ${openSongMenuKey === popKey ? 'relative z-30' : 'relative z-0'}`}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setOpenSongMenuKey(openSongMenuKey === popKey ? null : popKey);
+                        }}
+                        onTouchStart={(e) => handleSongTouchStart(popKey, e)}
+                        onTouchMove={handleSongTouchMove}
+                        onTouchEnd={handleSongTouchEnd}
+                        onTouchCancel={handleSongTouchEnd}
                         onClick={() => {
+                          if (isSongLongPressActiveRef.current) {
+                            isSongLongPressActiveRef.current = false;
+                            return;
+                          }
                           if (isCurrent) {
                             playPause();
                           } else {
@@ -1138,7 +1188,20 @@ export default function SearchPage({ refreshKey = 0 }) {
                                       ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
                                       : 'bg-[#141416] hover:bg-[#202024] active:bg-[#25252a] border border-white/5'
                                   } ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpenSongMenuKey(openSongMenuKey === menuKey ? null : menuKey);
+                                  }}
+                                  onTouchStart={(e) => handleSongTouchStart(menuKey, e)}
+                                  onTouchMove={handleSongTouchMove}
+                                  onTouchEnd={handleSongTouchEnd}
+                                  onTouchCancel={handleSongTouchEnd}
                                   onClick={() => {
+                                    if (isSongLongPressActiveRef.current) {
+                                      isSongLongPressActiveRef.current = false;
+                                      return;
+                                    }
                                     if (isCurrent) {
                                       playPause();
                                     } else {
@@ -1400,7 +1463,20 @@ export default function SearchPage({ refreshKey = 0 }) {
                                     ? 'bg-white/[0.08] border border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.06)] playing-card-active'
                                     : 'bg-[#141416] hover:bg-[#202024] border border-white/5'
                                 } ${openSongMenuKey === menuKey ? 'relative z-30' : 'relative z-0'}`}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setOpenSongMenuKey(openSongMenuKey === menuKey ? null : menuKey);
+                                }}
+                                onTouchStart={(e) => handleSongTouchStart(menuKey, e)}
+                                onTouchMove={handleSongTouchMove}
+                                onTouchEnd={handleSongTouchEnd}
+                                onTouchCancel={handleSongTouchEnd}
                                 onClick={() => {
+                                  if (isSongLongPressActiveRef.current) {
+                                    isSongLongPressActiveRef.current = false;
+                                    return;
+                                  }
                                   if (isCurrent) {
                                     playPause();
                                   } else {

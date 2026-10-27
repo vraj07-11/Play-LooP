@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Play, FolderPlus, ListStart, ListMusic, Share2, X } from 'lucide-react';
+import { usePlayer } from '../context/PlayerContext';
 
 export default function Carousel({ 
   title, 
@@ -16,6 +17,82 @@ export default function Carousel({
   isLoadingMore = false 
 }) {
   const rowRef = useRef(null);
+  const { addToUpNext, addToQueue } = usePlayer();
+  const [activeMenuIndex, setActiveMenuIndex] = useState(null);
+
+  const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+  const isLongPressActiveRef = useRef(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.carousel-card-menu-container')) {
+        setActiveMenuIndex(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setActiveMenuIndex(null);
+    };
+    document.addEventListener('pointerdown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handleTouchStart = (index, e) => {
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    isLongPressActiveRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+      }
+      setActiveMenuIndex(index);
+    }, 450);
+  };
+
+  const handleTouchMove = (e) => {
+    if (longPressTimerRef.current) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      if (dx > 8 || dy > 8) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMenuAction = (action, item) => {
+    setActiveMenuIndex(null);
+    const trackObj = {
+      videoId: item.videoId || item.id,
+      title: item.title,
+      artist: item.artist || item.author,
+      thumbnail: item.thumbnail || item.cover || item.artwork || item.albumArt || '/default-cover.svg'
+    };
+
+    if (action === 'playlist') {
+      window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: trackObj }));
+    } else if (action === 'playNext') {
+      if (typeof addToUpNext === 'function') addToUpNext(trackObj);
+    } else if (action === 'queue') {
+      if (typeof addToQueue === 'function') addToQueue(trackObj);
+    } else if (action === 'share') {
+      window.dispatchEvent(new CustomEvent('playloop-open-share', { detail: trackObj }));
+    }
+  };
 
   const scroll = (direction) => {
     if (!rowRef.current) return;
@@ -200,8 +277,23 @@ export default function Carousel({
           return (
             <div 
               key={keyExtractor ? keyExtractor(item, index) : index} 
-              className="square-card"
-              onClick={() => onItemClick && onItemClick(item, index)}
+              className="square-card relative select-none"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setActiveMenuIndex(activeMenuIndex === index ? null : index);
+              }}
+              onTouchStart={(e) => handleTouchStart(index, e)}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+              onClick={() => {
+                if (isLongPressActiveRef.current) {
+                  isLongPressActiveRef.current = false;
+                  return;
+                }
+                if (onItemClick) onItemClick(item, index);
+              }}
             >
               <div className="square-card-art-wrapper">
                 <div className="square-card-vinyl-container">
@@ -230,6 +322,59 @@ export default function Carousel({
                   >
                     <Play className="w-5 h-5 fill-current text-black translate-x-[1px]" />
                   </button>
+
+                  {/* Context / Hold Options Menu Overlay */}
+                  {activeMenuIndex === index && (
+                    <div
+                      className="carousel-card-menu-container absolute inset-0 bg-zinc-950/95 backdrop-blur-md rounded-lg p-2.5 z-30 flex flex-col justify-between shadow-2xl border border-white/20 animate-in fade-in zoom-in-95 duration-150"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between pb-1 border-b border-white/10">
+                        <span className="text-[11px] font-bold text-white truncate max-w-[120px]">{item.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveMenuIndex(null)}
+                          className="p-1 text-zinc-400 hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('playlist', item)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Add to Playlist</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('playNext', item)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <ListStart className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Play Next</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('queue', item)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <ListMusic className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Add to Queue</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('share', item)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Share Track</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
                 <div className="square-card-info">

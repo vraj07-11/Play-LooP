@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
-import { Play, Shuffle, ChevronLeft, ChevronRight, Sparkles, Music } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { Play, Shuffle, ChevronLeft, ChevronRight, Sparkles, Music, FolderPlus, ListStart, ListMusic, Share2, X } from 'lucide-react';
+import { usePlayer } from '../context/PlayerContext';
 
 const formatDuration = (seconds) => {
   if (!seconds || isNaN(seconds)) return null;
@@ -18,6 +19,82 @@ export default function LanguageSongSection({
   onShuffle
 }) {
   const scrollRef = useRef(null);
+  const { addToUpNext, addToQueue } = usePlayer();
+  const [activeMenuIndex, setActiveMenuIndex] = useState(null);
+
+  const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+  const isLongPressActiveRef = useRef(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.lang-card-menu-container')) {
+        setActiveMenuIndex(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setActiveMenuIndex(null);
+    };
+    document.addEventListener('pointerdown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const handleTouchStart = (index, e) => {
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    isLongPressActiveRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+      }
+      setActiveMenuIndex(index);
+    }, 450);
+  };
+
+  const handleTouchMove = (e) => {
+    if (longPressTimerRef.current) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      if (dx > 8 || dy > 8) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMenuAction = (action, track) => {
+    setActiveMenuIndex(null);
+    const trackObj = {
+      videoId: track.videoId || track.id,
+      title: track.title,
+      artist: track.artist || meta?.label,
+      thumbnail: track.thumbnail || track.cover || track.artwork || track.albumArt || '/default-cover.svg'
+    };
+
+    if (action === 'playlist') {
+      window.dispatchEvent(new CustomEvent('playloop-open-add-to-playlist', { detail: trackObj }));
+    } else if (action === 'playNext') {
+      if (typeof addToUpNext === 'function') addToUpNext(trackObj);
+    } else if (action === 'queue') {
+      if (typeof addToQueue === 'function') addToQueue(trackObj);
+    } else if (action === 'share') {
+      window.dispatchEvent(new CustomEvent('playloop-open-share', { detail: trackObj }));
+    }
+  };
 
   const handleScroll = (direction) => {
     if (!scrollRef.current) return;
@@ -142,7 +219,22 @@ export default function LanguageSongSection({
             return (
               <div
                 key={`${lang}-${track.videoId}-${index}`}
-                onClick={() => onPlayTrack && onPlayTrack(track, index)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setActiveMenuIndex(activeMenuIndex === index ? null : index);
+                }}
+                onTouchStart={(e) => handleTouchStart(index, e)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
+                onClick={() => {
+                  if (isLongPressActiveRef.current) {
+                    isLongPressActiveRef.current = false;
+                    return;
+                  }
+                  if (onPlayTrack) onPlayTrack(track, index);
+                }}
                 className="w-[160px] sm:w-[185px] md:w-[205px] flex-shrink-0 bg-[#0e0e12] hover:bg-[#15151b] border border-white/[0.07] hover:border-white/30 rounded-2xl p-3 flex flex-col transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_14px_30px_rgba(0,0,0,0.85),0_0_20px_rgba(255,255,255,0.04)] group/track relative cursor-pointer select-none"
               >
                 {/* Artwork Box with Rank Badge and Center Play Orb */}
@@ -181,6 +273,59 @@ export default function LanguageSongSection({
                       <Play className="w-4 h-4 fill-current translate-x-[1px]" />
                     </div>
                   </div>
+
+                  {/* Context / Hold Options Menu Overlay */}
+                  {activeMenuIndex === index && (
+                    <div
+                      className="lang-card-menu-container absolute inset-0 bg-zinc-950/95 backdrop-blur-md rounded-xl p-2.5 z-30 flex flex-col justify-between shadow-2xl border border-white/20 animate-in fade-in zoom-in-95 duration-150"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between pb-1 border-b border-white/10">
+                        <span className="text-[11px] font-bold text-white truncate max-w-[120px]">{track.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveMenuIndex(null)}
+                          className="p-1 text-zinc-400 hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('playlist', track)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Add to Playlist</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('playNext', track)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <ListStart className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Play Next</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('queue', track)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <ListMusic className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Add to Queue</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMenuAction('share', track)}
+                          className="w-full px-2 py-1.5 text-xs text-left text-zinc-200 hover:text-white hover:bg-white/10 rounded-lg flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <Share2 className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Share Track</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Track Metadata */}

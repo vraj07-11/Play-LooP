@@ -144,6 +144,44 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const [isReorderMode, setIsReorderMode] = useState(false);
   const headerMenuRef = useRef(null);
 
+  const longPressTimerRef = useRef(null);
+  const touchStartPosRef = useRef({ x: 0, y: 0 });
+  const isLongPressActiveRef = useRef(false);
+
+  const handleTrackTouchStart = (idx, e) => {
+    if (isReorderMode) return;
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+    isLongPressActiveRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+      }
+      setOpenTrackMenuIndex(idx);
+    }, 450);
+  };
+
+  const handleTrackTouchMove = (e) => {
+    if (longPressTimerRef.current) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      if (dx > 8 || dy > 8) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleTrackTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   useEffect(() => {
     setIsReorderMode(false);
     setTouchDragIndex(null);
@@ -1271,19 +1309,6 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                 </button>
               )}
 
-              {/* Find / Scroll to Currently Playing Song Button */}
-              {isPlayingInThisPlaylist && (
-                <button
-                  type="button"
-                  onClick={handleScrollToPlayingTrack}
-                  title={`Scroll to playing song: ${sortedTracks[playingTrackIndex]?.title || ''} (#${playingTrackIndex + 1})`}
-                  aria-label="Scroll to currently playing song"
-                  className="inline-flex items-center justify-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-zinc-900/90 hover:bg-zinc-800 border border-white/25 hover:border-white/50 text-white font-medium text-xs sm:text-sm rounded-full transition hover:scale-105 active:scale-95 cursor-pointer shadow-md shrink-0 group animate-in fade-in zoom-in-95 duration-200"
-                >
-                  <LocateFixed className="w-3.5 h-3.5 text-zinc-300 group-hover:text-white transition-colors" />
-                </button>
-              )}
-
               {/* Share Playlist Button */}
               {!selectedPlaylist.isLikedPlaylist && (
                 <button
@@ -1384,25 +1409,17 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
               </div>
               
               <div className="flex items-center gap-2">
-                {isSelectedUserPlaylist && (
+                {/* Locate Playing Song Button */}
+                {isPlayingInThisPlaylist && (
                   <button
                     type="button"
-                    onClick={() => {
-                      const next = !isReorderMode;
-                      setIsReorderMode(next);
-                      if (next && sortBy !== 'recent') {
-                        setSortBy('recent');
-                      }
-                    }}
-                    className={`text-xs sm:text-sm font-semibold rounded-full px-3 py-1.5 flex items-center gap-1.5 transition cursor-pointer border shadow-sm ${
-                      isReorderMode
-                        ? 'bg-white text-black border-white hover:bg-zinc-200'
-                        : 'text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700/60'
-                    }`}
-                    title={isReorderMode ? 'Done Reordering' : 'Reorder Tracks'}
+                    onClick={handleScrollToPlayingTrack}
+                    title={`Scroll to playing song: ${sortedTracks[playingTrackIndex]?.title || ''} (#${playingTrackIndex + 1})`}
+                    aria-label="Scroll to currently playing song"
+                    className="text-xs sm:text-sm font-semibold rounded-full px-3 py-1.5 sm:px-3.5 sm:py-1.5 flex items-center gap-1.5 transition cursor-pointer border shadow-sm text-zinc-300 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border-zinc-700/60 hover:scale-105 active:scale-95"
                   >
-                    <GripVertical className="w-3.5 h-3.5" />
-                    <span>{isReorderMode ? 'Done' : 'Reorder'}</span>
+                    <LocateFixed className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white transition-colors" />
+                    <span>Locate</span>
                   </button>
                 )}
 
@@ -1511,8 +1528,21 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     } ${
                       touchDragIndex === idx ? 'opacity-40 scale-[0.98] bg-zinc-800/80 ring-1 ring-white/20' : ''
                     }`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setOpenTrackMenuIndex(openTrackMenuIndex === idx ? null : idx);
+                    }}
+                    onTouchStart={(e) => handleTrackTouchStart(idx, e)}
+                    onTouchMove={handleTrackTouchMove}
+                    onTouchEnd={handleTrackTouchEnd}
+                    onTouchCancel={handleTrackTouchEnd}
                     onClick={() => {
                       if (isReorderMode) return;
+                      if (isLongPressActiveRef.current) {
+                        isLongPressActiveRef.current = false;
+                        return;
+                      }
                       if (isCurrentTrack) {
                         playPause();
                       } else {
