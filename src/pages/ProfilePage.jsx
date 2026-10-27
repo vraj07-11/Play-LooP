@@ -21,7 +21,8 @@ import {
   saveUserProfile, 
   PROFILE_NAME_KEY, 
   PROFILE_AVATAR_KEY,
-  PLAYLIST_HISTORY_KEY 
+  PLAYLIST_HISTORY_KEY,
+  fetchApi 
 } from '../services/api';
 import { 
   RECENTLY_PLAYED_KEY, 
@@ -201,7 +202,7 @@ export default function ProfilePage({ setCurrentView, refreshKey = 0 }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/user/stats?user_uuid=${encodeURIComponent(userUuid)}&timeframe=${timeframe}`);
+      const res = await fetchApi(`/api/user/stats?user_uuid=${encodeURIComponent(userUuid)}&timeframe=${timeframe}`);
       if (res.ok) {
         const data = await res.json();
         

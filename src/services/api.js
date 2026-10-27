@@ -1,9 +1,21 @@
 import { filterValidDurationTracks } from '../utils/durationUtils';
 
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+export function resolveApiUrl(path) {
+  if (!path) return path;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  if (path.startsWith('/')) {
+    return `${API_BASE_URL}${path}`;
+  }
+  return `${API_BASE_URL}/${path}`;
+}
+
 // Fetch API helper
 export async function fetchApi(endpoint, options = {}) {
   try {
-    return await fetch(endpoint, options);
+    const url = resolveApiUrl(endpoint);
+    return await fetch(url, options);
   } catch (err) {
     if (err.name === "AbortError") throw err;
     console.error("fetchApi error:", err);
@@ -13,7 +25,7 @@ export async function fetchApi(endpoint, options = {}) {
 
 export function getAudioUrl(videoId) {
   const quality = localStorage.getItem('playloop_audio_quality') || '320';
-  return `/api/audio?id=${encodeURIComponent(videoId)}&quality=${encodeURIComponent(quality)}`;
+  return resolveApiUrl(`/api/audio?id=${encodeURIComponent(videoId)}&quality=${encodeURIComponent(quality)}`);
 }
 
 export const USER_UUID_KEY = 'user_uuid';

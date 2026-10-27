@@ -5,3 +5,16 @@ audio-cache/
 .env
 .env.local
 .DS_Store
+
+# Android & IDE
+.idea/
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties
+android/.idea/
+android/.gradle/
+android/local.properties
+android/**/build/
+

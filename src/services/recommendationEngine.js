@@ -8,6 +8,8 @@
  * context, or popular defaults (cold start).
  */
 
+import { fetchApi } from './api';
+
 // --- Constants ---
 const LOCAL_SCROBBLES_KEY = 'playloop_scrobbles';
 
@@ -50,7 +52,7 @@ function _topArtists(scrobbles, n = 3) {
  */
 async function _searchTracks(query, limit = 8) {
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&n=${limit}`);
+    const res = await fetchApi(`/api/search?q=${encodeURIComponent(query)}&n=${limit}`);
     if (!res.ok) return [];
     const data = await res.json();
     // The endpoint returns either an array (simple search) or { songs } (multi search)
@@ -67,7 +69,7 @@ async function _searchTracks(query, limit = 8) {
  */
 async function _fetchPopular() {
   try {
-    const res = await fetch('/api/popular-songs');
+    const res = await fetchApi('/api/popular-songs');
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data.filter(s => s && s.videoId) : [];

@@ -12,6 +12,7 @@ import PullToRefresh from './components/PullToRefresh';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
 import { initNavigationHistory } from './utils/navigationHistory';
+import { fetchApi } from './services/api';
 
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const LoopsPage = lazy(() => import('./pages/LoopsPage'));
@@ -102,7 +103,7 @@ function App() {
         }
 
         try {
-          const res = await fetch(`/api/song?id=${encodeURIComponent(trackId)}`);
+          const res = await fetchApi(`/api/song?id=${encodeURIComponent(trackId)}`);
           if (res.ok) {
             const song = await res.json();
             if (song && song.videoId) {

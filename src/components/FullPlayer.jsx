@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, ListPlus, FolderPlus, Check, X } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { getAudioUrl, savePlaylistApi, unsavePlaylistApi, saveLikedTrackApi } from '../services/api';
+import { getAudioUrl, savePlaylistApi, unsavePlaylistApi, saveLikedTrackApi, resolveApiUrl } from '../services/api';
 import { shareTrack } from '../services/shareService';
 
 export default function FullPlayer({
@@ -243,7 +243,7 @@ export default function FullPlayer({
     setIsDownloading(true);
     showToast("Starting audio download...");
     try {
-      const downloadUrl = `/api/download?id=${encodeURIComponent(pendingTrack.videoId)}`;
+      const downloadUrl = resolveApiUrl(`/api/download?id=${encodeURIComponent(pendingTrack.videoId)}`);
       const link = document.createElement('a');
       link.href = downloadUrl;
       const cleanTitle = (pendingTrack.title || 'song').replace(/[/\\?%*:|"<>]/g, '');

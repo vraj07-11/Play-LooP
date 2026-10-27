@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { usePlayer, fetchApi } from '../context/PlayerContext';
+import { usePlayer } from '../context/PlayerContext';
 import { Menu, X, Search, User } from 'lucide-react';
-import { getUserUuid, fetchUserProfile, PROFILE_AVATAR_KEY } from '../services/api';
+import { getUserUuid, fetchUserProfile, PROFILE_AVATAR_KEY, fetchApi } from '../services/api';
 
 export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView }) {
   const [query, setQuery] = useState('');
@@ -131,7 +131,7 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
     setHasSearched(false);
     setShowSuggestions(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(searchTerm)}`, {
+      const res = await fetchApi(`/api/search?q=${encodeURIComponent(searchTerm)}`, {
         signal: abortControllerRef.current.signal
       });
       if (res.ok) {

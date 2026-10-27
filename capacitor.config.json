@@ -1,0 +1,15 @@
+{
+  "appId": "com.playloop.app",
+  "appName": "Play-LooP",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#000000"
+    }
+  }
+}

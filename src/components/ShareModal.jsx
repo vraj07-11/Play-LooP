@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Copy, Share2, ExternalLink } from 'lucide-react';
+import { resolveApiUrl } from '../services/api';
 
 export default function ShareModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -219,7 +220,7 @@ export default function ShareModal() {
         {/* Track Preview Card */}
         <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-white/5 border border-white/5 mb-6">
           <img
-            src={track.thumbnail || (track.videoId ? `/api/cover?id=${encodeURIComponent(track.videoId)}` : '/default-cover.svg')}
+            src={track.thumbnail || (track.videoId ? resolveApiUrl(`/api/cover?id=${encodeURIComponent(track.videoId)}`) : '/default-cover.svg')}
             alt={title}
             onError={(e) => { e.target.src = '/default-cover.svg'; }}
             className="w-14 h-14 rounded-xl object-cover shrink-0 border border-white/10 shadow-md"

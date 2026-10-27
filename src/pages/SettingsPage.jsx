@@ -230,7 +230,7 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
     setImportProgress({ current: 0, total: 0, statusText: 'Connecting to playlist source...' });
 
     try {
-      const res = await fetch(`/api/import-playlist?url=${encodeURIComponent(playlistLink.trim())}`);
+      const res = await fetchApi(`/api/import-playlist?url=${encodeURIComponent(playlistLink.trim())}`);
       if (!res.ok) {
         const errData = await res.json();
         throw new Error(errData.error || 'Failed to parse playlist URL');
