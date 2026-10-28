@@ -8,20 +8,20 @@ const KNOWN_BACKUP_CLIENT_IDS = [
 
 // --- High-Performance SoundCloud Client ID State ---
 let scClientIdCache = {
-	id: KNOWN_BACKUP_CLIENT_IDS[0],
-	fetchedAt: Date.now()
+	id: null,
+	fetchedAt: 0
 };
 let inFlightClientIdPromise = null;
 
 /**
- * Fast parallel scraper to extract a live client_id from soundcloud.com script assets.
- * Fetches candidate bundle scripts concurrently to minimize latency (< 800ms).
+ * Fast scraper to extract a live client_id from soundcloud.com script assets.
+ * Evaluates the modern application bundle scripts where client_id is declared.
  */
 async function scrapeFreshSoundCloudClientId() {
 	try {
 		const htmlRes = await fetch("https://soundcloud.com", {
 			headers: { "User-Agent": USER_AGENT },
-			signal: AbortSignal.timeout(4000)
+			signal: AbortSignal.timeout(5000)
 		});
 		if (!htmlRes.ok) throw new Error(`HTML fetch failed: ${htmlRes.status}`);
 
@@ -31,28 +31,40 @@ async function scrapeFreshSoundCloudClientId() {
 
 		if (scriptUrls.length === 0) throw new Error("No script URLs found");
 
-		// Prioritize modern chunk bundles which contain the client_id definition
-		const candidates = scriptUrls.slice(-8).reverse();
-		const scriptPromises = candidates.map(async (url) => {
+		// The client_id is defined in the primary app chunk (within the last 4 scripts)
+		const targets = scriptUrls.slice(-4).reverse();
+		for (const url of targets) {
 			try {
 				const jsRes = await fetch(url, {
 					headers: { "User-Agent": USER_AGENT },
-					signal: AbortSignal.timeout(3500)
+					signal: AbortSignal.timeout(4000)
 				});
-				if (!jsRes.ok) return null;
+				if (!jsRes.ok) continue;
 				const jsText = await jsRes.text();
-				const match = jsText.match(/client_id[:=]["']([a-zA-Z0-9]{32})["']/);
-				return match ? match[1] : null;
-			} catch (_) {
-				return null;
-			}
-		});
+				const match = jsText.match(/client_id[:=]["']([a-zA-Z0-9_-]{32})["']/);
+				if (match && match[1]) {
+					console.log(`[SoundCloud] Successfully scraped fresh client_id: ${match[1]}`);
+					return match[1];
+				}
+			} catch (_) {}
+		}
 
-		const results = await Promise.allSettled(scriptPromises);
-		for (const res of results) {
-			if (res.status === "fulfilled" && res.value) {
-				return res.value;
-			}
+		// Fallback check on remaining script bundles if needed
+		const otherCandidates = scriptUrls.slice(0, -4).reverse();
+		for (const url of otherCandidates.slice(0, 4)) {
+			try {
+				const jsRes = await fetch(url, {
+					headers: { "User-Agent": USER_AGENT },
+					signal: AbortSignal.timeout(3000)
+				});
+				if (!jsRes.ok) continue;
+				const jsText = await jsRes.text();
+				const match = jsText.match(/client_id[:=]["']([a-zA-Z0-9_-]{32})["']/);
+				if (match && match[1]) {
+					console.log(`[SoundCloud] Scraped fresh client_id from secondary bundle: ${match[1]}`);
+					return match[1];
+				}
+			} catch (_) {}
 		}
 	} catch (err) {
 		console.warn("[SoundCloud] Client ID scraping warning:", err.message || err);
@@ -69,9 +81,9 @@ async function scrapeFreshSoundCloudClientId() {
  */
 async function getSoundCloudClientId(forceRefresh = false) {
 	const now = Date.now();
-	const isExpired = !scClientIdCache.id || (now - scClientIdCache.fetchedAt > 60 * 60 * 1000); // 1 hour TTL
+	const isExpired = !scClientIdCache.id || (now - scClientIdCache.fetchedAt > 45 * 60 * 1000); // 45 min TTL
 
-	if (!forceRefresh && !isExpired) {
+	if (!forceRefresh && !isExpired && scClientIdCache.id) {
 		return scClientIdCache.id;
 	}
 
@@ -202,66 +214,84 @@ const scStreamUrlCache = new Map();
  * Resolves high-fidelity stream URL for a given track scId.
  * Uses in-memory cache and self-healing auth for zero-latency direct playback.
  */
-async function getSoundCloudStreamUrl(scId) {
-	const cached = scStreamUrlCache.get(scId);
-	if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
-		return cached.url;
+async function getSoundCloudStreamUrl(scId, forceRefresh = false) {
+	if (forceRefresh) {
+		scStreamUrlCache.delete(scId);
+	} else {
+		const cached = scStreamUrlCache.get(scId);
+		if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+			return cached.url;
+		}
 	}
-	try {
-		const trackRes = await fetchWithSoundCloudAuth(
-			(cid) => `https://api-v2.soundcloud.com/tracks/${scId}?client_id=${cid}`,
-			{
-				headers: { "User-Agent": USER_AGENT },
-				signal: AbortSignal.timeout(5000)
+
+	for (let attempt = 1; attempt <= 2; attempt++) {
+		try {
+			const trackRes = await fetchWithSoundCloudAuth(
+				(cid) => `https://api-v2.soundcloud.com/tracks/${scId}?client_id=${cid}`,
+				{
+					headers: { "User-Agent": USER_AGENT },
+					signal: AbortSignal.timeout(5000)
+				}
+			);
+			if (!trackRes.ok) {
+				console.warn(`[SoundCloud] Failed to fetch track ${scId} (attempt ${attempt}): ${trackRes.status}`);
+				if (attempt === 1) {
+					await getSoundCloudClientId(true);
+					continue;
+				}
+				return null;
 			}
-		);
-		if (!trackRes.ok) {
-			console.warn(`[SoundCloud] Failed to fetch track ${scId}: ${trackRes.status}`);
-			return null;
-		}
-		const trackData = await trackRes.json();
+			const trackData = await trackRes.json();
 
-		const trans = trackData.media?.transcodings || [];
-		if (trans.length === 0) return null;
+			const trans = trackData.media?.transcodings || [];
+			if (trans.length === 0) return null;
 
-		// 1. Prefer non-snipped full-length streams over previews
-		const fullLength = trans.filter(t => !t.snipped);
-		const candidates = fullLength.length > 0 ? fullLength : trans;
+			// 1. Prefer non-snipped full-length streams over previews
+			const fullLength = trans.filter(t => !t.snipped);
+			const candidates = fullLength.length > 0 ? fullLength : trans;
 
-		// 2. Select progressive MP3 if available so browser can play directly without HLS processing
-		const transcoding = 
-			candidates.find(t => t.format?.protocol === "progressive") ||
-			candidates.find(t => t.preset === "aac_160k") ||
-			candidates.find(t => t.preset === "aac_256k") ||
-			candidates[0];
+			// 2. Select progressive MP3 if available so browser can play directly without HLS processing
+			const transcoding = 
+				candidates.find(t => t.format?.protocol === "progressive") ||
+				candidates.find(t => t.preset === "aac_160k") ||
+				candidates.find(t => t.preset === "aac_256k") ||
+				candidates[0];
 
-		if (!transcoding || !transcoding.url) return null;
+			if (!transcoding || !transcoding.url) return null;
 
-		const streamRes = await fetchWithSoundCloudAuth(
-			(cid) => `${transcoding.url}?client_id=${cid}`,
-			{
-				headers: { "User-Agent": USER_AGENT },
-				signal: AbortSignal.timeout(5000)
+			const streamRes = await fetchWithSoundCloudAuth(
+				(cid) => `${transcoding.url}?client_id=${cid}`,
+				{
+					headers: { "User-Agent": USER_AGENT },
+					signal: AbortSignal.timeout(5000)
+				}
+			);
+			if (!streamRes.ok) {
+				console.warn(`[SoundCloud] Failed to resolve transcoding stream (attempt ${attempt}): ${streamRes.status}`);
+				if (attempt === 1) {
+					await getSoundCloudClientId(true);
+					continue;
+				}
+				return null;
 			}
-		);
-		if (!streamRes.ok) {
-			console.warn(`[SoundCloud] Failed to resolve transcoding stream: ${streamRes.status}`);
-			return null;
-		}
-		const streamData = await streamRes.json();
-		const finalUrl = streamData.url || null;
-		if (finalUrl) {
-			scStreamUrlCache.set(scId, { url: finalUrl, timestamp: Date.now() });
-			if (scStreamUrlCache.size > 200) {
-				const oldest = scStreamUrlCache.keys().next().value;
-				scStreamUrlCache.delete(oldest);
+			const streamData = await streamRes.json();
+			const finalUrl = streamData.url || null;
+			if (finalUrl) {
+				scStreamUrlCache.set(scId, { url: finalUrl, timestamp: Date.now() });
+				if (scStreamUrlCache.size > 200) {
+					const oldest = scStreamUrlCache.keys().next().value;
+					scStreamUrlCache.delete(oldest);
+				}
+			}
+			return finalUrl;
+		} catch (err) {
+			console.error(`[SoundCloud] Stream resolve error (attempt ${attempt}):`, err.message || err);
+			if (attempt === 1) {
+				await getSoundCloudClientId(true).catch(() => {});
 			}
 		}
-		return finalUrl;
-	} catch (err) {
-		console.error("[SoundCloud] Stream resolve error:", err.message || err);
-		return null;
 	}
+	return null;
 }
 
 /**

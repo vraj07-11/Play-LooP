@@ -30,6 +30,7 @@ export default function SearchPage({ refreshKey = 0 }) {
   const songLongPressTimerRef = useRef(null);
   const songTouchStartPosRef = useRef({ x: 0, y: 0 });
   const isSongLongPressActiveRef = useRef(false);
+  const lastSongLongPressOpenedAtRef = useRef(0);
 
   const handleSongTouchStart = (key, e) => {
     const touch = e.touches[0];
@@ -38,19 +39,20 @@ export default function SearchPage({ refreshKey = 0 }) {
     if (songLongPressTimerRef.current) clearTimeout(songLongPressTimerRef.current);
     songLongPressTimerRef.current = setTimeout(() => {
       isSongLongPressActiveRef.current = true;
+      lastSongLongPressOpenedAtRef.current = Date.now();
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         try { navigator.vibrate(40); } catch (_) {}
       }
       setOpenSongMenuKey(key);
-    }, 450);
+    }, 420);
   };
 
   const handleSongTouchMove = (e) => {
     if (songLongPressTimerRef.current) {
       const touch = e.touches[0];
-      const dx = Math.abs(touch.clientX - songTouchStartPosRef.current.x);
-      const dy = Math.abs(touch.clientY - songTouchStartPosRef.current.y);
-      if (dx > 8 || dy > 8) {
+      const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      if (dx > 16 || dy > 16) {
         clearTimeout(songLongPressTimerRef.current);
         songLongPressTimerRef.current = null;
       }
@@ -61,6 +63,11 @@ export default function SearchPage({ refreshKey = 0 }) {
     if (songLongPressTimerRef.current) {
       clearTimeout(songLongPressTimerRef.current);
       songLongPressTimerRef.current = null;
+    }
+    if (isSongLongPressActiveRef.current) {
+      setTimeout(() => {
+        isSongLongPressActiveRef.current = false;
+      }, 400);
     }
   };
 
@@ -82,6 +89,9 @@ export default function SearchPage({ refreshKey = 0 }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
+      if (Date.now() - lastSongLongPressOpenedAtRef.current < 450 || isSongLongPressActiveRef.current) {
+        return;
+      }
       if (!e.target.closest('.search-song-menu-container')) {
         setOpenSongMenuKey(null);
       }
@@ -577,14 +587,19 @@ export default function SearchPage({ refreshKey = 0 }) {
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          setOpenSongMenuKey(openSongMenuKey === popKey ? null : popKey);
+                          lastSongLongPressOpenedAtRef.current = Date.now();
+                          isSongLongPressActiveRef.current = true;
+                          setOpenSongMenuKey(popKey);
+                          setTimeout(() => {
+                            isSongLongPressActiveRef.current = false;
+                          }, 400);
                         }}
                         onTouchStart={(e) => handleSongTouchStart(popKey, e)}
                         onTouchMove={handleSongTouchMove}
                         onTouchEnd={handleSongTouchEnd}
                         onTouchCancel={handleSongTouchEnd}
                         onClick={() => {
-                          if (isSongLongPressActiveRef.current) {
+                          if (isSongLongPressActiveRef.current || (Date.now() - lastSongLongPressOpenedAtRef.current < 450)) {
                             isSongLongPressActiveRef.current = false;
                             return;
                           }
@@ -628,7 +643,11 @@ export default function SearchPage({ refreshKey = 0 }) {
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <div className="search-song-menu-container relative flex items-center">
+                          <div 
+                            className="search-song-menu-container relative flex items-center"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
                               onClick={(e) => {
@@ -646,6 +665,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                               <div
                                 className="absolute right-0 top-full mt-1 w-48 sm:w-52 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
                                 onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
                               >
                                 <button
                                   type="button"
@@ -1191,14 +1212,19 @@ export default function SearchPage({ refreshKey = 0 }) {
                                   onContextMenu={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    setOpenSongMenuKey(openSongMenuKey === menuKey ? null : menuKey);
+                                    lastSongLongPressOpenedAtRef.current = Date.now();
+                                    isSongLongPressActiveRef.current = true;
+                                    setOpenSongMenuKey(menuKey);
+                                    setTimeout(() => {
+                                      isSongLongPressActiveRef.current = false;
+                                    }, 400);
                                   }}
                                   onTouchStart={(e) => handleSongTouchStart(menuKey, e)}
                                   onTouchMove={handleSongTouchMove}
                                   onTouchEnd={handleSongTouchEnd}
                                   onTouchCancel={handleSongTouchEnd}
                                   onClick={() => {
-                                    if (isSongLongPressActiveRef.current) {
+                                    if (isSongLongPressActiveRef.current || (Date.now() - lastSongLongPressOpenedAtRef.current < 450)) {
                                       isSongLongPressActiveRef.current = false;
                                       return;
                                     }
@@ -1262,7 +1288,11 @@ export default function SearchPage({ refreshKey = 0 }) {
                                     >
                                       <FolderPlus className="w-4 h-4" />
                                     </button>
-                                    <div className="search-song-menu-container relative flex items-center">
+                                    <div 
+                                      className="search-song-menu-container relative flex items-center"
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                      onTouchStart={(e) => e.stopPropagation()}
+                                    >
                                       <button
                                         type="button"
                                         onClick={(e) => {
@@ -1280,6 +1310,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                                         <div
                                           className="absolute right-0 top-full mt-1 w-48 sm:w-52 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
                                           onClick={(e) => e.stopPropagation()}
+                                          onPointerDown={(e) => e.stopPropagation()}
+                                          onTouchStart={(e) => e.stopPropagation()}
                                         >
                                           <button
                                             type="button"
@@ -1466,14 +1498,19 @@ export default function SearchPage({ refreshKey = 0 }) {
                                 onContextMenu={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  setOpenSongMenuKey(openSongMenuKey === menuKey ? null : menuKey);
+                                  lastSongLongPressOpenedAtRef.current = Date.now();
+                                  isSongLongPressActiveRef.current = true;
+                                  setOpenSongMenuKey(menuKey);
+                                  setTimeout(() => {
+                                    isSongLongPressActiveRef.current = false;
+                                  }, 400);
                                 }}
                                 onTouchStart={(e) => handleSongTouchStart(menuKey, e)}
                                 onTouchMove={handleSongTouchMove}
                                 onTouchEnd={handleSongTouchEnd}
                                 onTouchCancel={handleSongTouchEnd}
                                 onClick={() => {
-                                  if (isSongLongPressActiveRef.current) {
+                                  if (isSongLongPressActiveRef.current || (Date.now() - lastSongLongPressOpenedAtRef.current < 450)) {
                                     isSongLongPressActiveRef.current = false;
                                     return;
                                   }
@@ -1533,7 +1570,11 @@ export default function SearchPage({ refreshKey = 0 }) {
                                   >
                                     <FolderPlus className="w-4 h-4" />
                                   </button>
-                                  <div className="search-song-menu-container relative flex items-center">
+                                  <div 
+                                    className="search-song-menu-container relative flex items-center"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onTouchStart={(e) => e.stopPropagation()}
+                                  >
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -1551,6 +1592,8 @@ export default function SearchPage({ refreshKey = 0 }) {
                                       <div
                                         className="absolute right-0 top-full mt-1 w-48 sm:w-52 bg-zinc-900 border border-zinc-700/80 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
                                         onClick={(e) => e.stopPropagation()}
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        onTouchStart={(e) => e.stopPropagation()}
                                       >
                                         <button
                                           type="button"

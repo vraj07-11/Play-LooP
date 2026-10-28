@@ -147,6 +147,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const isLongPressActiveRef = useRef(false);
+  const lastLongPressOpenedAtRef = useRef(0);
 
   const handleTrackTouchStart = (idx, e) => {
     if (isReorderMode) return;
@@ -156,11 +157,12 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
       isLongPressActiveRef.current = true;
+      lastLongPressOpenedAtRef.current = Date.now();
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         try { navigator.vibrate(40); } catch (_) {}
       }
       setOpenTrackMenuIndex(idx);
-    }, 450);
+    }, 420);
   };
 
   const handleTrackTouchMove = (e) => {
@@ -168,7 +170,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
       const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
-      if (dx > 8 || dy > 8) {
+      if (dx > 16 || dy > 16) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
@@ -180,6 +182,11 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    if (isLongPressActiveRef.current) {
+      setTimeout(() => {
+        isLongPressActiveRef.current = false;
+      }, 400);
+    }
   };
 
   useEffect(() => {
@@ -190,6 +197,10 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
+      // Prevent synthetic touch release / pointer events right after long-press from closing the menu
+      if (Date.now() - lastLongPressOpenedAtRef.current < 450 || isLongPressActiveRef.current) {
+        return;
+      }
       if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target)) {
         setIsSortDropdownOpen(false);
       }
@@ -1531,7 +1542,12 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     onContextMenu={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setOpenTrackMenuIndex(openTrackMenuIndex === idx ? null : idx);
+                      lastLongPressOpenedAtRef.current = Date.now();
+                      isLongPressActiveRef.current = true;
+                      setOpenTrackMenuIndex(idx);
+                      setTimeout(() => {
+                        isLongPressActiveRef.current = false;
+                      }, 400);
                     }}
                     onTouchStart={(e) => handleTrackTouchStart(idx, e)}
                     onTouchMove={handleTrackTouchMove}
@@ -1539,7 +1555,7 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     onTouchCancel={handleTrackTouchEnd}
                     onClick={() => {
                       if (isReorderMode) return;
-                      if (isLongPressActiveRef.current) {
+                      if (isLongPressActiveRef.current || (Date.now() - lastLongPressOpenedAtRef.current < 450)) {
                         isLongPressActiveRef.current = false;
                         return;
                       }
@@ -1690,7 +1706,11 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                     </div>
 
                     {/* Track Menu Dropdown */}
-                    <div className="track-menu-container relative flex items-center justify-end">
+                    <div 
+                      className="track-menu-container relative flex items-center justify-end"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1707,6 +1727,8 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
                         <div
                           className="absolute right-0 top-full mt-1 w-52 bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl py-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
                           onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"

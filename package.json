@@ -27,9 +27,11 @@
   "homepage": "https://github.com/vraj07-11/Play-LooP#readme",
   "dependencies": {
     "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/status-bar": "^8.0.4",
+    "@capgo/capacitor-media-session": "^8.1.6",
     "@libsql/client": "^0.18.0",
     "@vitejs/plugin-react": "^6.1.1",
     "compression": "^1.8.2",

@@ -13,6 +13,7 @@ import { useSwipeTabs } from './hooks/useSwipeTabs';
 import { usePullToRefresh } from './hooks/usePullToRefresh';
 import { initNavigationHistory } from './utils/navigationHistory';
 import { fetchApi } from './services/api';
+import { setupNativeAppBackButton } from './services/nativeAppBridge';
 
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const LoopsPage = lazy(() => import('./pages/LoopsPage'));
@@ -56,6 +57,12 @@ function App() {
   useEffect(() => {
     isSidebarOpenRef.current = isSidebarOpen;
   }, [isSidebarOpen]);
+
+  // Proactively warm up and load fresh SoundCloud client ID on app/website startup
+  useEffect(() => {
+    fetchApi('/api/soundcloud/init').catch(() => {});
+    setupNativeAppBackButton();
+  }, []);
 
   useEffect(() => {
     setVisitedViews(prev => {

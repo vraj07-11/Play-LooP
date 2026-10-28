@@ -4,6 +4,7 @@ import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
 import { filterValidDurationTracks } from '../utils/durationUtils.js';
 import { RECENTLY_PLAYED_KEY, MAX_HISTORY_ITEMS, normalizeHistoryTrack, mergeHistoryLists } from '../utils/historyManager.js';
+import { nativeMediaBridge } from '../services/nativeMediaBridge.js';
 
 let hlsModulePromise = null;
 const getHlsModule = () => {
@@ -865,41 +866,64 @@ export function PlayerProvider({ children }) {
     audioA.preload = "auto";
     audioB.preload = "auto";
     
-    // Register Browser Media Session API Action Handlers for Mobile Background Controls
+    // Register Action Handlers for Web and Native Media Session (Lockscreen, Notification & Earbuds)
+    const handlePlayAction = () => {
+      const active = getActiveAudio();
+      if (active) {
+        active.play().catch(console.error);
+      }
+      startWallClock();
+      setIsPlaying(true);
+      setPlayerStatus("Playing");
+      nativeMediaBridge.setPlaybackState('playing');
+    };
+
+    const handlePauseAction = () => {
+      flushWallClock();
+      flushListeningTime();
+      const active = getActiveAudio();
+      if (active) {
+        active.pause();
+      }
+      setIsPlaying(false);
+      setPlayerStatus("Paused");
+      nativeMediaBridge.setPlaybackState('paused');
+    };
+
+    const handleNextAction = () => playNextTrackRef.current?.();
+    const handlePreviousAction = () => playPreviousTrack();
+    const handleSeekToAction = (time) => {
+      const active = getActiveAudio();
+      if (time !== undefined && active) {
+        active.currentTime = time;
+      }
+    };
+    const handleSeekByAction = (delta) => seekBy(delta);
+    const handleStopAction = () => stopAllPlayback();
+
+    // Register Native Media Session for Capacitor APK
+    nativeMediaBridge.init({
+      onPlay: handlePlayAction,
+      onPause: handlePauseAction,
+      onNext: handleNextAction,
+      onPrevious: handlePreviousAction,
+      onSeekTo: handleSeekToAction,
+      onSeekBy: handleSeekByAction,
+      onStop: handleStopAction
+    });
+
+    // Register Browser Media Session API Action Handlers for Web
     if ('mediaSession' in navigator) {
       try {
-        navigator.mediaSession.setActionHandler('play', () => {
-          const active = getActiveAudio();
-          if (active) {
-            active.play().catch(console.error);
-          }
-          setIsPlaying(true);
-          setPlayerStatus("Playing");
-        });
-        navigator.mediaSession.setActionHandler('pause', () => {
-          flushWallClock();
-          flushListeningTime();
-          const active = getActiveAudio();
-          if (active) {
-            active.pause();
-          }
-          setIsPlaying(false);
-          setPlayerStatus("Paused");
-        });
-        navigator.mediaSession.setActionHandler('play', () => {
-          // Override: also start wall-clock on media-session resume.
-          startWallClock();
-        });
-        navigator.mediaSession.setActionHandler('previoustrack', () => playPreviousTrack());
-        navigator.mediaSession.setActionHandler('nexttrack', () => playNextTrackRef.current?.());
+        navigator.mediaSession.setActionHandler('play', handlePlayAction);
+        navigator.mediaSession.setActionHandler('pause', handlePauseAction);
+        navigator.mediaSession.setActionHandler('previoustrack', handlePreviousAction);
+        navigator.mediaSession.setActionHandler('nexttrack', handleNextAction);
         navigator.mediaSession.setActionHandler('seekto', (details) => {
-          const active = getActiveAudio();
-          if (details.seekTime !== undefined && active) {
-            active.currentTime = details.seekTime;
-          }
+          if (details && details.seekTime !== undefined) handleSeekToAction(details.seekTime);
         });
-        navigator.mediaSession.setActionHandler('seekforward', () => seekBy(10));
-        navigator.mediaSession.setActionHandler('seekbackward', () => seekBy(-10));
+        navigator.mediaSession.setActionHandler('seekforward', () => handleSeekByAction(10));
+        navigator.mediaSession.setActionHandler('seekbackward', () => handleSeekByAction(-10));
       } catch (e) {
         console.warn("MediaSession handler error:", e);
       }
@@ -935,6 +959,12 @@ export function PlayerProvider({ children }) {
             });
           } catch (e) {}
         }
+
+        nativeMediaBridge.setPositionState({
+          duration: dur,
+          position: curTime,
+          playbackRate: currentAudio.playbackRate || 1
+        });
 
         maybeRecordScrobble(dur, currentAudio);
 
@@ -1025,6 +1055,7 @@ export function PlayerProvider({ children }) {
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = "paused";
       }
+      nativeMediaBridge.setPlaybackState('paused');
     } else {
       if (activeAudio) {
         activeAudio.play().catch(e => console.error(e));
@@ -1039,6 +1070,7 @@ export function PlayerProvider({ children }) {
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = "playing";
       }
+      nativeMediaBridge.setPlaybackState('playing');
     }
   }, [isPlaying]);
 
@@ -1047,6 +1079,7 @@ export function PlayerProvider({ children }) {
     hasCrossfadeTriggeredRef.current = false;
     destroyHls('A');
     destroyHls('B');
+    nativeMediaBridge.setPlaybackState('none');
     try {
       if (audioPlayerA.current) {
         audioPlayerA.current.pause();
@@ -1062,6 +1095,7 @@ export function PlayerProvider({ children }) {
   };
 
   const applyMediaSessionMetadata = (title, artist, thumbnail, videoId) => {
+    const safeThumbnail = (!thumbnail || thumbnail === '/logo.svg') ? '/default-cover.svg' : thumbnail;
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -1069,7 +1103,7 @@ export function PlayerProvider({ children }) {
           artist: artist || "Play LooP",
           album: "Play LooP",
           artwork: [
-            { src: (!thumbnail || thumbnail === '/logo.svg') ? '/default-cover.svg' : thumbnail, sizes: "512x512", type: "image/jpeg" }
+            { src: safeThumbnail, sizes: "512x512", type: "image/jpeg" }
           ]
         });
         navigator.mediaSession.playbackState = "playing";
@@ -1077,6 +1111,14 @@ export function PlayerProvider({ children }) {
         console.warn("MediaMetadata update error:", e);
       }
     }
+
+    nativeMediaBridge.setMetadata({
+      title: title || "Play LooP Track",
+      artist: artist || "Play LooP",
+      album: "Play LooP",
+      thumbnail: safeThumbnail
+    });
+    nativeMediaBridge.setPlaybackState('playing');
   };
 
   const performCrossfadeToTrack = useCallback((trackObj, customFadeSec = null) => {

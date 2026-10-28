@@ -23,9 +23,13 @@ export default function Carousel({
   const longPressTimerRef = useRef(null);
   const touchStartPosRef = useRef({ x: 0, y: 0 });
   const isLongPressActiveRef = useRef(false);
+  const lastLongPressOpenedAtRef = useRef(0);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
+      if (Date.now() - lastLongPressOpenedAtRef.current < 450 || isLongPressActiveRef.current) {
+        return;
+      }
       if (!e.target.closest('.carousel-card-menu-container')) {
         setActiveMenuIndex(null);
       }
@@ -48,11 +52,12 @@ export default function Carousel({
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
       isLongPressActiveRef.current = true;
+      lastLongPressOpenedAtRef.current = Date.now();
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         try { navigator.vibrate(40); } catch (_) {}
       }
       setActiveMenuIndex(index);
-    }, 450);
+    }, 420);
   };
 
   const handleTouchMove = (e) => {
@@ -60,7 +65,7 @@ export default function Carousel({
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
       const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
-      if (dx > 8 || dy > 8) {
+      if (dx > 16 || dy > 16) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
@@ -71,6 +76,11 @@ export default function Carousel({
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
+    }
+    if (isLongPressActiveRef.current) {
+      setTimeout(() => {
+        isLongPressActiveRef.current = false;
+      }, 400);
     }
   };
 
@@ -281,14 +291,19 @@ export default function Carousel({
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setActiveMenuIndex(activeMenuIndex === index ? null : index);
+                lastLongPressOpenedAtRef.current = Date.now();
+                isLongPressActiveRef.current = true;
+                setActiveMenuIndex(index);
+                setTimeout(() => {
+                  isLongPressActiveRef.current = false;
+                }, 400);
               }}
               onTouchStart={(e) => handleTouchStart(index, e)}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
               onTouchCancel={handleTouchEnd}
               onClick={() => {
-                if (isLongPressActiveRef.current) {
+                if (isLongPressActiveRef.current || (Date.now() - lastLongPressOpenedAtRef.current < 450)) {
                   isLongPressActiveRef.current = false;
                   return;
                 }
@@ -328,6 +343,8 @@ export default function Carousel({
                     <div
                       className="carousel-card-menu-container absolute inset-0 bg-zinc-950/95 backdrop-blur-md rounded-lg p-2.5 z-30 flex flex-col justify-between shadow-2xl border border-white/20 animate-in fade-in zoom-in-95 duration-150"
                       onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-center justify-between pb-1 border-b border-white/10">
                         <span className="text-[11px] font-bold text-white truncate max-w-[120px]">{item.title}</span>

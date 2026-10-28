@@ -14,6 +14,15 @@ router.get("/api/audio/preload", (req, res) => {
 	res.json({ ok: true });
 });
 
+router.get("/api/soundcloud/init", async (req, res) => {
+	try {
+		const clientId = await getSoundCloudClientId();
+		return res.json({ ok: true, ready: Boolean(clientId) });
+	} catch (e) {
+		return res.json({ ok: false });
+	}
+});
+
 router.get("/api/audio", async (req, res) => {
 	const videoId = String(req.query.id || "").trim();
 	const quality = String(req.query.quality || "320").trim();
@@ -22,7 +31,12 @@ router.get("/api/audio", async (req, res) => {
 	// Handle SoundCloud tracks
 	if (videoId.startsWith("sc:")) {
 		const scId = videoId.replace(/^sc:/, "");
-		const scStreamUrl = await getSoundCloudStreamUrl(scId);
+		let scStreamUrl = await getSoundCloudStreamUrl(scId);
+		if (!scStreamUrl) {
+			console.warn(`[Audio] Retrying SoundCloud stream for ${scId} with fresh client ID...`);
+			await getSoundCloudClientId(true);
+			scStreamUrl = await getSoundCloudStreamUrl(scId, true);
+		}
 		if (scStreamUrl) {
 			return res.redirect(302, scStreamUrl);
 		} else {
