@@ -2,9 +2,10 @@ const { cleanStr, getValidImage, isValidSongDuration } = require("./jiosaavn");
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const KNOWN_BACKUP_CLIENT_IDS = [
-	"xk6BGxLCsQJ5Ss0bH6sRdsZhts3gTNaU",
-	"V7f0p2q7JD4voO1Esqg6bwwtNYcYAtLC"
-];
+	process.env.SOUNDCLOUD_CLIENT_ID,
+	"5lnU5PEpImc23JXFHBdq8E6QDd39I2uT",
+	"xk6BGxLCsQJ5Ss0bH6sRdsZhts3gTNaU"
+].filter(Boolean);
 
 // --- High-Performance SoundCloud Client ID State ---
 let scClientIdCache = {
@@ -117,7 +118,7 @@ if (clientRefreshInterval.unref) {
 
 /**
  * Self-healing wrapper for SoundCloud API requests.
- * Automatically catches 401 / 403 errors, forces client_id refresh, and retries once transparently.
+ * Automatically catches 401 / 403 errors, forces client_id refresh, and cycles through backup IDs.
  */
 async function fetchWithSoundCloudAuth(urlBuilder, options = {}) {
 	let clientId = await getSoundCloudClientId();
@@ -128,6 +129,19 @@ async function fetchWithSoundCloudAuth(urlBuilder, options = {}) {
 		console.warn(`[SoundCloud Auth] Received ${res.status}. Refreshing client ID and retrying request...`);
 		clientId = await getSoundCloudClientId(true);
 		res = await fetch(urlBuilder(clientId), options);
+
+		// If still failing, rotate through known working backup client IDs
+		if (res.status === 401 || res.status === 403) {
+			for (const backupId of KNOWN_BACKUP_CLIENT_IDS) {
+				if (backupId === clientId) continue;
+				console.warn(`[SoundCloud Auth] Trying fallback backup client ID: ${backupId}`);
+				res = await fetch(urlBuilder(backupId), options);
+				if (res.ok) {
+					scClientIdCache = { id: backupId, fetchedAt: Date.now() };
+					break;
+				}
+			}
+		}
 	}
 
 	return res;
@@ -135,35 +149,51 @@ async function fetchWithSoundCloudAuth(urlBuilder, options = {}) {
 
 /**
  * Search SoundCloud tracks by query with automatic auth retries.
+ * Only returns unblocked, playable tracks with active streams.
  */
 async function searchSoundCloud(query, limit = 8) {
 	try {
 		const res = await fetchWithSoundCloudAuth(
-			(cid) => `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${cid}&limit=${limit}`,
+			(cid) => `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${cid}&limit=${limit * 2}`,
 			{
 				headers: { "User-Agent": USER_AGENT },
-				signal: AbortSignal.timeout(2000)
+				signal: AbortSignal.timeout(3500)
 			}
 		);
 		if (!res.ok) return [];
 		const data = await res.json();
 		const collection = data.collection || [];
 
-		return collection.map(track => {
-			const artwork = track.artwork_url || track.user?.avatar_url || "";
-			const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/default-cover.svg";
+		return collection
+			.filter(track => {
+				// Exclude tracks that are blocked or marked non-streamable
+				if (track.policy === "BLOCK") return false;
+				if (track.streamable === false) return false;
+				const trans = track.media?.transcodings || [];
+				// Ensure track has at least one unencrypted, non-snipped playable stream
+				const hasPlayable = trans.some(t => 
+					!t.snipped && 
+					(t.format?.protocol === "progressive" || t.format?.protocol === "hls") && 
+					!String(t.format?.protocol || "").includes("encrypted")
+				);
+				return hasPlayable;
+			})
+			.slice(0, limit)
+			.map(track => {
+				const artwork = track.artwork_url || track.user?.avatar_url || "";
+				const highResArt = artwork ? artwork.replace("-large", "-t500x500") : "/default-cover.svg";
 
-			return {
-				videoId: `sc:${track.id}`,
-				title: cleanStr(track.title, "SoundCloud Track"),
-				artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
-				thumbnail: getValidImage(highResArt),
-				duration: Math.round((track.duration || 0) / 1000),
-				source: "soundcloud",
-				provider: "SoundCloud",
-				tag: "SoundCloud"
-			};
-		}).filter(s => isValidSongDuration(s.duration));
+				return {
+					videoId: `sc:${track.id}`,
+					title: cleanStr(track.title, "SoundCloud Track"),
+					artist: cleanStr(track.user?.username || track.user?.full_name, "SoundCloud Artist"),
+					thumbnail: getValidImage(highResArt),
+					duration: Math.round((track.duration || 0) / 1000),
+					source: "soundcloud",
+					provider: "SoundCloud",
+					tag: "SoundCloud"
+				};
+			}).filter(s => isValidSongDuration(s.duration));
 	} catch (err) {
 		if (err.name !== "TimeoutError") {
 			console.warn("[SoundCloud] Search warning:", err.message || err);
@@ -212,14 +242,15 @@ const scStreamUrlCache = new Map();
 
 /**
  * Resolves high-fidelity stream URL for a given track scId.
- * Uses in-memory cache and self-healing auth for zero-latency direct playback.
+ * Uses in-memory cache (with short 30s TTL to prevent CloudFront 403 expiration) and self-healing auth.
  */
 async function getSoundCloudStreamUrl(scId, forceRefresh = false) {
 	if (forceRefresh) {
 		scStreamUrlCache.delete(scId);
 	} else {
 		const cached = scStreamUrlCache.get(scId);
-		if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+		// CloudFront signed URLs expire in 1-5 minutes; keep cache TTL to 30s to prevent stale 403 Forbidden
+		if (cached && Date.now() - cached.timestamp < 30 * 1000) {
 			return cached.url;
 		}
 	}
@@ -243,19 +274,33 @@ async function getSoundCloudStreamUrl(scId, forceRefresh = false) {
 			}
 			const trackData = await trackRes.json();
 
+			// Exclude blocked tracks or non-streamable tracks
+			if (trackData.policy === "BLOCK" || trackData.streamable === false) {
+				console.warn(`[SoundCloud] Track ${scId} is restricted: policy=${trackData.policy}, streamable=${trackData.streamable}`);
+				return null;
+			}
+
 			const trans = trackData.media?.transcodings || [];
 			if (trans.length === 0) return null;
 
-			// 1. Prefer non-snipped full-length streams over previews
-			const fullLength = trans.filter(t => !t.snipped);
-			const candidates = fullLength.length > 0 ? fullLength : trans;
+			// 1. Filter out snipped previews and DRM/encrypted protocols (cbc/ctr)
+			const playable = trans.filter(t => 
+				!t.snipped && 
+				(t.format?.protocol === "progressive" || t.format?.protocol === "hls") && 
+				!String(t.format?.protocol || "").includes("encrypted")
+			);
+			if (playable.length === 0) {
+				console.warn(`[SoundCloud] Track ${scId} has no playable unencrypted stream`);
+				return null;
+			}
 
-			// 2. Select progressive MP3 if available so browser can play directly without HLS processing
+			// 2. Select progressive MP3 if available, otherwise high quality unencrypted HLS
 			const transcoding = 
-				candidates.find(t => t.format?.protocol === "progressive") ||
-				candidates.find(t => t.preset === "aac_160k") ||
-				candidates.find(t => t.preset === "aac_256k") ||
-				candidates[0];
+				playable.find(t => t.format?.protocol === "progressive") ||
+				playable.find(t => t.preset === "aac_160k") ||
+				playable.find(t => t.preset === "aac_96k") ||
+				playable.find(t => t.preset === "abr_sq") ||
+				playable[0];
 
 			if (!transcoding || !transcoding.url) return null;
 

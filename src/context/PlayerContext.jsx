@@ -759,6 +759,43 @@ export function PlayerProvider({ children }) {
               lowLatencyMode: true,
               backBufferLength: 90
             });
+            hls.on(Hls.Events.ERROR, (event, data) => {
+              if (data.fatal) {
+                console.warn('[Audio Engine] Fatal Hls.js error encountered:', data.type, data.details);
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    if (data.response?.code === 403 || data.response?.code === 404) {
+                      destroyHls(slot);
+                      setPlayerStatus("Playback failed");
+                      setIsPlaying(false);
+                      setTimeout(() => {
+                        playNextTrackRef.current?.();
+                      }, 1200);
+                    } else {
+                      hls.startLoad();
+                    }
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    hls.recoverMediaError();
+                    break;
+                  default:
+                    destroyHls(slot);
+                    setPlayerStatus("Playback failed");
+                    setIsPlaying(false);
+                    setTimeout(() => {
+                      playNextTrackRef.current?.();
+                    }, 1200);
+                    break;
+                }
+              }
+            });
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              audioEl.play().then(() => {
+                startWallClock();
+                setIsPlaying(true);
+                setPlayerStatus("Playing");
+              }).catch(() => {});
+            });
             hls.loadSource(targetUrl);
             hls.attachMedia(audioEl);
             if (slot === 'A') hlsPlayerA.current = hls;

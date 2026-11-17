@@ -39,9 +39,39 @@ router.get("/api/audio", async (req, res) => {
 		}
 		if (scStreamUrl) {
 			return res.redirect(302, scStreamUrl);
-		} else {
-			return res.status(404).send("SoundCloud stream URL not found");
 		}
+
+		// Intelligent CDN Fallback: If SoundCloud stream is blocked, geo-restricted, or unavailable,
+		// resolve the track title/artist and seamlessly fall back to JioSaavn
+		try {
+			console.log(`[Audio] SoundCloud track ${scId} stream unavailable. Checking track details for CDN fallback...`);
+			const trackDetails = await getSoundCloudTrackDetails(scId);
+			if (trackDetails && trackDetails.title) {
+				const cleanTitle = (trackDetails.title || "")
+					.replace(/\(official.*?\)/gi, "")
+					.replace(/\[official.*?\]/gi, "")
+					.replace(/\(remix.*?\)/gi, "")
+					.replace(/ft\..*$/gi, "")
+					.trim();
+				const cleanArtist = (trackDetails.artist || "")
+					.replace(/soundcloud artist/gi, "")
+					.trim();
+				const fallbackQuery = `${cleanTitle} ${cleanArtist}`.trim();
+				console.log(`[Audio] Attempting fallback CDN search for: "${fallbackQuery}"`);
+				const searchData = await fetchJioSaavn({ __call: "search.getResults", q: fallbackQuery, n: "3", p: "1" });
+				if (searchData && searchData.results && searchData.results.length > 0) {
+					const formatted = formatSong(searchData.results[0], quality);
+					if (formatted.streamUrl) {
+						console.log(`[Audio] Successfully recovered stream via CDN fallback: ${formatted.title}`);
+						return res.redirect(302, formatted.streamUrl);
+					}
+				}
+			}
+		} catch (fallbackErr) {
+			console.warn("[Audio] SoundCloud to CDN fallback failed:", fallbackErr.message);
+		}
+
+		return res.status(404).send("SoundCloud stream URL not found");
 	}
 
 	// Handle dynamic search query tracks
