@@ -181,6 +181,24 @@ This project uses Capacitor to package the web application into an Android APK.
 
 ---
 
+## Contributing
+
+Contributions, bug reports, and feature requests are welcome.
+
+Before starting work on a new feature or fix, please check the [open issues](https://github.com/vraj07-11/Play-LooP/issues) to discuss ideas, claim existing tasks, or report new bugs.
+
+1. Fork the repository and create your feature branch:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+2. Make your changes and test the build:
+   ```bash
+   npm run build
+   ```
+3. Push to your branch and submit a Pull Request referencing the relevant issue.
+
+---
+
 ## Author
 
 Vraj Gajera
