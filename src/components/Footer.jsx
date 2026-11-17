@@ -14,11 +14,6 @@ export default function Footer({ setCurrentView }) {
     }
   };
 
-  const openSocialHub = (e) => {
-    e.preventDefault();
-    window.open('https://github.com/vraj07-11/Play-LooP', '_blank', 'noopener,noreferrer');
-  };
-
   return (
     <footer className="w-full mt-16 pt-12 pb-6 border-t border-white/10 bg-[#000000] text-zinc-400 select-none">
       <div className="max-w-7xl mx-auto px-6 sm:px-8">
@@ -162,13 +157,14 @@ export default function Footer({ setCurrentView }) {
               Join our socials for updates and roadmap polls.
             </p>
             <div>
-              <button
-                type="button"
-                onClick={openSocialHub}
-                className="px-5 py-2.5 rounded-lg bg-[#141416] hover:bg-[#202024] border border-white/10 hover:border-white/20 text-sm font-medium text-white transition-all cursor-pointer"
+              <a
+                href="https://www.linkedin.com/in/vraj-gajera-260a96377"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block px-5 py-2.5 rounded-lg bg-[#141416] hover:bg-[#202024] border border-white/10 hover:border-white/20 text-sm font-medium text-white transition-all cursor-pointer"
               >
-                Visit Social Hub
-              </button>
+                Follow Me
+              </a>
             </div>
             <p className="text-xs text-zinc-500 mt-6">
               &copy; {new Date().getFullYear()} Play LooP. All rights reserved.

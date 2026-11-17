@@ -1,218 +1,190 @@
-# Play LooP 
+# Play LooP
 
-**Play LooP** is a modern, lightweight, and high-performance web music player designed for seamless, ad-free streaming. Built with a sleek dark aesthetic, responsive mobile-first gestures, and low-latency audio delivery, Play LooP bridges client-side elegance with an intelligent Express backend, real-time HLS proxying, and cloud database synchronization.
+Play LooP is an ad-free music player built with React and an Express audio proxy backend. It delivers fast stream playback via adaptive HLS, synchronized LRC lyrics, offline downloads, and zero-account cloud playlist synchronization powered by Turso (LibSQL).
 
----
+The application runs as a responsive web app and can also be deployed as a native Android APK using Capacitor.
 
-## Live Demo
-
-Experience the application live here:  
- **[play-loop.onrender.com](https://play-loop.onrender.com)**
+Live demo: [play-loop.onrender.com](https://play-loop.onrender.com)
 
 ---
 
-## 🛠️ Technology Stack
+## Screenshots
 
-![React](https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
-![Vite](https://img.shields.io/badge/Vite_8-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
-![Express.js](https://img.shields.io/badge/Express_5-000000?style=for-the-badge&logo=express&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
-![Turso](https://img.shields.io/badge/Turso_LibSQL-00E599?style=for-the-badge&logo=sqlite&logoColor=black)
-![HLS.js](https://img.shields.io/badge/HLS.js-FF6F00?style=for-the-badge&logo=html5&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![Render](https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)
+| Home | Loops Discovery | Search & Explore |
+| :---: | :---: | :---: |
+| <img src="public/screenshots/home.png" width="280" alt="Home Screen" /> | <img src="public/screenshots/loops.png" width="280" alt="Loops Discovery Feed" /> | <img src="public/screenshots/search.png" width="280" alt="Search and Popular Songs" /> |
+
+| Your Library | Playlist View | Settings & Importer |
+| :---: | :---: | :---: |
+| <img src="public/screenshots/library.png" width="280" alt="Your Library" /> | <img src="public/screenshots/playlist.png" width="280" alt="Playlist View" /> | <img src="public/screenshots/settings.png" width="280" alt="Settings and Playlist Importer" /> |
 
 ---
 
-## ✨ Key Features
+## Features
 
-* **Ad-Free HLS Audio Streaming**  
-  Proxies high-quality audio streams on-the-fly using adaptive HLS segmenting and predictive audio preloading (`/api/audio/preload`), eliminating disk lag and buffering.
-* **Custom Playlists & Flexible Library Management**  
-  Create personal playlists with custom names and descriptions. Add any track to multiple playlists simultaneously from the player, search results, or queue. Reorder tracks on the fly using intuitive drag-and-drop or manual up/down controls.
-* **Up-Next Queue & Recommendation Engine**  
-  Dynamic recommendation pipeline analyzing your current track, genre, and preferred languages (English, Hindi, Punjabi, etc.) to continuously generate uninterrupted playback. Easily add songs to "Up Next", reorder, or clear the queue.
-* **Fullscreen Player & Synced Lyrics**  
-  Rich player interface with animated album art carousel, real-time synchronized lyrics parsing (`LRC`), volume controls, track scrubbing, and seamless crossfade transitions.
-* **Passwordless Cloud Sync via Turso / LibSQL**  
-  Automatically synchronizes your custom playlists, playback history, liked tracks, and user profile across devices using an anonymous, cryptographically secure device UUID backed by distributed edge SQLite.
-* **Social Sharing & Direct Links**  
-  Share both individual tracks and custom playlists via clean direct URLs (`/#/playlist/:id`, `/track/:id`), native OS share sheet integration, and one-click sharing to WhatsApp, Telegram, X, Facebook, and Reddit.
-* **Offline Download Manager**  
-  Save your favorite tracks locally for offline playback via the built-in streaming proxy download service with proper ID3 metadata tags.
-* **Mobile-First Gestures & PWA**  
-  Installable Progressive Web App (PWA) with background audio playback (MediaSession API), native pull-to-refresh (`usePullToRefresh`), swipeable tabs (`useSwipeTabs`), and responsive bottom navigation.
+- Adaptive HLS streaming: Streams audio on-the-fly using adaptive segmenting with preloading for the next track in queue.
+- Loops short-form discovery: Dedicated 30-second audio snippet player for quick track discovery with synchronized lyrics and single-tap full playback.
+- Synchronized lyrics: Real-time timed LRC lyrics with auto-scroll and line highlighting.
+- Multi-platform playlist importer: Import playlists directly from Spotify, YouTube Music, JioSaavn, SoundCloud, or custom JSON/CSV files.
+- Up-Next queue and recommendations: Dynamic recommendation pipeline based on current track, genre, and language preferences (English, Hindi, Punjabi, Telugu, Tamil, etc.).
+- Playlists and library: Create custom playlists, add tracks across multiple playlists simultaneously, reorder queue items, sort by newest/oldest, and track playback history.
+- Device cloud sync: Automatic playlist and library synchronization across devices using anonymous device UUIDs backed by Turso LibSQL, requiring no login credentials or passwords.
+- Offline downloads: Download tracks locally with proper ID3 metadata tags for playback without an active internet connection.
+- Mobile gestures and PWA: Installable Progressive Web App with MediaSession background audio controls, pull-to-refresh, swipeable navigation tabs, and AMOLED dark mode styling.
+- Android APK support: Built-in Capacitor configuration to build and run the app natively on Android devices.
 
 ---
 
-## 📁 Project Structure
+## Tech Stack
+
+- Frontend: React 19, Vite, Tailwind CSS v4, Lucide Icons
+- Audio and Media: HLS.js, Web Audio API, MediaSession API
+- Backend: Node.js, Express 5, Axios, Compression, CORS
+- Database: Turso (LibSQL / distributed SQLite edge database)
+- Native & PWA: Capacitor 8 (Android runtime and media session bridge), Service Worker
+
+---
+
+## Project Structure
 
 ```text
 Play-LooP/
-├── public/                 # Static assets, branding & PWA configuration
-│   ├── brand-logo.svg      # Play LooP branding logo
-│   ├── default-cover.svg   # Fallback song artwork
-│   ├── manifest.json       # PWA web manifest specification
-│   ├── robots.txt          # Search engine crawler policies
-│   └── sw.js               # Service Worker entry point
-├── src/                    # Frontend React 19 application
-│   ├── components/         # Reusable UI & interactive components
-│   │   ├── AddToPlaylistModal.jsx # Multi-playlist selector modal with inline creation
-│   │   ├── Carousel.jsx           # Featured releases & recommendation carousel
-│   │   ├── ErrorBoundary.jsx      # Error handling boundary
-│   │   ├── FullPlayer.jsx         # Fullscreen player with lyrics & queue
-│   │   ├── GlobalToast.jsx        # Non-intrusive action notification pills
-│   │   ├── Header.jsx             # Top search bar and navigation header
-│   │   ├── LanguageSelector.jsx   # Multi-language preference selector
-│   │   ├── MobileBottomNav.jsx    # Mobile bottom navigation bar
-│   │   ├── Player.jsx             # Persistent mini/docked audio player & queue drawer
-│   │   ├── PlaylistEditModal.jsx  # Playlist creation and metadata editor modal
-│   │   ├── PullToRefresh.jsx      # Mobile pull-to-refresh animated indicator
-│   │   ├── RightSidebar.jsx       # Up-Next queue & lyrics drawer
-│   │   ├── ShareModal.jsx         # Social sharing dialog with Web Share API & social links
-│   │   └── Sidebar.jsx            # Desktop collapsible navigation sidebar
-│   ├── constants/          # Static routes & navigation data
-│   │   └── pagesData.js
-│   ├── context/            # Global React state management
-│   │   └── PlayerContext.jsx      # Audio playback, queue, volume & crossfade state
-│   ├── hooks/              # Custom React hooks
-│   │   ├── usePullToRefresh.js    # Pull-down-to-refresh touch gesture handler
-│   │   └── useSwipeTabs.js        # Horizontal tab swipe gesture handler
-│   ├── pages/              # Main view screens
-│   │   ├── DownloadPage.jsx       # Offline tracks & download manager
-│   │   ├── Home.jsx               # Feed, quick picks, trending artists & popular tracks
-│   │   ├── InfoPage.jsx           # Features, architecture, FAQ & legal pages
-│   │   ├── LibraryPage.jsx        # Playlists, favorite tracks & listening history
-│   │   ├── LoopsPage.jsx          # Beat loops and audio snippet player
-│   │   ├── PlaceholderPage.jsx    # Fallback and empty-state view
-│   │   ├── ProfilePage.jsx        # User stats, top artists, and avatar customizer
-│   │   ├── SearchPage.jsx         # Fast search with filter chips (songs, artists, albums)
-│   │   └── SettingsPage.jsx       # Audio quality, crossfade & Turso cloud sync settings
-│   ├── services/           # API and client services
-│   │   ├── api.js                 # HTTP client for backend streaming & data endpoints
-│   │   ├── lyrics.js              # Timed lyrics fetcher & synchronizer
-│   │   ├── recommendationEngine.js# Client recommendation & queue heuristics
-│   │   └── shareService.js        # Share link generation & clipboard utilities
-│   ├── styles/             # Modular CSS styling & animations
-│   │   ├── animations.css         # Keyframe animations and transitions
-│   │   ├── base.css               # Base typography and design variables
-│   │   ├── content.css            # Content cards & responsive grid layouts
-│   │   ├── header.css             # Navigation header styling
-│   │   ├── index.css              # Main CSS imports & Tailwind directives
-│   │   ├── player.css             # Mini & fullscreen player styles
-│   │   └── sidebar.css            # Desktop navigation sidebar styling
-│   ├── utils/              # Helper utilities
-│   │   ├── durationUtils.js       # Track time formatters & duration parsers
-│   │   ├── navigationHistory.js   # Browser navigation & view stack state
-│   │   └── playlistManager.js     # Playlist CRUD, track syncing & local persistence
-│   ├── App.jsx             # Core application shell, routing & gestures
-│   └── main.jsx            # Application mount & DOM entry point
-├── server/                 # Express backend modular architecture
-│   ├── config/             # Database initialization (Turso LibSQL client)
-│   ├── routes/             # API routes (audio, explore, playlist, search, user)
-│   ├── services/           # External streaming providers & scraping logic
-│   └── app.js              # Express app setup and middleware configuration
-├── Dockerfile              # Docker container build specification
-├── server.js               # Express 5 entry point & HLS streaming server
-├── sw.js                   # Service Worker script for offline cache & PWA
-├── vite.config.mjs         # Vite configuration with Tailwind CSS v4 & chunk splitting
-├── package.json            # Project dependencies and npm scripts
-├── .env.example            # Environment variable configuration template
-└── readme.md               # Project documentation
+├── src/                    # Frontend React application
+│   ├── components/         # UI components (Player, FullPlayer, Modals, Navigation)
+│   ├── context/            # React context state (PlayerContext audio engine)
+│   ├── hooks/              # Custom hooks (touch gestures, pull-to-refresh)
+│   ├── pages/              # View routes (Home, Library, Search, Loops, Settings)
+│   ├── services/           # Client API layer, lyrics fetcher, share handlers
+│   └── styles/             # Tailwind directives and CSS animations
+├── server/                 # Express backend application
+│   ├── config/             # Turso database connection and schema
+│   ├── routes/             # REST endpoints (audio, search, playlists, user sync)
+│   └── services/           # Audio stream extraction and provider integrations
+├── android/                # Capacitor Android project and native configuration
+├── public/                 # Static assets, PWA manifest, and screenshots
+├── server.js               # Backend server entry point
+├── Dockerfile              # Docker container deployment spec
+└── package.json            # Dependencies and scripts
 ```
 
 ---
 
-## ⚙️ Getting Started
+## Getting Started
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- `npm` or `yarn`
+
+- Node.js 18 or later
+- npm or yarn
 
 ### Installation
 
-1. **Clone the Repository**
+1. Clone the repository:
    ```bash
    git clone https://github.com/vraj07-11/Play-LooP.git
    cd Play-LooP
    ```
 
-2. **Install Dependencies**
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. **Configure Environment Variables**
-   Copy the `.env.example` file to `.env` and fill in your credentials:
+3. Set up environment variables:
    ```bash
    cp .env.example .env
    ```
+
+   Configure the required variables in `.env`:
    ```env
    PORT=3000
-   TURSO_DATABASE_URL=libsql://your-database-name.turso.io
-   TURSO_AUTH_TOKEN=your_turso_auth_token_here
+   TURSO_DATABASE_URL=libsql://your-database.turso.io
+   TURSO_AUTH_TOKEN=your_turso_auth_token
    ```
 
-4. **Run the Development Application**
-   - **Frontend (Vite dev server):**
-     ```bash
-     npm run dev
-     ```
-   - **Backend Server (Express API & Audio Proxy):**
-     ```bash
-     npm start
-     ```
+### Development
 
-5. **Build for Production**
-   ```bash
-   npm run build
-   ```
+Run the frontend and backend in separate terminal tabs:
 
-### 🐳 Running with Docker
+- Start the frontend dev server:
+  ```bash
+  npm run dev
+  ```
 
-You can build and deploy the application using the included `Dockerfile`:
+- Start the backend API server:
+  ```bash
+  npm start
+  ```
+
+### Production Build
+
+Build the static frontend bundle:
+
+```bash
+npm run build
+```
+
+The compiled assets will be output to the `dist/` directory.
+
+### Running with Docker
+
+You can build and deploy the containerized application using Docker:
 
 ```bash
 docker build -t play-loop .
 docker run -p 3000:3000 --env-file .env play-loop
 ```
 
+### Android APK Build
+
+This project uses Capacitor to package the web application into an Android APK.
+
+1. Build the web app and sync native Android assets:
+   ```bash
+   npm run cap:sync
+   ```
+
+2. Compile the debug APK using Gradle:
+   ```bash
+   npm run cap:build-apk
+   ```
+
+3. Alternatively, open the Android project in Android Studio:
+   ```bash
+   npm run cap:open
+   ```
+
 ---
 
-## 🔌 API Endpoints Overview
+## API Reference
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/search?q=:query` | Search tracks, artists, and albums |
-| `GET` | `/api/audio?id=:id` | Stream audio via adaptive HLS pipeline |
-| `GET` | `/api/audio/preload?id=:id`| Preload audio stream for upcoming queue item |
-| `GET` | `/api/download?id=:id` | Download track directly with metadata headers |
+| `GET` | `/api/audio?id=:id` | Stream audio via adaptive HLS proxy |
+| `GET` | `/api/audio/preload?id=:id` | Preload audio stream for upcoming queue tracks |
+| `GET` | `/api/download?id=:id` | Download track with embedded metadata |
 | `GET` | `/api/song?id=:id` | Fetch detailed track metadata |
-| `GET` | `/api/recommendations` | Get smart song suggestions based on current track |
-| `GET` | `/api/trending-artists`| Fetch top trending music artists |
-| `GET` | `/api/popular-songs` | Fetch trending & popular tracks by language |
-| `GET` | `/api/playlists` | Fetch featured and curated top playlists |
-| `GET` | `/api/playlist?id=:id` | Fetch playlist track listing (JioSaavn, Spotify, YT, or user DB) |
-| `POST`| `/api/playlist/save` | Persist or update custom playlist in Turso cloud database |
-| `POST`| `/api/playlist/unsave` | Remove saved playlist from database |
-| `POST`| `/api/scrobble` | Record listening event and playback duration |
-| `GET` | `/api/sync?user_uuid=:uuid` | Fetch synchronized user playlists, history & liked tracks |
-| `POST`| `/api/sync/history` | Batch synchronize playback history items |
-| `GET` | `/api/user/profile` | Fetch user profile (display name, avatar) |
-| `POST`| `/api/user/profile` | Update user display name and avatar |
-| `GET` | `/api/health` | Health check endpoint |
+| `GET` | `/api/lyrics?id=:id` | Fetch synchronized LRC lyrics |
+| `GET` | `/api/recommendations` | Fetch track recommendations based on playback |
+| `GET` | `/api/trending-artists` | Fetch current trending artists |
+| `GET` | `/api/popular-songs` | Fetch popular tracks filtered by language |
+| `GET` | `/api/playlists` | Fetch featured and curated playlists |
+| `GET` | `/api/playlist?id=:id` | Fetch playlist track listing |
+| `POST` | `/api/playlist/save` | Save or update custom playlist in Turso database |
+| `POST` | `/api/playlist/unsave` | Remove saved playlist from database |
+| `POST` | `/api/scrobble` | Record listening activity |
+| `GET` | `/api/sync?user_uuid=:uuid` | Fetch user playlists, history, and liked tracks |
+| `POST` | `/api/sync/history` | Batch synchronize playback history items |
+| `GET` | `/api/user/profile` | Fetch user profile data |
+| `POST` | `/api/user/profile` | Update user display name and avatar |
+| `GET` | `/api/health` | Service health check |
 
 ---
 
-## 👤 About the Developer
+## Author
 
-This project is the independent work of a solo developer. Driven by a passion for music, design, and software engineering, **Play LooP** was built to provide a fast, elegant, and ad-free music streaming experience.
+Vraj Gajera
 
----
-
-## 📬 Contact & Links
-
-- **GitHub:** [@vraj07-11](https://github.com/vraj07-11)
-- **Email:** [gajeravraj593@gmail.com](mailto:gajeravraj593@gmail.com)
-- **LinkedIn:** [Vraj Gajera](https://www.linkedin.com/in/vraj-gajera-260a96377)
+- GitHub: [github.com/vraj07-11](https://github.com/vraj07-11)
+- LinkedIn: [linkedin.com/in/vraj-gajera-260a96377](https://www.linkedin.com/in/vraj-gajera-260a96377)
+- Email: [gajeravraj593@gmail.com](mailto:gajeravraj593@gmail.com)
