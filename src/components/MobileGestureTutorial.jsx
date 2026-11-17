@@ -24,6 +24,7 @@ export default function MobileGestureTutorial({ forceOpen = false, onClose }) {
   const [stepFeedback, setStepFeedback] = useState(null);
   const [hasTestedCurrent, setHasTestedCurrent] = useState(false);
 
+  const isTouchRef = useRef(false);
   const touchStartRef = useRef({ x: 0, y: 0, time: 0 });
   const isDraggingRef = useRef(false);
   const playgroundTapRef = useRef({ time: 0, x: 0, y: 0 });
@@ -141,134 +142,24 @@ export default function MobileGestureTutorial({ forceOpen = false, onClose }) {
     }
   };
 
-  // Card Touch gesture handlers for interactive testing
-  const handleCardTouchStart = (e) => {
-    if (!e.touches || !e.touches[0]) return;
-    touchStartRef.current = {
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY,
-      time: Date.now()
-    };
-    isDraggingRef.current = true;
-  };
-
-  const handleCardTouchMove = (e) => {
-    if (!isDraggingRef.current || !e.touches || !e.touches[0]) return;
-    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
-    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
-
-    if (currentStep === 2 || currentStep === 5) {
-      setSwipeOffset(deltaX * 0.7);
-    } else if (currentStep === 3 || currentStep === 4) {
-      setVerticalSwipeOffset(deltaY * 0.7);
-    }
-  };
-
-  const handleCardTouchEnd = (e) => {
-    if (!isDraggingRef.current) return;
-    isDraggingRef.current = false;
-    const endX = e.changedTouches?.[0]?.clientX || 0;
-    const endY = e.changedTouches?.[0]?.clientY || 0;
-    const deltaX = endX - touchStartRef.current.x;
-    const deltaY = endY - touchStartRef.current.y;
-
-    if (currentStep === 2) {
-      if (deltaX < -35) {
-        triggerHaptic(20);
-        setStepFeedback({ type: 'next', text: 'Next Track' });
-        setHasTestedCurrent(true);
-      } else if (deltaX > 35) {
-        triggerHaptic(20);
-        setStepFeedback({ type: 'prev', text: 'Previous Track' });
-        setHasTestedCurrent(true);
-      }
-    }
-
-    if (currentStep === 3) {
-      if (deltaY < -25) {
-        triggerHaptic(20);
-        setMockLyricsOpen(true);
-        setStepFeedback({ type: 'lyrics', text: 'Lyrics Opened' });
-        setHasTestedCurrent(true);
-      } else if (deltaY > 25) {
-        triggerHaptic(20);
-        setMockLyricsOpen(false);
-      }
-    }
-
-    if (currentStep === 4) {
-      if (deltaY < -25) {
-        triggerHaptic(20);
-        setMockFullPlayerOpen(true);
-        setStepFeedback({ type: 'expand', text: 'Player Expanded' });
-        setHasTestedCurrent(true);
-      } else if (deltaY > 25) {
-        triggerHaptic(20);
-        setMockFullPlayerOpen(false);
-      }
-    }
-
-    if (currentStep === 5) {
-      if (deltaX < -30) {
-        triggerHaptic(15);
-        setMockTabIndex(prev => Math.min(prev + 1, 3));
-        setStepFeedback({ type: 'tab', text: 'View Switched' });
-        setHasTestedCurrent(true);
-      } else if (deltaX > 30) {
-        triggerHaptic(15);
-        setMockTabIndex(prev => Math.max(prev - 1, 0));
-        setStepFeedback({ type: 'tab', text: 'View Switched' });
-        setHasTestedCurrent(true);
-      }
-    }
-
-    // Double tap handling on touch
-    if (currentStep === 0 || currentStep === 1) {
-      const now = Date.now();
-      const last = playgroundTapRef.current;
-      const diff = now - last.time;
-      const dist = Math.hypot(endX - last.x, endY - last.y);
-
-      if (diff > 30 && diff < 380 && dist < 50) {
-        const rect = e.currentTarget.getBoundingClientRect();
-        const relX = (endX - rect.left) / rect.width;
-        playgroundTapRef.current = { time: 0, x: 0, y: 0 };
-        triggerHaptic([15, 35, 15]);
-
-        if (currentStep === 0) {
-          if (relX < 0.45) {
-            setStepFeedback({ type: 'rewind', text: '-10s' });
-          } else {
-            setStepFeedback({ type: 'forward', text: '+10s' });
-          }
-          setHasTestedCurrent(true);
-        } else if (currentStep === 1) {
-          setStepFeedback({ type: 'like', text: 'Liked' });
-          setHasTestedCurrent(true);
-        }
-      } else {
-        playgroundTapRef.current = { time: now, x: endX, y: endY };
-      }
-    }
-
-    setSwipeOffset(0);
-    setVerticalSwipeOffset(0);
-  };
-
-  const handlePlaygroundClick = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+  // Unified tap processor for double tap detection
+  const processTap = (clientX, clientY, currentTarget) => {
+    if (!currentTarget) return;
+    const rect = currentTarget.getBoundingClientRect();
+    const x = clientX - rect.left;
     const relX = x / rect.width;
     const now = Date.now();
     const last = playgroundTapRef.current;
     const diff = now - last.time;
+    const dist = Math.hypot(clientX - last.x, clientY - last.y);
 
-    if (diff > 30 && diff < 380) {
+    if (diff > 20 && diff < 450 && dist < 75) {
+      // Double tap detected!
       playgroundTapRef.current = { time: 0, x: 0, y: 0 };
-      triggerHaptic([15, 40, 15]);
+      triggerHaptic([15, 35, 15]);
 
       if (currentStep === 0) {
-        if (relX < 0.45) {
+        if (relX < 0.5) {
           setStepFeedback({ type: 'rewind', text: '-10 SEC' });
         } else {
           setStepFeedback({ type: 'forward', text: '+10 SEC' });
@@ -280,10 +171,119 @@ export default function MobileGestureTutorial({ forceOpen = false, onClose }) {
       }
 
       setTimeout(() => {
-        setStepFeedback(prev => (prev?.id === now ? null : prev));
-      }, 1000);
+        setStepFeedback(null);
+      }, 900);
     } else {
-      playgroundTapRef.current = { time: now, x, y: e.clientY - rect.top };
+      playgroundTapRef.current = { time: now, x: clientX, y: clientY };
+    }
+  };
+
+  // Card Touch gesture handlers for interactive testing
+  const handleCardTouchStart = (e) => {
+    isTouchRef.current = true;
+    if (!e.touches || !e.touches[0]) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now()
+    };
+    isDraggingRef.current = false;
+  };
+
+  const handleCardTouchMove = (e) => {
+    if (!e.touches || !e.touches[0]) return;
+    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+
+    if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+      isDraggingRef.current = true;
+    }
+
+    if (currentStep === 2 || currentStep === 5) {
+      setSwipeOffset(deltaX * 0.7);
+    } else if (currentStep === 3 || currentStep === 4) {
+      setVerticalSwipeOffset(deltaY * 0.7);
+    }
+  };
+
+  const handleCardTouchEnd = (e) => {
+    const endX = e.changedTouches?.[0]?.clientX ?? touchStartRef.current.x;
+    const endY = e.changedTouches?.[0]?.clientY ?? touchStartRef.current.y;
+    const deltaX = endX - touchStartRef.current.x;
+    const deltaY = endY - touchStartRef.current.y;
+    const moveDist = Math.hypot(deltaX, deltaY);
+
+    if (isDraggingRef.current || moveDist > 12) {
+      if (currentStep === 2) {
+        if (deltaX < -35) {
+          triggerHaptic(20);
+          setStepFeedback({ type: 'next', text: 'Next Track' });
+          setHasTestedCurrent(true);
+        } else if (deltaX > 35) {
+          triggerHaptic(20);
+          setStepFeedback({ type: 'prev', text: 'Previous Track' });
+          setHasTestedCurrent(true);
+        }
+      }
+
+      if (currentStep === 3) {
+        if (deltaY < -25) {
+          triggerHaptic(20);
+          setMockLyricsOpen(true);
+          setStepFeedback({ type: 'lyrics', text: 'Lyrics Opened' });
+          setHasTestedCurrent(true);
+        } else if (deltaY > 25) {
+          triggerHaptic(20);
+          setMockLyricsOpen(false);
+        }
+      }
+
+      if (currentStep === 4) {
+        if (deltaY < -25) {
+          triggerHaptic(20);
+          setMockFullPlayerOpen(true);
+          setStepFeedback({ type: 'expand', text: 'Player Expanded' });
+          setHasTestedCurrent(true);
+        } else if (deltaY > 25) {
+          triggerHaptic(20);
+          setMockFullPlayerOpen(false);
+        }
+      }
+
+      if (currentStep === 5) {
+        if (deltaX < -30) {
+          triggerHaptic(15);
+          setMockTabIndex(prev => Math.min(prev + 1, 3));
+          setStepFeedback({ type: 'tab', text: 'View Switched' });
+          setHasTestedCurrent(true);
+        } else if (deltaX > 30) {
+          triggerHaptic(15);
+          setMockTabIndex(prev => Math.max(prev - 1, 0));
+          setStepFeedback({ type: 'tab', text: 'View Switched' });
+          setHasTestedCurrent(true);
+        }
+      }
+    } else {
+      // Tap without dragging
+      if (currentStep === 0 || currentStep === 1) {
+        if (e.cancelable) e.preventDefault();
+        processTap(endX, endY, e.currentTarget);
+      }
+    }
+
+    isDraggingRef.current = false;
+    setSwipeOffset(0);
+    setVerticalSwipeOffset(0);
+  };
+
+  const handlePlaygroundClick = (e) => {
+    // If touched, the touch handler already processed it; ignore synthetic click
+    if (isTouchRef.current) {
+      isTouchRef.current = false;
+      return;
+    }
+    if (currentStep === 0 || currentStep === 1) {
+      processTap(e.clientX, e.clientY, e.currentTarget);
     }
   };
 
@@ -380,11 +380,17 @@ export default function MobileGestureTutorial({ forceOpen = false, onClose }) {
               onTouchMove={handleCardTouchMove}
               onTouchEnd={handleCardTouchEnd}
               onClick={handlePlaygroundClick}
-              className="relative w-60 h-60 rounded-xl bg-[#0e0e11] border border-white/10 overflow-hidden cursor-pointer flex flex-col items-center justify-center select-none active:border-white/30 transition-colors"
+              style={{
+                WebkitTapHighlightColor: 'transparent',
+                touchAction: 'none',
+                userSelect: 'none',
+                WebkitUserSelect: 'none'
+              }}
+              className="relative w-60 h-60 rounded-xl bg-[#0e0e11] border border-white/10 overflow-hidden cursor-pointer flex flex-col items-center justify-center select-none outline-none focus:outline-none focus:ring-0 active:outline-none [-webkit-tap-highlight-color:transparent]"
             >
               {/* STEP 0: SKIP 10s */}
               {currentStep === 0 && (
-                <div className="relative w-full h-full flex items-center justify-center p-3">
+                <div className="relative w-full h-full flex items-center justify-center p-3 pointer-events-none">
                   <div className="absolute inset-0 bg-[#121216] flex items-center justify-center">
                     <div className="w-24 h-24 rounded-lg bg-black/70 border border-white/10 flex flex-col items-center justify-center">
                       <Music className="w-8 h-8 text-white/40 mb-1" />
@@ -431,7 +437,7 @@ export default function MobileGestureTutorial({ forceOpen = false, onClose }) {
 
               {/* STEP 1: INSTANT LIKE */}
               {currentStep === 1 && (
-                <div className="relative w-full h-full flex items-center justify-center p-3">
+                <div className="relative w-full h-full flex items-center justify-center p-3 pointer-events-none">
                   <div className="absolute inset-0 bg-[#121216] flex items-center justify-center">
                     <div className="w-24 h-24 rounded-lg bg-black/70 border border-white/10 flex items-center justify-center">
                       <Heart className="w-10 h-10 text-white/30" />
