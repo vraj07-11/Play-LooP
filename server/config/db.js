@@ -65,6 +65,16 @@ async function initDb() {
 			PRIMARY KEY (user_uuid, track_id)
 		)
 	`);
+	await db.execute(`
+		CREATE TABLE IF NOT EXISTS contact_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			email TEXT NOT NULL,
+			subject TEXT NOT NULL,
+			message TEXT NOT NULL,
+			created_at INTEGER NOT NULL
+		)
+	`);
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_scrobbles_user ON scrobbles(user_uuid)");
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_uuid)");
 	await db.execute("CREATE INDEX IF NOT EXISTS idx_user_profiles ON user_profiles(user_uuid)");
