@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { usePlayer } from '../context/PlayerContext';
 import { Menu, X, Search, User } from 'lucide-react';
-import { getUserUuid, fetchUserProfile, PROFILE_AVATAR_KEY, fetchApi } from '../services/api';
+import { getUserUuid, fetchUserProfile, PROFILE_NAME_KEY, PROFILE_AVATAR_KEY, fetchApi } from '../services/api';
 
 export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView }) {
   const [query, setQuery] = useState('');
@@ -39,6 +39,11 @@ export default function Header({ isSidebarOpen, setIsSidebarOpen, setCurrentView
           setAvatarError(false);
           try {
             localStorage.setItem(PROFILE_AVATAR_KEY, profile.avatar_url || '');
+          } catch (_) {}
+        }
+        if (profile.display_name) {
+          try {
+            localStorage.setItem(PROFILE_NAME_KEY, profile.display_name);
           } catch (_) {}
         }
       })

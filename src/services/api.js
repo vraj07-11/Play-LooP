@@ -55,18 +55,42 @@ export function getUserUuid() {
 
 export function sendScrobble(trackData) {
   try {
+    if (!trackData) return;
+    const payloadTrack = {
+      ...trackData,
+      artist: trackData.artist || trackData.channelTitle || trackData.singers || trackData.author || trackData.uploader || 'Unknown Artist',
+      track_id: trackData.track_id || trackData.videoId || trackData.id || null
+    };
     fetchApi('/api/scrobble', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_uuid: getUserUuid(),
-        track: trackData
+        track: payloadTrack
       })
     }).catch((err) => {
       console.warn('sendScrobble failed:', err);
     });
   } catch (err) {
     console.warn('sendScrobble failed:', err);
+  }
+}
+
+export async function syncScrobblesBatch(scrobbles) {
+  try {
+    if (!Array.isArray(scrobbles) || scrobbles.length === 0) return false;
+    const res = await fetchApi('/api/scrobble/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_uuid: getUserUuid(),
+        scrobbles: scrobbles.slice(0, 100)
+      })
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('syncScrobblesBatch failed:', err);
+    return false;
   }
 }
 

@@ -9,10 +9,11 @@ router.post("/api/scrobble", async (req, res) => {
 		const user_uuid = req.body?.user_uuid;
 		const track = req.body?.track || {};
 		const title = track.title;
-		const artist = track.artist;
+		const artist = track.artist || track.channelTitle || track.singers || track.author || track.uploader || "Unknown Artist";
+		const track_id = track.track_id || track.videoId || track.id || null;
 
-		if (!user_uuid || !title || !artist) {
-			return res.status(400).json({ error: "user_uuid, track.title, and track.artist are required" });
+		if (!user_uuid || !title) {
+			return res.status(400).json({ error: "user_uuid and track.title are required" });
 		}
 
 		const played_at = track.played_at != null ? Number(track.played_at) : Date.now();
@@ -26,13 +27,27 @@ router.post("/api/scrobble", async (req, res) => {
 		const playlist_id = track.playlistId || track.playlist_id || null;
 		const origin_context = track.originContext || track.origin_context || null;
 
+		if (session_id) {
+			const updateRes = await db.execute({
+				sql: `UPDATE scrobbles 
+					SET duration_listened = MAX(COALESCE(duration_listened, 0), ?),
+					    played_at = MAX(played_at, ?)
+					WHERE user_uuid = ? AND session_id = ?`,
+				args: [duration_listened, played_at, user_uuid, session_id]
+			}).catch(() => null);
+
+			if (updateRes && updateRes.rowsAffected > 0) {
+				return res.status(200).json({ success: true, message: "Scrobble updated" });
+			}
+		}
+
 		try {
 			await db.execute({
 				sql: `INSERT OR IGNORE INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration, duration_listened, session_id, playlist_id, origin_context)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				args: [
 					user_uuid,
-					track.track_id ?? null,
+					track_id,
 					title,
 					artist,
 					track.album ?? null,
@@ -53,7 +68,7 @@ router.post("/api/scrobble", async (req, res) => {
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					args: [
 						user_uuid,
-						track.track_id ?? null,
+						track_id,
 						title,
 						artist,
 						track.album ?? null,
@@ -72,7 +87,7 @@ router.post("/api/scrobble", async (req, res) => {
 							VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 						args: [
 							user_uuid,
-							track.track_id ?? null,
+							track_id,
 							title,
 							artist,
 							track.album ?? null,
@@ -88,7 +103,7 @@ router.post("/api/scrobble", async (req, res) => {
 							VALUES (?, ?, ?, ?, ?, ?, ?)`,
 						args: [
 							user_uuid,
-							track.track_id ?? null,
+							track_id,
 							title,
 							artist,
 							track.album ?? null,
@@ -104,6 +119,57 @@ router.post("/api/scrobble", async (req, res) => {
 	} catch (error) {
 		console.error("Scrobble failed:", error);
 		return res.status(500).json({ error: "Failed to record scrobble" });
+	}
+});
+
+router.post("/api/scrobble/batch", async (req, res) => {
+	try {
+		const user_uuid = req.body?.user_uuid;
+		const scrobbles = req.body?.scrobbles;
+		if (!user_uuid || !Array.isArray(scrobbles) || scrobbles.length === 0) {
+			return res.status(400).json({ error: "user_uuid and scrobbles array required" });
+		}
+
+		for (const item of scrobbles.slice(0, 100)) {
+			if (!item || !item.title) continue;
+			const title = item.title;
+			const artist = item.artist || item.channelTitle || item.singers || item.author || item.uploader || "Unknown Artist";
+			const track_id = item.track_id || item.videoId || item.id || null;
+			const played_at = item.played_at != null ? Number(item.played_at) : Date.now();
+			const cover = item.cover || item.thumbnail || item.image || null;
+			const duration = item.duration != null && !isNaN(item.duration) ? Math.round(Number(item.duration)) : null;
+			const duration_listened = Math.max(0, Math.round(Number(item.duration_listened || item.time_listened || 0)));
+			const session_id = item.session_id || null;
+			const playlist_id = item.playlistId || item.playlist_id || null;
+			const origin_context = item.originContext || item.origin_context || null;
+
+			try {
+				await db.execute({
+					sql: `INSERT OR IGNORE INTO scrobbles (user_uuid, track_id, title, artist, album, genre, played_at, cover, duration, duration_listened, session_id, playlist_id, origin_context)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					args: [
+						user_uuid,
+						track_id,
+						title,
+						artist,
+						item.album ?? null,
+						item.genre ?? null,
+						played_at,
+						cover,
+						duration,
+						duration_listened,
+						session_id,
+						playlist_id,
+						origin_context
+					]
+				});
+			} catch (_) {}
+		}
+
+		return res.json({ success: true, count: scrobbles.length });
+	} catch (error) {
+		console.error("Batch scrobble failed:", error);
+		return res.status(500).json({ error: "Failed to sync scrobbles" });
 	}
 });
 
@@ -498,7 +564,7 @@ router.get("/api/sync", async (req, res) => {
 			? Number(req.query.since)
 			: 0;
 
-		const [scrobblesResult, playlistsResult, historyResult, likedSongsResult] = await Promise.all([
+		const [scrobblesResult, playlistsResult, historyResult, likedSongsResult, profileResult] = await Promise.all([
 			db.execute({
 				sql: `SELECT id, user_uuid, track_id, title, artist, album, genre, played_at, cover, duration
 					FROM scrobbles
@@ -533,6 +599,12 @@ router.get("/api/sync", async (req, res) => {
 					WHERE user_uuid = ?
 					ORDER BY liked_at DESC`,
 				args: [user_uuid]
+			}).catch(() => ({ rows: [] })),
+			db.execute({
+				sql: `SELECT user_uuid, display_name, avatar_url, updated_at
+					FROM user_profiles
+					WHERE user_uuid = ?`,
+				args: [user_uuid]
 			}).catch(() => ({ rows: [] }))
 		]);
 
@@ -561,7 +633,15 @@ router.get("/api/sync", async (req, res) => {
 		const history = historyResult.rows.map(mapHistoryRow);
 		const liked_tracks = likedSongsResult.rows.map(mapLikedSongRow);
 
-		return res.json({ scrobbles, playlists, history, liked_tracks });
+		const profileRow = profileResult?.rows?.[0];
+		const profile = profileRow ? {
+			user_uuid: profileRow.user_uuid,
+			display_name: profileRow.display_name || "Loopner",
+			avatar_url: profileRow.avatar_url || "",
+			updated_at: profileRow.updated_at != null ? Number(profileRow.updated_at) : null
+		} : null;
+
+		return res.json({ profile, scrobbles, playlists, history, liked_tracks });
 	} catch (error) {
 		console.error("Sync failed:", error);
 		return res.status(500).json({ error: "Failed to sync data" });
@@ -613,8 +693,13 @@ router.get("/api/user/stats", async (req, res) => {
 			db.execute({
 				sql: `SELECT 
 						COUNT(*) AS totalPlays,
-						COUNT(DISTINCT title || ' - ' || artist) AS uniqueSongs,
-						SUM(COALESCE(duration_listened, CASE WHEN duration IS NOT NULL AND duration > 0 THEN duration ELSE 0 END)) AS totalSeconds
+						COUNT(DISTINCT title || artist) AS uniqueSongs,
+						SUM(CASE 
+							WHEN duration_listened >= 25 AND duration IS NOT NULL AND duration > duration_listened THEN duration
+							WHEN duration_listened IS NOT NULL AND duration_listened > 0 THEN duration_listened
+							WHEN duration IS NOT NULL AND duration > 0 THEN duration
+							ELSE 180
+						END) AS totalSeconds
 					FROM scrobbles
 					WHERE user_uuid = ? AND played_at >= ?`,
 				args: [user_uuid, cutoff]
@@ -692,8 +777,9 @@ router.get("/api/user/stats", async (req, res) => {
 		const historyItems = historyResult.rows.map(mapHistoryRow);
 		const historyCount = historyItems.length;
 		const totalPlaysFromScrobbles = Number(totalResult.rows[0]?.totalPlays || 0);
+		const uniqueSongsFromScrobbles = Number(totalResult.rows[0]?.uniqueSongs || 0);
 		const totalPlays = Math.max(totalPlaysFromScrobbles, historyCount);
-		const uniqueSongs = Math.max(Number(totalResult.rows[0]?.uniqueSongs || 0), historyCount);
+		const uniqueSongs = totalPlaysFromScrobbles > 0 ? uniqueSongsFromScrobbles : historyCount;
 		const totalSeconds = totalPlays > 0 ? Number(totalResult.rows[0]?.totalSeconds || (totalPlays * 210)) : 0;
 		const totalMinutes = Math.round(totalSeconds / 60);
 		const listeningTimeFormatted = formatDurationText(totalSeconds);

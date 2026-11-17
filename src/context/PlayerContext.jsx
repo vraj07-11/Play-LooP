@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { fetchApi, getAudioUrl, sendScrobble, saveHistoryItem, syncHistoryBatch, syncLikedTracksBatch, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, getUserUuid } from '../services/api.js';
+import { fetchApi, getAudioUrl, sendScrobble, syncScrobblesBatch, saveHistoryItem, syncHistoryBatch, syncLikedTracksBatch, fetchSyncData, LAST_SYNC_KEY, LOCAL_SCROBBLES_KEY, PLAYLIST_HISTORY_KEY, PROFILE_NAME_KEY, PROFILE_AVATAR_KEY, getUserUuid } from '../services/api.js';
 import { fetchSyncedLyrics } from '../services/lyrics.js';
 import { generateRecommendations } from '../services/recommendationEngine.js';
 import { filterValidDurationTracks } from '../utils/durationUtils.js';
@@ -122,7 +122,9 @@ export function PlayerProvider({ children }) {
 
   const getTrackScrobbleKey = (track) => {
     if (!track) return null;
-    return track.videoId || `${track.title || ''}:${track.artist || ''}`;
+    const resolvedArtist = track.artist || track.channelTitle || track.singers || track.author || track.uploader || '';
+    const id = track.videoId || track.track_id || track.id || '';
+    return id || `${track.title || ''}:${resolvedArtist}`;
   };
 
   /** Generate a new unique session token. Falls back to timestamp+random on old browsers. */
@@ -168,12 +170,22 @@ export function PlayerProvider({ children }) {
 
   const flushListeningTime = () => {
     const track = pendingTrackRef.current;
-    if (!track || !track.title || !track.artist || hasScrobbledRef.current) return;
+    if (!track || !track.title) return;
+    const resolvedArtist = track.artist || track.channelTitle || track.singers || track.author || track.uploader || 'Unknown Artist';
     flushWallClock();
     const listened = Math.round(accumulatedListenSecondsRef.current);
-    if (listened >= 5) {
+    const trackDur = Number(track.duration || 0);
+    const threshold = trackDur > 0 ? Math.min(30, Math.round(trackDur * 0.5)) : 30;
+
+    if (hasScrobbledRef.current) {
+      // If already scrobbled at 30s threshold, update with the final listened time if more was listened
+      if (listened > 30) {
+        recordScrobble({ ...track, artist: resolvedArtist }, listened);
+      }
+    } else if (listened >= threshold) {
+      // Met threshold for the first time
       hasScrobbledRef.current = true;
-      recordScrobble(track, listened);
+      recordScrobble({ ...track, artist: resolvedArtist }, listened);
     }
   };
 
@@ -193,12 +205,18 @@ export function PlayerProvider({ children }) {
     try {
       const existing = JSON.parse(localStorage.getItem(LOCAL_SCROBBLES_KEY) || '[]');
       const list = Array.isArray(existing) ? existing : [];
-      // Idempotency guard: if a scrobble for this exact session already exists, skip.
-      if (entry.session_id && list.some((e) => e.session_id === entry.session_id)) {
-        console.debug('[Scrobble] Duplicate session_id detected, skipping:', entry.session_id);
-        return;
+      const idx = entry.session_id ? list.findIndex((e) => e.session_id === entry.session_id) : -1;
+      if (idx >= 0) {
+        // Update existing session with latest duration_listened
+        list[idx] = {
+          ...list[idx],
+          ...entry,
+          duration_listened: Math.max(list[idx].duration_listened || 0, entry.duration_listened || 0),
+          time_listened: Math.max(list[idx].time_listened || 0, entry.time_listened || 0)
+        };
+      } else {
+        list.push(entry);
       }
-      list.push(entry);
       localStorage.setItem(LOCAL_SCROBBLES_KEY, JSON.stringify(list.slice(-100)));
     } catch (e) {
       console.warn('Failed to cache local scrobble', e);
@@ -307,15 +325,16 @@ export function PlayerProvider({ children }) {
   };
 
   const recordScrobble = (track, timeListened = null) => {
-    if (!track || !track.title || !track.artist) return;
+    if (!track || !track.title) return;
+    const resolvedArtist = track.artist || track.channelTitle || track.singers || track.author || 'Unknown Artist';
     const listenedSec = Math.max(1, Math.round(
       timeListened != null ? timeListened : peekListenSeconds()
     ));
     const currentContext = activeContextRef.current;
     const payload = {
-      track_id: track.videoId || track.track_id || null,
+      track_id: track.videoId || track.track_id || track.id || null,
       title: track.title,
-      artist: track.artist,
+      artist: resolvedArtist,
       album: track.album || null,
       genre: track.genre || null,
       cover: track.cover || track.thumbnail || track.image || null,
@@ -493,6 +512,17 @@ export function PlayerProvider({ children }) {
       const lastSync = Number(localStorage.getItem(LAST_SYNC_KEY) || 0);
       const data = await fetchSyncData(lastSync);
       if (!data) return data;
+      if (data.profile) {
+        try {
+          if (data.profile.display_name) {
+            localStorage.setItem(PROFILE_NAME_KEY, data.profile.display_name);
+          }
+          if (data.profile.avatar_url !== undefined && data.profile.avatar_url !== null) {
+            localStorage.setItem(PROFILE_AVATAR_KEY, data.profile.avatar_url);
+          }
+          window.dispatchEvent(new CustomEvent('playloop-profile-updated', { detail: data.profile }));
+        } catch (_) {}
+      }
       if (Array.isArray(data.history) && data.history.length > 0) {
         mergeIncomingHistory(data.history);
       }
@@ -520,6 +550,14 @@ export function PlayerProvider({ children }) {
         const localLiked = JSON.parse(localStorage.getItem('playloop_liked_tracks_list') || '[]');
         if (Array.isArray(localLiked) && localLiked.length > 0) {
           syncLikedTracksBatch(localLiked).catch(() => {});
+        }
+      } catch (_) {}
+
+      // Sync local scrobbles to server if present (for offline playback retry)
+      try {
+        const localScrobbles = JSON.parse(localStorage.getItem(LOCAL_SCROBBLES_KEY) || '[]');
+        if (Array.isArray(localScrobbles) && localScrobbles.length > 0) {
+          syncScrobblesBatch(localScrobbles).catch(() => {});
         }
       } catch (_) {}
 

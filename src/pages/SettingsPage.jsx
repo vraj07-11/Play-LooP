@@ -204,12 +204,31 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
       localStorage.setItem(USER_UUID_KEY, newUuid);
       localStorage.setItem(LAST_SYNC_KEY, '0');
       setDeviceUuid(newUuid);
+
+      // Fetch and apply remote profile immediately for the newly linked device
+      try {
+        const remoteProfile = await fetchUserProfile(newUuid);
+        if (remoteProfile) {
+          if (remoteProfile.display_name) {
+            localStorage.setItem(PROFILE_NAME_KEY, remoteProfile.display_name);
+            setProfileName(remoteProfile.display_name);
+          }
+          if (remoteProfile.avatar_url !== undefined && remoteProfile.avatar_url !== null) {
+            localStorage.setItem(PROFILE_AVATAR_KEY, remoteProfile.avatar_url);
+            setProfileAvatar(remoteProfile.avatar_url);
+          }
+          window.dispatchEvent(new CustomEvent('playloop-profile-updated', { detail: remoteProfile }));
+        }
+      } catch (profErr) {
+        console.warn('Could not load remote profile during link:', profErr);
+      }
+
       if (typeof pullDeviceSync === 'function') {
         await pullDeviceSync();
       }
       window.dispatchEvent(new Event('playloop-sync-now'));
       setLinkUuid('');
-      setLinkMessage('Device linked. History and playlists are syncing.');
+      setLinkMessage('Device linked. Profile, history, and playlists are syncing.');
     } catch (err) {
       console.error('Failed to link device', err);
       setLinkMessage('Could not complete sync. Your ID was saved — try again.');
