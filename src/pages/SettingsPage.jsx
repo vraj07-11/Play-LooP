@@ -883,6 +883,25 @@ export default function SettingsPage({ setCurrentView, refreshKey = 0 }) {
         )}
       </div>
 
+      {/* --- MOBILE GESTURE CONTROLS CARD --- */}
+      <div className="page-card space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-medium text-white mb-1">Mobile Gestures</h3>
+            <p className="text-xs text-zinc-400">
+              Tutorial for swipe-to-skip, double-tap seek, and lyrics shortcuts.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-gesture-tutorial', { detail: { step: 0 } }))}
+            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 hover:border-zinc-500 text-white font-medium text-xs rounded-lg transition-colors cursor-pointer shrink-0"
+          >
+            View Gestures
+          </button>
+        </div>
+      </div>
+
       {/* --- DEVICE SYNC & TRANSFER CARD --- */}
       <div className="page-card space-y-4">
         <div>

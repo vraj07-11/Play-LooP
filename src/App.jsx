@@ -27,6 +27,7 @@ const ShareModal = lazy(() => import('./components/ShareModal'));
 const AddToPlaylistModal = lazy(() => import('./components/AddToPlaylistModal'));
 const PlaylistEditModal = lazy(() => import('./components/PlaylistEditModal'));
 const GlobalToast = lazy(() => import('./components/GlobalToast'));
+const MobileGestureTutorial = lazy(() => import('./components/MobileGestureTutorial'));
 
 const INFO_VIEWS = new Set([
   'how-it-works', 'features', 'faq', 'blog',
@@ -290,7 +291,21 @@ function App() {
         setIsSidebarOpen={handleSetIsSidebarOpen}
         setCurrentView={handleSetCurrentView}
       />
-      <LanguageSelector onComplete={() => setLanguagesReady(true)} />
+      <LanguageSelector 
+        onComplete={(langs, justSelected) => {
+          setLanguagesReady(true);
+          if (justSelected && typeof window !== 'undefined' && window.innerWidth < 768) {
+            try {
+              const hasSeen = localStorage.getItem('playloop_gesture_tutorial_seen');
+              if (!hasSeen) {
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('playloop-open-gesture-tutorial', { detail: { step: 0 } }));
+                }, 350);
+              }
+            } catch (_) {}
+          }
+        }} 
+      />
       
       {languagesReady && (
         <>
@@ -375,6 +390,7 @@ function App() {
         <AddToPlaylistModal />
         <PlaylistEditModal />
         <GlobalToast />
+        <MobileGestureTutorial />
       </Suspense>
     </div>
   );

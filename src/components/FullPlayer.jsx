@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, ListPlus, FolderPlus, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Play, Pause, Shuffle, SkipBack, SkipForward, Repeat1, ChartBar, RotateCcw, RotateCw, Heart, Bookmark, Share2, Download, ListMusic, ListPlus, FolderPlus, Check, X, HelpCircle } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { getAudioUrl, savePlaylistApi, unsavePlaylistApi, saveLikedTrackApi, resolveApiUrl } from '../services/api';
 import { shareTrack } from '../services/shareService';
@@ -707,7 +707,15 @@ export default function FullPlayer({
           </span>
         </div>
 
-        <div className="w-10" />
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('playloop-open-gesture-tutorial', { detail: { step: 0 } }))}
+          className="p-2 -mr-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 active:scale-95 transition-colors flex items-center justify-center cursor-pointer"
+          title="Gestures Guide"
+          aria-label="Gestures Guide"
+        >
+          <HelpCircle className="w-5 h-5 text-zinc-400" />
+        </button>
       </header>
 
       {/* Floating Toast Notification Banner */}

@@ -59,7 +59,9 @@ export default function LanguageSelector({ onComplete }) {
     setIsClosing(true);
     setTimeout(() => {
       setIsVisible(false);
-      onComplete(selected);
+      if (typeof onComplete === 'function') {
+        onComplete(selected, true);
+      }
     }, 400); // fade out duration
   };
 

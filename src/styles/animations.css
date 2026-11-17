@@ -383,5 +383,155 @@
   animation: playing-track-flash-anim 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* =========================================================================
+   Mobile Gesture Tutorial Animations
+   ========================================================================= */
+
+@keyframes gesture-pulse-dot {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes gesture-hand-double-tap-left {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
+  }
+  15% {
+    transform: translate3d(-45px, 0, 0) scale(0.85);
+    opacity: 1;
+  }
+  25% {
+    transform: translate3d(-45px, 0, 0) scale(1.1);
+    opacity: 1;
+  }
+  35% {
+    transform: translate3d(-45px, 0, 0) scale(0.85);
+    opacity: 1;
+  }
+  45% {
+    transform: translate3d(-45px, 0, 0) scale(1.1);
+    opacity: 1;
+  }
+  60%, 90% {
+    transform: translate3d(-45px, 0, 0) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes gesture-hand-double-tap-center {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
+  }
+  15% {
+    transform: translate3d(0, 0, 0) scale(0.85);
+    opacity: 1;
+  }
+  25% {
+    transform: translate3d(0, 0, 0) scale(1.15);
+    opacity: 1;
+  }
+  35% {
+    transform: translate3d(0, 0, 0) scale(0.85);
+    opacity: 1;
+  }
+  45% {
+    transform: translate3d(0, 0, 0) scale(1.15);
+    opacity: 1;
+  }
+  60%, 90% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes gesture-hand-swipe-left {
+  0% {
+    transform: translate3d(50px, 0, 0);
+    opacity: 0;
+  }
+  20% {
+    transform: translate3d(40px, 0, 0);
+    opacity: 1;
+  }
+  70% {
+    transform: translate3d(-60px, 0, 0);
+    opacity: 1;
+  }
+  85%, 100% {
+    transform: translate3d(-80px, 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes gesture-hand-swipe-up {
+  0% {
+    transform: translate3d(0, 45px, 0);
+    opacity: 0;
+  }
+  20% {
+    transform: translate3d(0, 35px, 0);
+    opacity: 1;
+  }
+  70% {
+    transform: translate3d(0, -45px, 0);
+    opacity: 1;
+  }
+  85%, 100% {
+    transform: translate3d(0, -60px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes gesture-glow-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+@keyframes gesture-badge-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-gesture-badge-pop {
+  animation: gesture-badge-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-gesture-ring {
+  animation: gesture-glow-ring 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+
 
 
