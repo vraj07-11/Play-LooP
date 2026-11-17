@@ -553,14 +553,6 @@ export function PlayerProvider({ children }) {
         }
       } catch (_) {}
 
-      // Sync local scrobbles to server if present (for offline playback retry)
-      try {
-        const localScrobbles = JSON.parse(localStorage.getItem(LOCAL_SCROBBLES_KEY) || '[]');
-        if (Array.isArray(localScrobbles) && localScrobbles.length > 0) {
-          syncScrobblesBatch(localScrobbles).catch(() => {});
-        }
-      } catch (_) {}
-
       return data;
     } catch (e) {
       console.warn('Device sync failed:', e);

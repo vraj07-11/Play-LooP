@@ -75,13 +75,22 @@ export default function SearchPage({ refreshKey = 0 }) {
     if (!pendingTrack || !song) return false;
     const sId = String(song.videoId || song.track_id || song.id || '').trim();
     const pId = String(pendingTrack.videoId || pendingTrack.track_id || pendingTrack.id || '').trim();
-    if (sId && pId && sId === pId) return true;
+
+    // Primary unique check: if both tracks have IDs, match strictly on ID
+    if (sId && pId) {
+      return sId === pId;
+    }
+
+    // Fallback only when one of the objects is missing an ID
     if (song.title && pendingTrack.title) {
-      const sTitle = String(song.title).toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
-      const pTitle = String(pendingTrack.title).toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+      const normalize = (str) => String(str || '').toLowerCase().replace(/[\(\[].*?[\)\]]/g, '').replace(/[^a-z0-9]/gi, '').trim();
+      const sTitle = normalize(song.title);
+      const pTitle = normalize(pendingTrack.title);
       if (sTitle && pTitle && sTitle === pTitle) {
-        if (!song.artist || !pendingTrack.artist) return true;
-        return song.artist.toLowerCase().trim().slice(0, 10) === pendingTrack.artist.toLowerCase().trim().slice(0, 10);
+        const sArtist = normalize(song.artist);
+        const pArtist = normalize(pendingTrack.artist);
+        if (!sArtist || !pArtist) return true;
+        return sArtist === pArtist;
       }
     }
     return false;

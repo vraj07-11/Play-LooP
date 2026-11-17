@@ -238,16 +238,21 @@ export default function Home({ setCurrentView, refreshKey = 0 }) {
   const playingTrackIndex = useMemo(() => {
     if (!pendingTrack || !sortedTracks || sortedTracks.length === 0) return -1;
     const pId = String(pendingTrack.videoId || pendingTrack.id || '').trim();
-    const pTitle = String(pendingTrack.title || '').toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+    const normalize = (str) => String(str || '').toLowerCase().replace(/[\(\[].*?[\)\]]/g, '').replace(/[^a-z0-9]/gi, '').trim();
+    const pTitle = normalize(pendingTrack.title);
+    const pArtist = normalize(pendingTrack.artist);
 
     return sortedTracks.findIndex((t) => {
       const tId = String(t.videoId || t.id || '').trim();
-      if (tId && pId && tId === pId) return true;
+      if (tId && pId) {
+        return tId === pId;
+      }
       if (t.title && pTitle) {
-        const tTitle = String(t.title).toLowerCase().trim().replace(/[\(\[].*?[\)\]]/g, '').trim();
+        const tTitle = normalize(t.title);
         if (tTitle && tTitle === pTitle) {
-          if (!t.artist || !pendingTrack.artist) return true;
-          return t.artist.toLowerCase().trim().slice(0, 10) === pendingTrack.artist.toLowerCase().trim().slice(0, 10);
+          const tArtist = normalize(t.artist);
+          if (!tArtist || !pArtist) return true;
+          return tArtist === pArtist;
         }
       }
       return false;

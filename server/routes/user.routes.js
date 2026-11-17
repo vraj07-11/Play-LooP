@@ -20,6 +20,12 @@ router.post("/api/scrobble", async (req, res) => {
 		const cover = track.cover || track.thumbnail || track.image || null;
 		const duration = track.duration != null && !isNaN(track.duration) ? Math.round(Number(track.duration)) : null;
 		const duration_listened = Math.max(0, Math.round(Number(track.duration_listened || track.time_listened || 0)));
+
+		// Minimum threshold for a scrobble is 25 seconds of actual playback.
+		// Skips, preview clicks, and 0-second plays are rejected to prevent inflating stats.
+		if (duration_listened < 25) {
+			return res.status(200).json({ success: true, message: "Skipped sub-threshold scrobble (< 25s)" });
+		}
 		// session_id: optional unique token from the client. When present, the
 		// UNIQUE INDEX on (user_uuid, session_id) makes the INSERT a no-op if
 		// the same scrobble was already committed (e.g. duplicate network retry).
@@ -139,6 +145,9 @@ router.post("/api/scrobble/batch", async (req, res) => {
 			const cover = item.cover || item.thumbnail || item.image || null;
 			const duration = item.duration != null && !isNaN(item.duration) ? Math.round(Number(item.duration)) : null;
 			const duration_listened = Math.max(0, Math.round(Number(item.duration_listened || item.time_listened || 0)));
+
+			// Only persist real listening sessions (>= 25s)
+			if (duration_listened < 25) continue;
 			const session_id = item.session_id || null;
 			const playlist_id = item.playlistId || item.playlist_id || null;
 			const origin_context = item.originContext || item.origin_context || null;
@@ -695,21 +704,23 @@ router.get("/api/user/stats", async (req, res) => {
 						COUNT(*) AS totalPlays,
 						COUNT(DISTINCT title || artist) AS uniqueSongs,
 						SUM(CASE 
-							WHEN duration_listened >= 25 AND duration IS NOT NULL AND duration > duration_listened THEN duration
-							WHEN duration_listened IS NOT NULL AND duration_listened > 0 THEN duration_listened
-							WHEN duration IS NOT NULL AND duration > 0 THEN duration
-							ELSE 180
+							WHEN duration_listened IS NOT NULL AND duration_listened >= 25 THEN 
+								CASE 
+									WHEN duration IS NOT NULL AND duration > 0 THEN MIN(duration_listened, duration)
+									ELSE duration_listened
+								END
+							ELSE 0
 						END) AS totalSeconds
 					FROM scrobbles
-					WHERE user_uuid = ? AND played_at >= ?`,
+					WHERE user_uuid = ? AND played_at >= ? AND duration_listened >= 25`,
 				args: [user_uuid, cutoff]
 			}).catch(async () => {
 				const fallback = await db.execute({
-					sql: `SELECT COUNT(*) AS totalPlays, SUM(CASE WHEN duration IS NOT NULL AND duration > 0 THEN duration ELSE 0 END) AS totalSeconds FROM scrobbles WHERE user_uuid = ? AND played_at >= ?`,
+					sql: `SELECT COUNT(*) AS totalPlays, SUM(CASE WHEN duration_listened IS NOT NULL AND duration_listened >= 25 THEN duration_listened ELSE 0 END) AS totalSeconds FROM scrobbles WHERE user_uuid = ? AND played_at >= ? AND duration_listened >= 25`,
 					args: [user_uuid, cutoff]
 				});
 				const plays = Number(fallback.rows[0]?.totalPlays || 0);
-				const secs = Number(fallback.rows[0]?.totalSeconds || (plays * 180));
+				const secs = Number(fallback.rows[0]?.totalSeconds || 0);
 				return {
 					rows: [{
 						totalPlays: plays,
@@ -721,7 +732,7 @@ router.get("/api/user/stats", async (req, res) => {
 			db.execute({
 				sql: `SELECT artist, COUNT(*) AS playCount
 					FROM scrobbles
-					WHERE user_uuid = ? AND played_at >= ?
+					WHERE user_uuid = ? AND played_at >= ? AND duration_listened >= 25
 					GROUP BY artist
 					ORDER BY playCount DESC
 					LIMIT 5`,
@@ -730,7 +741,7 @@ router.get("/api/user/stats", async (req, res) => {
 			db.execute({
 				sql: `SELECT title, artist, track_id, MAX(cover) AS cover, COUNT(*) AS playCount
 					FROM scrobbles
-					WHERE user_uuid = ? AND played_at >= ?
+					WHERE user_uuid = ? AND played_at >= ? AND duration_listened >= 25
 					GROUP BY track_id, title, artist
 					ORDER BY playCount DESC
 					LIMIT 5`,
@@ -739,7 +750,7 @@ router.get("/api/user/stats", async (req, res) => {
 				return db.execute({
 					sql: `SELECT title, artist, track_id, COUNT(*) AS playCount
 						FROM scrobbles
-						WHERE user_uuid = ? AND played_at >= ?
+						WHERE user_uuid = ? AND played_at >= ? AND duration_listened >= 25
 						GROUP BY track_id, title, artist
 						ORDER BY playCount DESC
 						LIMIT 5`,
